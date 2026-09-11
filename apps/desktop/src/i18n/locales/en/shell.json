@@ -40,7 +40,9 @@
     "topicSummary": "{{status}} / peers: {{count}}",
     "topicsButton": "Topics",
     "trackedTopics": "Tracked Topics",
-    "updateAvailable": "Update available"
+    "updateAvailable": "Update available",
+    "noChannels": "No joined private channels.",
+    "channelEmptyAction": "Create or join"
   },
   "controlCenter": {
     "eyebrow": "Global navigation",
@@ -90,11 +92,12 @@
         "storage": "The saved layouts could not be written to local storage."
       }
     },
-    "createJoinChannel": "Create or join channel",
+    "createJoinChannel": "Create or join a private channel",
     "shareChannel": "Share active channel",
     "release": "Release and updates",
     "settings": "Settings",
-    "languageSettingsHint": "Language and theme"
+    "languageSettingsHint": "Language and theme",
+    "shareChannelHint": "Select a joined channel to create invite or share links."
   },
   "columnState": {
     "active": "Active",
@@ -261,7 +264,11 @@
     "communityNodeUnavailableAction": "Open Community Node Settings",
     "communityNodeUnavailableBody": "A configured community node is currently unavailable. Startup continues, and direct P2P connections remain available.",
     "communityNodeUnavailableTitle": "Community node unavailable",
-    "viewScope": "View Scope"
+    "viewScope": "View Scope",
+    "privateChannelEntry": "Private channel",
+    "privateChannelEntryLabel": "Create or join a private channel",
+    "channelSettingsEntry": "Settings & sharing",
+    "channelSettingsEntryLabel": "Open {{channel}} channel settings and sharing"
   },
   "testerFeedback": {
     "openButton": "Send feedback",

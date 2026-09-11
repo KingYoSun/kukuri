@@ -56,7 +56,7 @@ async function publishFromTimelineColumn(
 // global 選択を Public に戻し、Public / core の Timeline Column 2 本(Public 側 active)を返す。
 async function setUpPublicAndPrivateColumns(page: Page) {
   const controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
+  await controlCenter.getByRole('button', { name: 'Create or join a private channel' }).click();
   const channelDialog = page.getByRole('dialog', { name: 'Create / Join Private Channel' });
   await expect(channelDialog).toBeVisible();
   await channelDialog.getByPlaceholder('Channel name').fill('core');

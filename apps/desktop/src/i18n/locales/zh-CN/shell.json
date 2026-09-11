@@ -40,7 +40,9 @@
     "topicSummary": "{{status}} / 对等节点: {{count}}",
     "topicsButton": "主题",
     "trackedTopics": "跟踪的主题",
-    "updateAvailable": "有可用更新"
+    "updateAvailable": "有可用更新",
+    "noChannels": "还没有已加入的私密频道。",
+    "channelEmptyAction": "创建或加入"
   },
   "controlCenter": {
     "eyebrow": "全局导航",
@@ -90,11 +92,12 @@
         "storage": "无法将已保存布局写入本地存储。"
       }
     },
-    "createJoinChannel": "创建或加入频道",
+    "createJoinChannel": "创建或加入私密频道",
     "shareChannel": "分享当前频道",
     "release": "版本与更新",
     "settings": "设置",
-    "languageSettingsHint": "语言和主题"
+    "languageSettingsHint": "语言和主题",
+    "shareChannelHint": "选择已加入的频道后，即可创建邀请或分享链接。"
   },
   "columnState": {
     "active": "当前",
@@ -261,7 +264,11 @@
     "communityNodeUnavailableAction": "打开社区节点设置",
     "communityNodeUnavailableBody": "已配置的社区节点当前不可用。客户端会继续启动，直接 P2P 连接仍然可用。",
     "communityNodeUnavailableTitle": "社区节点不可用",
-    "viewScope": "查看范围"
+    "viewScope": "查看范围",
+    "privateChannelEntry": "私密频道",
+    "privateChannelEntryLabel": "创建或加入私密频道",
+    "channelSettingsEntry": "设置与分享",
+    "channelSettingsEntryLabel": "打开 {{channel}} 的频道设置与分享"
   },
   "testerFeedback": {
     "openButton": "发送反馈",

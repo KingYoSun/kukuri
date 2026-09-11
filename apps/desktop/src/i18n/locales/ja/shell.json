@@ -40,7 +40,9 @@
     "topicSummary": "{{status}} / ピア: {{count}}",
     "topicsButton": "トピック",
     "trackedTopics": "追跡中のトピック",
-    "updateAvailable": "アップデートがあります"
+    "updateAvailable": "アップデートがあります",
+    "noChannels": "参加済みのプライベートチャンネルはありません。",
+    "channelEmptyAction": "作成または参加"
   },
   "controlCenter": {
     "eyebrow": "全体ナビゲーション",
@@ -90,11 +92,12 @@
         "storage": "保存済みレイアウトをローカルストレージへ書き込めませんでした。"
       }
     },
-    "createJoinChannel": "チャンネルを作成または参加",
+    "createJoinChannel": "プライベートチャンネルを作成または参加",
     "shareChannel": "選択中のチャンネルを共有",
     "release": "リリースと更新",
     "settings": "設定",
-    "languageSettingsHint": "言語とテーマ"
+    "languageSettingsHint": "言語とテーマ",
+    "shareChannelHint": "参加中のチャンネルを選ぶと、招待・共有リンクを作成できます。"
   },
   "columnState": {
     "active": "選択中",
@@ -261,7 +264,11 @@
     "communityNodeUnavailableAction": "コミュニティノード設定を開く",
     "communityNodeUnavailableBody": "設定済みのコミュニティノードに現在接続できません。起動は継続し、ダイレクト P2P 接続は引き続き利用できます。",
     "communityNodeUnavailableTitle": "コミュニティノードを利用できません",
-    "viewScope": "表示範囲"
+    "viewScope": "表示範囲",
+    "privateChannelEntry": "プライベートチャンネル",
+    "privateChannelEntryLabel": "プライベートチャンネルを作成または参加",
+    "channelSettingsEntry": "設定と共有",
+    "channelSettingsEntryLabel": "{{channel}} のチャンネル設定と共有を開く"
   },
   "testerFeedback": {
     "openButton": "フィードバックを送る",

@@ -12,6 +12,8 @@ type TopicNavListProps = {
   onSelectTopic: (topic: string) => void;
   onSelectChannel: (topic: string, channelId: string) => void;
   onOpenChannelSettings?: (topic: string, channelId: string) => void;
+  // 参加済みチャンネルが無い topic に、作成・参加への導線を出す(Issue #966)。
+  onOpenChannelManager?: (topic: string) => void;
   onLeaveChannel?: (topic: string, channelId: string) => void;
   onRemoveTopic: (topic: string) => void;
   onCopyTopicLink?: (topic: string) => void;
@@ -26,6 +28,7 @@ export function TopicNavList({
   onSelectTopic,
   onSelectChannel,
   onOpenChannelSettings,
+  onOpenChannelManager,
   onLeaveChannel,
   onRemoveTopic,
   onCopyTopicLink,
@@ -245,6 +248,20 @@ export function TopicNavList({
                         );
                       })}
                     </ul>
+                  </>
+                ) : onOpenChannelManager ? (
+                  <>
+                    <div className='topic-subsection-label'>{t('shell:navigation.channelsGroup')}</div>
+                    <div className='topic-channel-empty'>
+                      <span>{t('shell:navigation.noChannels')}</span>
+                      <button
+                        type='button'
+                        className='topic-channel-empty-action'
+                        onClick={() => onOpenChannelManager(item.topic)}
+                      >
+                        {t('shell:navigation.channelEmptyAction')}
+                      </button>
+                    </div>
                   </>
                 ) : null}
               </div>

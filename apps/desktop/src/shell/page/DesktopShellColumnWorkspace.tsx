@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { Lock, RefreshCw, Trash2 } from 'lucide-react';
 
 import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
 import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
@@ -19,6 +19,7 @@ import {
   type ColumnContextSelectOption,
 } from '@/components/shell/ColumnContextSelect';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
+import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import {
   TimelineViewIconTabs,
@@ -86,6 +87,10 @@ type DesktopShellColumnWorkspaceProps = {
   onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
   onSelectTimelineTopic: (column: ColumnState, topicId: string) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
+  // Timeline Column header のプライベートチャンネル入口(Issue #966)。公開 scope では
+  // 作成・参加 Dialog、channel scope ではそのチャンネルの設定・共有 Dialog を開く。
+  onOpenChannelManager: (column: ColumnState) => void;
+  onOpenChannelSettings: (column: ColumnState, topicId: string, channelId: string) => void;
   renderProfileSurface: (column: ColumnState) => ReactNode;
   renderPrimarySurface: (column: ColumnState) => ReactNode;
   scopeLabel: string;
@@ -117,6 +122,8 @@ export function DesktopShellColumnWorkspace({
   onActivateColumn,
   onSelectTimelineTopic,
   onSelectTimelineView,
+  onOpenChannelManager,
+  onOpenChannelSettings,
   renderProfileSurface,
   renderPrimarySurface,
   scopeLabel,
@@ -278,6 +285,48 @@ export function DesktopShellColumnWorkspace({
       );
     }
     return undefined;
+  };
+
+  const renderScopeActions = (column: ColumnState) => {
+    if (column.kind !== 'timeline' || !column.scope) return undefined;
+    const scope = column.scope;
+    if (scope.channelId === null) {
+      return (
+        <div className='shell-column-scope-actions' data-column-preserve-activation>
+          <Button
+            variant='ghost'
+            size='sm'
+            type='button'
+            className='shell-column-scope-action'
+            aria-label={t('workspace.privateChannelEntryLabel')}
+            onClick={() => onOpenChannelManager(column)}
+          >
+            <Lock className='size-4' aria-hidden='true' />
+            {t('workspace.privateChannelEntry')}
+          </Button>
+        </div>
+      );
+    }
+    const channelId = scope.channelId;
+    const channelLabel =
+      joinedChannelsByTopic[scope.topicId]?.find(
+        (candidate) => candidate.channel_id === channelId
+      )?.label ?? channelId;
+    return (
+      <div className='shell-column-scope-actions' data-column-preserve-activation>
+        <Button
+          variant='ghost'
+          size='sm'
+          type='button'
+          className='shell-column-scope-action'
+          aria-label={t('workspace.channelSettingsEntryLabel', { channel: channelLabel })}
+          onClick={() => onOpenChannelSettings(column, scope.topicId, channelId)}
+        >
+          <Lock className='size-4' aria-hidden='true' />
+          {t('workspace.channelSettingsEntry')}
+        </Button>
+      </div>
+    );
   };
 
   const activate = (columnId: string, syncRoute: boolean) => {
@@ -512,6 +561,7 @@ export function DesktopShellColumnWorkspace({
               resourceManaged={column.kind === 'stream' || column.kind === 'metaverse'}
               footer={renderFooter(column, runtime.active)}
               scopeControl={renderScopeControl(column)}
+              scopeActions={renderScopeActions(column)}
               headerActions={renderHeaderActions(column)}
               onPinnedChange={(pinned) =>
                 setWorkspaceState((current) => setColumnPinned(current, column.id, pinned))

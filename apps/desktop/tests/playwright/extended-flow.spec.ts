@@ -15,7 +15,7 @@ async function openChannelManager(page: Page) {
     return dialog;
   }
   const controlCenter = await openControlCenter(page);
-  await controlCenter.getByRole('button', { name: 'Create or join channel' }).click();
+  await controlCenter.getByRole('button', { name: 'Create or join a private channel' }).click();
   await expect(dialog).toBeVisible();
   return dialog;
 }

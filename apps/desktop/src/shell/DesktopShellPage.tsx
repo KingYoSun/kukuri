@@ -64,6 +64,7 @@ import { useSharePreview } from '@/shell/page/useSharePreview';
 import { useShellDialogs } from '@/shell/page/useShellDialogs';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  activateColumn,
   columnIdentityId,
   openTransientColumn,
   setColumnTimelineView,
@@ -817,6 +818,14 @@ export function DesktopShellPage({
     game: t('shell:primarySections.game'),
     metaverse: 'Metaverse',
   };
+  // 参加済みチャンネルの設定・共有 Dialog を開く共通入口(Control Center、Timeline Column
+  // header、作成・参加 Dialog の参加済み一覧が同じ経路を使う。Issue #966)。
+  const openChannelSettingsDialog = (topic: string, channelId: string) => {
+    setInviteOutput(null);
+    setChannelError(null);
+    shellActions.handleSelectPrivateChannel(topic, channelId);
+    dialogs.setChannelSettingsDialogOpen(true);
+  };
   const workspace = (
     <DesktopShellColumnWorkspace
       scopeLabel={viewModels.activeComposeAudienceLabel}
@@ -839,6 +848,20 @@ export function DesktopShellPage({
         void selectColumnTimelineTopic(column, topicId)
       }
       onSelectTimelineView={selectColumnTimelineView}
+      onOpenChannelManager={(column) => {
+        if (workspaceState.activeColumnId !== column.id) {
+          setWorkspaceState((current) => activateColumn(current, column.id));
+          void activateWorkspaceColumn(column);
+        }
+        dialogs.setChannelDialogOpen(true);
+      }}
+      onOpenChannelSettings={(column, topic, channelId) => {
+        if (workspaceState.activeColumnId !== column.id) {
+          setWorkspaceState((current) => activateColumn(current, column.id));
+          void activateWorkspaceColumn(column);
+        }
+        openChannelSettingsDialog(topic, channelId);
+      }}
       onRefreshNotifications={refreshNotificationsColumn}
       onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
       onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
@@ -906,6 +929,10 @@ export function DesktopShellPage({
           onTopicInputChange={setTopicInput}
           onAddTopic={shellActions.handleAddTopic}
           onOpenChannelManager={() => dialogs.setChannelDialogOpen(true)}
+          onOpenChannelManagerForTopic={(topic) => {
+            void shellActions.handleSelectTopic(topic);
+            dialogs.setChannelDialogOpen(true);
+          }}
           onActivateColumn={activateWorkspaceColumn}
           onOpenSettings={handleOpenSettingsSection}
           onOpenTesterFeedback={() => setTesterFeedbackOpen(true)}
@@ -913,12 +940,7 @@ export function DesktopShellPage({
           onSelectChannel={(topic, channelId) => {
             shellActions.handleSelectPrivateChannel(topic, channelId);
           }}
-          onOpenChannelSettings={(topic, channelId) => {
-            setInviteOutput(null);
-            setChannelError(null);
-            shellActions.handleSelectPrivateChannel(topic, channelId);
-            dialogs.setChannelSettingsDialogOpen(true);
-          }}
+          onOpenChannelSettings={openChannelSettingsDialog}
           onLeaveChannel={(topic, channelId) => dialogs.openLeaveChannelDialog(topic, channelId)}
           onRemoveTopic={(topic) => void shellActions.handleRemoveTopic(topic)}
           onCopyTopicLink={(topic) => handleCopyInternalLink(buildTopicLink(topic))}
@@ -943,6 +965,7 @@ export function DesktopShellPage({
         sharePreview={sharePreview}
         clipboardToastId={clipboardToastId}
         onRequestPrivateIndexing={setIndexingTarget}
+        onOpenChannelSettings={openChannelSettingsDialog}
       />
       <CommunityNodeOnboarding api={api} onAccept={shellActions.handleAcceptCommunityNodeConsents}
         onOpenSettings={handleOpenCommunityNodeSettings} onRetry={retryCommunityNode} />
