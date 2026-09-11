@@ -15,6 +15,8 @@ pub const BOOTSTRAP_HEARTBEAT_PATH: &str = "/v1/bootstrap/heartbeat";
 pub const NODE_MANIFEST_PATH: &str = "/v1/node/manifest";
 pub const TOPIC_RENDEZVOUS_HEARTBEAT_PATH: &str = "/v1/rendezvous/topics/heartbeat";
 pub const INDEXING_REQUESTS_PATH: &str = "/v1/indexing/requests";
+/// 自分の索引申請の状態と、任意の対象が supported set に含まれるかの読取り(#975)。
+pub const INDEXING_STATUS_PATH: &str = "/v1/indexing/status";
 pub const INDEX_SEARCH_PATH: &str = "/v1/index/search";
 pub const INDEX_DISCOVERY_PATH: &str = "/v1/index/discovery";
 pub const INDEX_RECOMMENDATIONS_PATH: &str = "/v1/index/recommendations";

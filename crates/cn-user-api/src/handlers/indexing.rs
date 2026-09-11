@@ -8,14 +8,16 @@ use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
     ApiError, ApiResult, IndexScopeKind, filter_relation_visible, get_channel_secret,
-    insert_indexing_request, register_channel_secret, require_bearer_identity, require_consents,
+    insert_indexing_request, is_topic_supported, list_indexing_requests_for_requester,
+    register_channel_secret, require_bearer_identity, require_consents,
 };
 use kukuri_cn_indexer::IndexQuery;
 use kukuri_cn_protocol::{
-    CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER,
+    BearerIdentity, CHANNEL_MEMBERSHIP_REQUIRED_CODE, CHANNEL_MEMBERSHIP_SECRET_HEADER,
     INDEX_QUERY_NOT_ACTIVATED_CODE, INDEX_QUERY_NOT_CONFIGURED_CODE,
     INDEXING_REQUEST_NOT_ACTIVATED_CODE, INDEXING_REQUEST_NOT_CONFIGURED_CODE, IndexEntryView,
-    IndexQueryParams, IndexQueryResponse, RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
+    IndexQueryParams, IndexQueryResponse, IndexingRequestView, IndexingStatusParams,
+    IndexingStatusResponse, IndexingTargetStatus, RELATION_VISIBILITY_NOT_CONFIGURED_CODE,
     SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
@@ -40,22 +42,7 @@ pub(crate) async fn submit_indexing_request(
     headers: HeaderMap,
     Json(request): Json<SubmitIndexingRequestRequest>,
 ) -> ApiResult<Json<SubmitIndexingRequestResponse>> {
-    if state.index_query.is_none() {
-        return Err(ApiError::new(
-            StatusCode::NOT_FOUND,
-            INDEXING_REQUEST_NOT_CONFIGURED_CODE,
-            "this community node does not provide indexing, so it does not accept indexing requests",
-        ));
-    }
-    if !state.readiness_activation_is_valid().await {
-        return Err(ApiError::new(
-            StatusCode::NOT_FOUND,
-            INDEXING_REQUEST_NOT_ACTIVATED_CODE,
-            "this community node index activation is not current, so it does not accept indexing requests",
-        ));
-    }
-    let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
-    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let identity = require_indexing_gate(&state, &headers).await?;
 
     let kind = match request.kind.trim() {
         "public_topic" => IndexScopeKind::PublicTopic,
@@ -115,6 +102,87 @@ pub(crate) async fn submit_indexing_request(
         request_id: stored.id,
         status: stored.status,
     }))
+}
+
+/// 索引申請面(登録 / 状態読取り)の共通の門(#713 / #975)。
+///
+/// 順序は「索引参照が構成済み → 有効化(準備完了記録)が有効 → bearer → consent」。未提供・
+/// 失効は read 面と同じく認証より先に 404 で存在しない扱いにし、索引を提供しないノードへ
+/// 申請(非公開チャンネルでは秘密値)が送られる前に client が縮退判別できるようにする。
+/// 状態読取りも同じ門を通すことで、申請できないノードの申請状態を語らない。
+async fn require_indexing_gate(
+    state: &UserApiState,
+    headers: &HeaderMap,
+) -> ApiResult<BearerIdentity> {
+    if state.index_query.is_none() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            INDEXING_REQUEST_NOT_CONFIGURED_CODE,
+            "this community node does not provide indexing, so it does not accept indexing requests",
+        ));
+    }
+    if !state.readiness_activation_is_valid().await {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            INDEXING_REQUEST_NOT_ACTIVATED_CODE,
+            "this community node index activation is not current, so it does not accept indexing requests",
+        ));
+    }
+    let identity = require_bearer_identity(&state.pool, &state.jwt_config, headers).await?;
+    let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    Ok(identity)
+}
+
+/// 自分の索引申請の状態と、任意の対象の supported 判定を返す(#975)。
+///
+/// - `requests` は呼出し主(bearer identity)の申請だけ。他利用者の申請や supported set 全体は
+///   返さない。却下済みも含む(申請者は自分の却下を確認できる)。
+/// - `scope_kind` + `scope_id` を指定すると `target.supported` を併せて返す。非公開チャンネルは
+///   範囲指定読みと同じ所属証明(#711)を要求し、未提示・不一致・未登録・鍵未設定は同一の 403 で
+///   拒否して索引の有無を漏らさない。自分の申請一覧の取得には所属証明を要求しない。
+/// - 読取り専用。scope state(`supported_topics` / `indexing_requests` / `channel_secrets`)を
+///   書き換えない。
+pub(crate) async fn indexing_status(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Query(params): Query<IndexingStatusParams>,
+) -> ApiResult<Json<IndexingStatusResponse>> {
+    let identity = require_indexing_gate(&state, &headers).await?;
+    let target = parse_scope_pair(params.scope_kind.as_deref(), params.scope_id.as_deref())?;
+    if let Some((IndexScopeKind::PrivateChannel, scope_id)) = target.as_ref() {
+        require_channel_membership(&state, &headers, scope_id.as_str()).await?;
+    }
+    let requests = list_indexing_requests_for_requester(&state.pool, identity.pubkey.as_str())
+        .await
+        .map_err(|source| IndexingError::infrastructure(IndexingOperation::ReadStatus, source))
+        .map_err(indexing_error)?
+        .into_iter()
+        .map(|request| IndexingRequestView {
+            request_id: request.id,
+            scope_kind: request.kind,
+            target_id: request.target_id,
+            status: request.status,
+            created_at: request.created_at.timestamp_millis(),
+            decided_at: request.decided_at.map(|at| at.timestamp_millis()),
+        })
+        .collect();
+    let target = match target {
+        Some((scope_kind, scope_id)) => {
+            let supported = is_topic_supported(&state.pool, scope_kind, scope_id.as_str())
+                .await
+                .map_err(|source| {
+                    IndexingError::infrastructure(IndexingOperation::ReadStatus, source)
+                })
+                .map_err(indexing_error)?;
+            Some(IndexingTargetStatus {
+                scope_kind,
+                scope_id,
+                supported,
+            })
+        }
+        None => None,
+    };
+    Ok(Json(IndexingStatusResponse { requests, target }))
 }
 
 fn index_query_response(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> IndexQueryResponse {
@@ -260,16 +328,16 @@ fn constant_time_str_eq(expected: &str, supplied: &str) -> bool {
 fn parse_index_scope_params(
     params: &IndexQueryParams,
 ) -> Result<Option<(IndexScopeKind, String)>, ApiError> {
-    let scope_kind = params
-        .scope_kind
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
-    let scope_id = params
-        .scope_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
+    parse_scope_pair(params.scope_kind.as_deref(), params.scope_id.as_deref())
+}
+
+/// `scope_kind` / `scope_id` の組を解釈する(index query と索引状況読取りで共有)。
+fn parse_scope_pair(
+    scope_kind: Option<&str>,
+    scope_id: Option<&str>,
+) -> Result<Option<(IndexScopeKind, String)>, ApiError> {
+    let scope_kind = scope_kind.map(str::trim).filter(|v| !v.is_empty());
+    let scope_id = scope_id.map(str::trim).filter(|v| !v.is_empty());
     match (scope_kind, scope_id) {
         (None, None) => Ok(None),
         (Some(kind), Some(id)) => {
@@ -444,6 +512,8 @@ mod error_contract_tests {
             IndexingOperation::Discovery,
             IndexingOperation::Recommendations,
             IndexingOperation::FilterRelationVisibility,
+            IndexingOperation::VerifyChannelMembership,
+            IndexingOperation::ReadStatus,
         ] {
             assert_error_contract(
                 indexing_error(IndexingError::infrastructure(

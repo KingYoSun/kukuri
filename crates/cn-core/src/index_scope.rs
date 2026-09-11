@@ -292,6 +292,30 @@ pub async fn list_indexing_requests(
     rows.iter().map(indexing_request_from_row).collect()
 }
 
+/// 呼出し主自身の indexing request を新着順に列挙する(#975 の read 面)。
+///
+/// `requester_pubkey` で絞るため他利用者の申請は含まない。却下済みの行も残っているので
+/// `rejected` を含めて返す(申請者が自分の却下を確認できる)。
+pub async fn list_indexing_requests_for_requester(
+    pool: &PgPool,
+    requester_pubkey: &str,
+) -> Result<Vec<IndexingRequest>> {
+    let requester_pubkey = requester_pubkey.trim();
+    if requester_pubkey.is_empty() {
+        bail!("indexing request requester_pubkey must not be empty");
+    }
+    let rows = sqlx::query(
+        "SELECT id, requester_pubkey, kind, target_id, status, created_at, decided_at
+         FROM cn_index.indexing_requests
+         WHERE requester_pubkey = $1
+         ORDER BY created_at DESC",
+    )
+    .bind(requester_pubkey)
+    .fetch_all(pool)
+    .await?;
+    rows.iter().map(indexing_request_from_row).collect()
+}
+
 /// indexing request を承認する。承認と同時に対象 scope を supported set に入れる
 /// （`request → operator 承認（supported 化）` の接続。ADR 0025 §2.2）。
 ///

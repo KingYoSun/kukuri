@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use kukuri_cn_core::{
-    JwtConfig, TestDatabase, connect_postgres, readiness_context_fingerprint,
+    IndexScopeKind, JwtConfig, TestDatabase, connect_postgres, readiness_context_fingerprint,
     record_readiness_activation,
 };
 use kukuri_cn_operator::READINESS_CHECK_IDS;
@@ -497,4 +497,348 @@ async fn indexing_request_is_rejected_when_activation_is_stale() -> Result<()> {
     assert_nothing_stored(&server).await?;
 
     server.shutdown().await
+}
+
+/// 索引状況読取り(#975)が scope state を書き換えないことを確認するための行数 snapshot。
+async fn scope_state_counts(server: &TestServer) -> Result<(i64, i64, i64)> {
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    let requests: i64 = sqlx::query_scalar("SELECT count(*) FROM cn_index.indexing_requests")
+        .fetch_one(&pool)
+        .await?;
+    let supported: i64 = sqlx::query_scalar("SELECT count(*) FROM cn_index.supported_topics")
+        .fetch_one(&pool)
+        .await?;
+    let secrets: i64 = sqlx::query_scalar("SELECT count(*) FROM cn_index.channel_secrets")
+        .fetch_one(&pool)
+        .await?;
+    Ok((requests, supported, secrets))
+}
+
+async fn submit_request(
+    client: &Client,
+    base_url: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let response = client
+        .post(format!("{base_url}/v1/indexing/requests"))
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    Ok(response.json::<serde_json::Value>().await?)
+}
+
+#[tokio::test]
+async fn indexing_status_requires_auth_and_consent() -> Result<()> {
+    // #975 AC-1 / INVAR-1: 状態読取りは申請と同じ門を通る(未認証 401、未同意 403)。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_indexing_status_auth",
+        Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+    )
+    .await?;
+    let client = Client::new();
+
+    let unauthenticated = client
+        .get(format!("{}/v1/indexing/status", server.base_url))
+        .send()
+        .await?;
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    let keys = generate_keys();
+    let (token, _) =
+        support::authenticate(&client, &server.base_url, &keys, "peer-status", None).await?;
+    let unconsented = client
+        .get(format!("{}/v1/indexing/status", server.base_url))
+        .bearer_auth(token.as_str())
+        .send()
+        .await?;
+    assert_eq!(unconsented.status(), StatusCode::FORBIDDEN);
+    let body = unconsented.json::<serde_json::Value>().await?;
+    assert_eq!(body["code"], "CONSENT_REQUIRED");
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn indexing_status_returns_own_requests_only_and_public_target_support() -> Result<()> {
+    // #975 AC-1 / AC-4 / INVAR-2: 自分の申請だけを返し、公開 topic の supported を判定し、
+    // 読取りが scope state を書き換えない。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_indexing_status_own",
+        Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+    )
+    .await?;
+    let client = Client::new();
+    let keys_a = generate_keys();
+    let token_a = authenticate_and_consent(&client, &server.base_url, &keys_a).await?;
+    let keys_b = generate_keys();
+    let token_b = authenticate_and_consent(&client, &server.base_url, &keys_b).await?;
+
+    // 申請前: 一覧は空で、対象は supported でない(INVAR-2 の基準 snapshot)。
+    let before = client
+        .get(format!(
+            "{}/v1/indexing/status?scope_kind=public_topic&scope_id=rust",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(before.status(), StatusCode::OK);
+    let before = before.json::<serde_json::Value>().await?;
+    assert_eq!(before["requests"], serde_json::json!([]));
+    assert_eq!(
+        before["target"],
+        serde_json::json!({ "scope_kind": "public_topic", "scope_id": "rust", "supported": false })
+    );
+    assert_eq!(scope_state_counts(&server).await?, (0, 0, 0));
+
+    let mine = submit_request(
+        &client,
+        &server.base_url,
+        token_a.as_str(),
+        serde_json::json!({ "kind": "public_topic", "target_id": "rust" }),
+    )
+    .await?;
+    submit_request(
+        &client,
+        &server.base_url,
+        token_b.as_str(),
+        serde_json::json!({ "kind": "public_topic", "target_id": "golang" }),
+    )
+    .await?;
+    let snapshot = scope_state_counts(&server).await?;
+    assert_eq!(snapshot, (2, 0, 0));
+
+    // A の一覧には A の行だけ。B の golang は含まない。
+    let listed = client
+        .get(format!("{}/v1/indexing/status", server.base_url))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed = listed.json::<serde_json::Value>().await?;
+    let requests = listed["requests"].as_array().expect("requests array");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["request_id"], mine["request_id"]);
+    assert_eq!(requests[0]["scope_kind"], "public_topic");
+    assert_eq!(requests[0]["target_id"], "rust");
+    assert_eq!(requests[0]["status"], "pending");
+    assert!(requests[0]["created_at"].as_i64().is_some_and(|at| at > 0));
+    assert!(requests[0]["decided_at"].is_null());
+    assert!(listed["target"].is_null());
+
+    // operator が承認すると supported になり、状態も approved になる(多段ゲートは不変)。
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    kukuri_cn_core::approve_indexing_request(&pool, mine["request_id"].as_str().unwrap())
+        .await?
+        .expect("request exists");
+    let approved = client
+        .get(format!(
+            "{}/v1/indexing/status?scope_kind=public_topic&scope_id=rust",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(approved.status(), StatusCode::OK);
+    let approved = approved.json::<serde_json::Value>().await?;
+    assert_eq!(approved["requests"][0]["status"], "approved");
+    assert!(approved["requests"][0]["decided_at"].as_i64().is_some());
+    assert_eq!(approved["target"]["supported"], true);
+
+    // B から見ると rust は supported だが、自分の申請一覧には A の行は出ない。
+    let other = client
+        .get(format!(
+            "{}/v1/indexing/status?scope_kind=public_topic&scope_id=rust",
+            server.base_url
+        ))
+        .bearer_auth(token_b.as_str())
+        .send()
+        .await?;
+    let other = other.json::<serde_json::Value>().await?;
+    assert_eq!(other["target"]["supported"], true);
+    assert_eq!(other["requests"].as_array().unwrap().len(), 1);
+    assert_eq!(other["requests"][0]["target_id"], "golang");
+
+    // 読取りを繰り返しても scope state は承認後の状態から動かない(INVAR-2)。
+    assert_eq!(scope_state_counts(&server).await?, (2, 1, 0));
+
+    // 片方だけの scope 指定は 400。
+    let half = client
+        .get(format!(
+            "{}/v1/indexing/status?scope_kind=public_topic",
+            server.base_url
+        ))
+        .bearer_auth(token_a.as_str())
+        .send()
+        .await?;
+    assert_eq!(half.status(), StatusCode::BAD_REQUEST);
+    let half = half.json::<serde_json::Value>().await?;
+    assert_eq!(half["code"], "INVALID_INDEX_QUERY");
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn indexing_status_private_target_requires_membership_proof() -> Result<()> {
+    // #975 AC-2 / #711: 非公開チャンネルの supported 判定は所属証明が必要で、未提示・不一致・
+    // 未登録は同一 403。自分の申請一覧は所属証明なしで取得できる。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_indexing_status_private",
+        Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+    )
+    .await?;
+    let client = Client::new();
+    let keys_member = generate_keys();
+    let token_member = authenticate_and_consent(&client, &server.base_url, &keys_member).await?;
+    let keys_outsider = generate_keys();
+    let token_outsider =
+        authenticate_and_consent(&client, &server.base_url, &keys_outsider).await?;
+    let secret_hex = hex::encode([9u8; 32]);
+    let private_status_url = format!(
+        "{}/v1/indexing/status?scope_kind=private_channel&scope_id=secret-room",
+        server.base_url
+    );
+
+    // 未登録チャンネルは、本人でも所属証明を提示しても 403(存在有無を漏らさない)。
+    let unregistered = client
+        .get(private_status_url.as_str())
+        .bearer_auth(token_member.as_str())
+        .header("x-kukuri-channel-secret", secret_hex.as_str())
+        .send()
+        .await?;
+    assert_eq!(unregistered.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        unregistered.json::<serde_json::Value>().await?["code"],
+        "CHANNEL_MEMBERSHIP_REQUIRED"
+    );
+
+    submit_request(
+        &client,
+        &server.base_url,
+        token_member.as_str(),
+        serde_json::json!({
+            "kind": "private_channel",
+            "target_id": "secret-room",
+            "channel_secret_hex": secret_hex,
+        }),
+    )
+    .await?;
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    kukuri_cn_core::add_supported_topic(&pool, IndexScopeKind::PrivateChannel, "secret-room")
+        .await?;
+    let snapshot = scope_state_counts(&server).await?;
+    assert_eq!(snapshot, (1, 1, 1));
+
+    // 未提示・不一致は同一 403。
+    let missing = client
+        .get(private_status_url.as_str())
+        .bearer_auth(token_outsider.as_str())
+        .send()
+        .await?;
+    assert_eq!(missing.status(), StatusCode::FORBIDDEN);
+    let missing = missing.json::<serde_json::Value>().await?;
+    assert_eq!(missing["code"], "CHANNEL_MEMBERSHIP_REQUIRED");
+    let mismatched = client
+        .get(private_status_url.as_str())
+        .bearer_auth(token_outsider.as_str())
+        .header("x-kukuri-channel-secret", hex::encode([8u8; 32]))
+        .send()
+        .await?;
+    assert_eq!(mismatched.status(), StatusCode::FORBIDDEN);
+    let mismatched = mismatched.json::<serde_json::Value>().await?;
+    assert_eq!(mismatched, missing, "未提示と不一致の応答本文は同一");
+
+    // 所属証明を提示すれば supported が読める。
+    let proven = client
+        .get(private_status_url.as_str())
+        .bearer_auth(token_member.as_str())
+        .header("x-kukuri-channel-secret", secret_hex.as_str())
+        .send()
+        .await?;
+    assert_eq!(proven.status(), StatusCode::OK);
+    let proven = proven.json::<serde_json::Value>().await?;
+    assert_eq!(proven["target"]["supported"], true);
+    assert_eq!(proven["requests"][0]["target_id"], "secret-room");
+
+    // 自分の申請一覧(target 無指定)は所属証明なしで取得できる。
+    let list_only = client
+        .get(format!("{}/v1/indexing/status", server.base_url))
+        .bearer_auth(token_member.as_str())
+        .send()
+        .await?;
+    assert_eq!(list_only.status(), StatusCode::OK);
+    let list_only = list_only.json::<serde_json::Value>().await?;
+    assert_eq!(list_only["requests"][0]["scope_kind"], "private_channel");
+    assert_eq!(list_only["requests"][0]["status"], "pending");
+
+    // 非参加者の一覧は空で、読取りは何も書かない(INVAR-2)。
+    let outsider_list = client
+        .get(format!("{}/v1/indexing/status", server.base_url))
+        .bearer_auth(token_outsider.as_str())
+        .send()
+        .await?;
+    assert_eq!(
+        outsider_list.json::<serde_json::Value>().await?["requests"],
+        serde_json::json!([])
+    );
+    assert_eq!(scope_state_counts(&server).await?, snapshot);
+
+    server.shutdown().await
+}
+
+#[tokio::test]
+async fn indexing_status_is_hidden_when_index_is_not_configured_or_stale() -> Result<()> {
+    // #975 INVAR-1: 状態読取りも #713 の門を通り、未構成・失効は認証より先に 404。
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api indexing test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let client = Client::new();
+    for (prefix, gate, expected_code) in [
+        (
+            "cn_indexing_status_gate_off",
+            IndexGate::NotConfigured,
+            "INDEXING_REQUEST_NOT_CONFIGURED",
+        ),
+        (
+            "cn_indexing_status_gate_stale",
+            IndexGate::Inactive,
+            "INDEXING_REQUEST_NOT_ACTIVATED",
+        ),
+    ] {
+        let server = TestServer::spawn_with_index_gate(
+            admin_database_url.as_str(),
+            prefix,
+            Some(TEST_CHANNEL_SECRET_KEY.to_string()),
+            gate,
+        )
+        .await?;
+        let unauthenticated = client
+            .get(format!("{}/v1/indexing/status", server.base_url))
+            .send()
+            .await?;
+        assert_eq!(unauthenticated.status(), StatusCode::NOT_FOUND);
+        let body = unauthenticated.json::<serde_json::Value>().await?;
+        assert_eq!(body["code"], expected_code);
+        server.shutdown().await?;
+    }
+    Ok(())
 }
