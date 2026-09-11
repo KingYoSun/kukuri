@@ -9,7 +9,7 @@ import { DESKTOP_THEME_STORAGE_KEY } from '../../src/lib/theme';
 
 const COPY = {
   ja: {
-    entry: 'プライベートチャンネルを作成または参加',
+    entry: 'チャンネル作成・参加',
     entryText: 'プライベートチャンネル',
     dialog: 'プライベートチャンネル作成 / 参加',
     intro: 'プライベートチャンネルは、このトピックの中で参加者だけが投稿を読み書きできる範囲です。',
@@ -23,7 +23,7 @@ const COPY = {
     copyShareLink: '共有リンクをコピーする',
     shareHint: '共有リンクは招待したい相手にだけ送ってください。',
     controlCenter: 'コントロールセンター',
-    ccCreateJoin: 'プライベートチャンネルを作成または参加',
+    ccCreateJoin: 'チャンネル作成・参加',
     ccEmpty: '参加済みのプライベートチャンネルはありません。',
     ccEmptyAction: '作成または参加',
     ccShare: '選択中のチャンネルを共有',

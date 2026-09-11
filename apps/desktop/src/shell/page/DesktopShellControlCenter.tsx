@@ -287,7 +287,6 @@ export function DesktopShellControlCenter({
         >
           <header className='shell-control-center-header'>
             <div>
-              <p className='eyebrow'>{t('shell:controlCenter.eyebrow')}</p>
               <h2>{t('shell:controlCenter.title')}</h2>
               <p className='shell-control-center-summary'>{statusLabel}</p>
             </div>

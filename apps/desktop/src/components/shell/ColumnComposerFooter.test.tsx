@@ -59,7 +59,7 @@ describe('ColumnComposerFooter', () => {
   it('uses an icon-sized accessible action while its Column is inactive', () => {
     renderFooter(false);
     const action = screen.getByRole('button', { name: /Post to Mutuals/ });
-    expect(action).toHaveClass('button-icon', 'size-10');
+    expect(action).toHaveClass('button-icon', 'size-7');
     expect(action.querySelector('span')).toBeNull();
   });
 

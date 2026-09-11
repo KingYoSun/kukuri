@@ -418,19 +418,16 @@
   gap: var(--space-sm);
 }
 
-.profile-overview-connections .button {
-  min-height: 2.75rem;
-}
-
 .profile-overview-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 4rem;
-  height: 4rem;
+  width: 3rem;
+  height: 3rem;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
+  /* avatar は角丸の例外として常に全丸 */
+  border-radius: var(--radius-pill);
   background: var(--surface-avatar);
   font-size: var(--text-h1);
   font-weight: 700;
@@ -454,7 +451,7 @@
   aspect-ratio: 1;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-pill);
   background: var(--surface-avatar);
 }
 

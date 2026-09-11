@@ -45,7 +45,6 @@
     "channelEmptyAction": "Create or join"
   },
   "controlCenter": {
-    "eyebrow": "Global navigation",
     "title": "Control Center",
     "openWithStatus": "Open Control Center · {{status}}",
     "closeWithStatus": "Close Control Center · {{status}}",

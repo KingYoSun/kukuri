@@ -60,6 +60,18 @@
     min-height: 44px;
   }
 
+  /* Control Center のカラム行操作は touch 目標 44px を維持する（desktop は 2rem）。 */
+  .shell-phase1 .shell-control-center-column-row {
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+  }
+
+  .shell-phase1 .shell-control-center-column-row > .button {
+    inline-size: 44px;
+    min-inline-size: 44px;
+    block-size: 44px;
+    min-block-size: 44px;
+  }
+
   .shell-phase1 .shell-column-footer {
     padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
   }

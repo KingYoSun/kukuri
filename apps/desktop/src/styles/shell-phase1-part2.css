@@ -29,7 +29,7 @@
 }
 
 .post-body {
-  margin-top: var(--space-sm);
+  margin-top: var(--space-2xs);
   min-width: 0;
 }
 
@@ -188,8 +188,8 @@
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
 }
 
 .post-reaction-summary {
@@ -503,8 +503,8 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-md);
-  margin-bottom: var(--space-xs);
+  gap: var(--space-xs);
+  margin-bottom: var(--space-2xs);
   font-size: var(--text-caption);
   color: var(--muted-foreground);
   min-width: 0;
@@ -561,7 +561,6 @@
 .author-avatar.author-avatar-sm.post-repost-attribution-avatar {
   width: 1.25rem;
   height: 1.25rem;
-  border-radius: var(--radius-pill);
   font-size: 0.625rem;
 }
 
@@ -711,9 +710,9 @@
 
 .shell-icon-button {
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
-  min-width: 2.5rem;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
   padding: 0;
   border-radius: var(--radius-input);
 }
