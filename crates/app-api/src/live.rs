@@ -12,7 +12,7 @@ impl AppService {
         scope: TimelineScope,
     ) -> Result<Vec<LiveSessionView>> {
         self.ensure_scope_subscriptions(topic_id, &scope).await?;
-        let muted_author_pubkeys = self.current_muted_author_pubkeys().await?;
+        let hidden_author_pubkeys = self.current_hidden_author_pubkeys().await?;
         self.services
             .projection_store
             .clear_expired_live_presence(Utc::now().timestamp_millis())
@@ -27,7 +27,7 @@ impl AppService {
             |row| row.channel_id.as_str(),
         )
         .into_iter()
-        .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+        .filter(|row| !hidden_author_pubkeys.contains(row.host_pubkey.as_str()))
         .collect::<Vec<_>>();
         let needs_refresh = rows
             .iter()
@@ -51,7 +51,7 @@ impl AppService {
                 |row| row.channel_id.as_str(),
             )
             .into_iter()
-            .filter(|row| !muted_author_pubkeys.contains(row.host_pubkey.as_str()))
+            .filter(|row| !hidden_author_pubkeys.contains(row.host_pubkey.as_str()))
             .collect();
         }
         self.cleanup_ended_live_presence_tasks(&rows).await;

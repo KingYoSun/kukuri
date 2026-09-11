@@ -155,11 +155,12 @@ export function useDesktopShellSectionLoaders({
     setProfileError(null);
     setProfilePanelState({ status: 'loading', error: null });
     try {
-      const [profile, following, followed, muted] = await Promise.all([
+      const [profile, following, followed, muted, blocking] = await Promise.all([
         api.getMyProfile(),
         api.listSocialConnections('following'),
         api.listSocialConnections('followed'),
         api.listSocialConnections('muted'),
+        api.listSocialConnections('blocking'),
       ]);
       const timeline = await api.listProfileTimeline(
         profile.pubkey,
@@ -176,9 +177,9 @@ export function useDesktopShellSectionLoaders({
         setProfileTimelineNextCursor(timeline.next_cursor ?? null);
         setProfileError(null);
         setProfilePanelState({ status: 'ready', error: null });
-        setSocialConnections({ following, followed, muted });
+        setSocialConnections({ following, followed, muted, blocking });
         setKnownAuthorsByPubkey((current) =>
-          mergeKnownAuthors(current, [...following, ...followed, ...muted])
+          mergeKnownAuthors(current, [...following, ...followed, ...muted, ...blocking])
         );
         setSocialConnectionsPanelState({ status: 'ready', error: null });
       });

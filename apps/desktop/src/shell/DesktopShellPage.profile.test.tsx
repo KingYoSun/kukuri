@@ -135,6 +135,7 @@ test('profile overview aggregates public posts across topics and excludes privat
 test('profile overview connection count buttons open the requested connections tab', async () => {
   const followedPubkey = 'b'.repeat(64);
   const mutedPubkey = 'c'.repeat(64);
+  const blockedPubkey = 'd'.repeat(64);
   const user = userEvent.setup();
 
   render(
@@ -148,6 +149,10 @@ test('profile overview connection count buttons open the requested connections t
           [mutedPubkey]: {
             name: 'carol',
             muted: true,
+          },
+          [blockedPubkey]: {
+            name: 'dave',
+            blocking: true,
           },
         },
       })}
@@ -176,6 +181,80 @@ test('profile overview connection count buttons open the requested connections t
       'true'
     );
   });
+
+  // #961: ブロック中の件数導線と、一覧行からの解除。
+  await user.click(screen.getByRole('button', { name: 'Back to profile' }));
+  await user.click(screen.getByRole('button', { name: '1 blocked user' }));
+  await waitFor(() => {
+    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Blocked' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  expect(window.location.hash).toContain('connectionsView=blocking');
+  const blockedColumn = getActiveColumn('Profile');
+  expect(within(blockedColumn).getByText('dave', { selector: '.post-title' })).toBeInTheDocument();
+  await user.click(within(blockedColumn).getByRole('button', { name: 'Unblock' }));
+  await waitFor(() => {
+    expect(within(blockedColumn).getByText('No blocked users yet.')).toBeInTheDocument();
+  });
+  await user.click(screen.getByRole('button', { name: 'Back to profile' }));
+  expect(screen.getByRole('button', { name: '0 blocked users' })).toBeInTheDocument();
+});
+
+test('blocking from the muted list moves the user into the blocked list', async () => {
+  const mutedPubkey = 'c'.repeat(64);
+  const user = userEvent.setup();
+  const api = createDesktopMockApi({
+    authorSocialViews: {
+      [mutedPubkey]: { name: 'carol', muted: true },
+    },
+  });
+  const blockAuthor = vi.spyOn(api, 'blockAuthor');
+  render(<App api={api} />);
+
+  await selectWorkspace(user, 'Profile');
+  await user.click(screen.getByRole('button', { name: '1 muted user' }));
+  const column = getActiveColumn('Profile');
+  await user.click(within(column).getByRole('button', { name: 'Block' }));
+  await waitFor(() => expect(blockAuthor).toHaveBeenCalledWith(mutedPubkey));
+  await waitFor(() => {
+    expect(within(column).getByRole('button', { name: 'Unblock' })).toBeInTheDocument();
+  });
+  await user.click(within(column).getByRole('tab', { name: 'Blocked' }));
+  await waitFor(() => {
+    expect(within(column).getByText('carol', { selector: '.post-title' })).toBeInTheDocument();
+  });
+  expect(within(column).getByText('Muted', { selector: '.relationship-badge' })).toBeInTheDocument();
+});
+
+test('safety settings open the blocked users list and close the drawer', async () => {
+  const blockedPubkey = 'd'.repeat(64);
+  const user = userEvent.setup();
+  render(
+    <App
+      api={createDesktopMockApi({
+        authorSocialViews: {
+          [blockedPubkey]: { name: 'dave', blocking: true },
+        },
+      })}
+    />
+  );
+
+  const drawer = await openSettingsSection(user, 'safety');
+  await user.click(within(drawer).getByRole('button', { name: 'Open blocked users' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+  await waitFor(() => {
+    expect(within(getSocialConnectionsTabs()).getByRole('tab', { name: 'Blocked' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+  expect(
+    within(getActiveColumn('Profile')).getByText('dave', { selector: '.post-title' })
+  ).toBeInTheDocument();
 });
 
 test('author detail shows profile topic posts and can open an untracked origin topic', async () => {

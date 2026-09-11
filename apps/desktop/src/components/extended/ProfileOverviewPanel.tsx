@@ -14,10 +14,12 @@ type ProfileOverviewPanelProps = {
   followingCount: number;
   followedCount: number;
   mutedCount: number;
+  blockingCount: number;
   onEdit: () => void;
   onOpenFollowing: () => void;
   onOpenFollowed: () => void;
   onOpenMuted: () => void;
+  onOpenBlocking: () => void;
 };
 
 export function ProfileOverviewPanel({
@@ -30,10 +32,12 @@ export function ProfileOverviewPanel({
   followingCount,
   followedCount,
   mutedCount,
+  blockingCount,
   onEdit,
   onOpenFollowing,
   onOpenFollowed,
   onOpenMuted,
+  onOpenBlocking,
 }: ProfileOverviewPanelProps) {
   const { t } = useTranslation('profile');
 
@@ -77,6 +81,9 @@ export function ProfileOverviewPanel({
           </Button>
           <Button variant='secondary' type='button' onClick={onOpenMuted}>
             {t('overview.mutedCount', { count: mutedCount })}
+          </Button>
+          <Button variant='secondary' type='button' onClick={onOpenBlocking}>
+            {t('overview.blockingCount', { count: blockingCount })}
           </Button>
         </div>
         <p className='lede'>{about?.trim() || t('overview.noBio')}</p>

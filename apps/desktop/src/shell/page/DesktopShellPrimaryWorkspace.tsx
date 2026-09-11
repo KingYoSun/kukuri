@@ -140,6 +140,7 @@ export type DesktopShellPrimarySurfaceProps = {
   resetProfileDraft: () => void;
   handleRelationshipAction: (authorPubkey: string, following: boolean) => Promise<void>;
   handleMuteAction: (authorPubkey: string, muted: boolean) => Promise<void>;
+  handleBlockAction: (authorPubkey: string, blocking: boolean) => Promise<void>;
   handleOpenOriginalTopic: (topicId: string) => Promise<void>;
 };
 
@@ -194,6 +195,7 @@ export function DesktopShellPrimarySurface({
   resetProfileDraft,
   handleRelationshipAction,
   handleMuteAction,
+  handleBlockAction,
   handleOpenOriginalTopic,
 }: DesktopShellPrimarySurfaceProps) {
   const {
@@ -764,6 +766,9 @@ export function DesktopShellPrimarySurface({
                   void handleRelationshipAction(authorPubkey, following)
                 }
                 onToggleMute={(authorPubkey, muted) => void handleMuteAction(authorPubkey, muted)}
+                onToggleBlock={(authorPubkey, blocking) =>
+                  void handleBlockAction(authorPubkey, blocking)
+                }
                 onBack={openProfileOverview}
               />
             ) : (
@@ -778,10 +783,12 @@ export function DesktopShellPrimarySurface({
                 followingCount={socialConnections.following.length}
                 followedCount={socialConnections.followed.length}
                 mutedCount={socialConnections.muted.length}
+                blockingCount={socialConnections.blocking.length}
                 onEdit={openProfileEditor}
                 onOpenFollowing={() => openProfileConnections('following')}
                 onOpenFollowed={() => openProfileConnections('followed')}
                 onOpenMuted={() => openProfileConnections('muted')}
+                onOpenBlocking={() => openProfileConnections('blocking')}
               />
             )}
             {profileMode !== 'connections' && profilePanelState.status === 'error' ? (

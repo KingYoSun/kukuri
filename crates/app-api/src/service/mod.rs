@@ -204,13 +204,13 @@ pub(crate) use profile_docs_support::{
 };
 pub(crate) use projection_support::{
     active_private_channel_participants, archive_private_channel_epoch,
-    bookmarked_post_row_is_muted, current_private_channel_replica_id,
+    bookmarked_post_row_is_hidden, current_private_channel_replica_id,
     fetch_post_object_for_projection, filter_channel_rows, filtered_thread_page,
     filtered_timeline_page, initial_private_channel_epoch_id,
     joined_private_channel_state_from_capability, merged_private_channel_state_from_epoch_join,
     next_private_channel_epoch_id, private_channel_epoch_capabilities,
     private_channel_is_epoch_aware, private_channel_replica_for_epoch,
-    profile_timeline_item_is_muted,
+    profile_timeline_item_is_hidden,
 };
 pub(crate) use social_helpers::{
     current_mutual_direct_message_peers, rebuild_author_relationships,

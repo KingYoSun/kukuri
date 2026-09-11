@@ -227,7 +227,7 @@
     },
     "safety": {
       "label": "安全",
-      "description": "成人内容显示设置。"
+      "description": "成人内容显示设置、静音与屏蔽。"
     }
   },
   "workspace": {

@@ -256,6 +256,12 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
         if (kind === 'followed') {
           return view.followed_by;
         }
+        if (kind === 'blocking') {
+          return view.blocking;
+        }
+        if (kind === 'blocked_by') {
+          return view.blocked_by;
+        }
         return view.muted;
       })
       .map(cloneAuthorView);

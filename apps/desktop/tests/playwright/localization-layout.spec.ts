@@ -36,6 +36,7 @@ const MAJOR_ROUTES = [
   '/#/notifications?topic=kukuri%3Atopic%3Ageneral',
   '/#/profile?topic=kukuri%3Atopic%3Ageneral',
   '/#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=muted',
+  '/#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=blocking',
   '/#/live?topic=kukuri%3Atopic%3Ageneral',
   '/#/game?topic=kukuri%3Atopic%3Ageneral',
 ] as const;

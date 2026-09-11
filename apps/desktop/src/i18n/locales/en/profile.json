@@ -118,6 +118,8 @@
     "loading": "Loading profile…",
     "mutedCount_one": "{{count}} muted user",
     "mutedCount_other": "{{count}} muted users",
+    "blockingCount_one": "{{count}} blocked user",
+    "blockingCount_other": "{{count}} blocked users",
     "noBio": "No bio yet.",
     "postCount": "Public posts",
     "title": "Profile"
@@ -127,17 +129,20 @@
     "empty": {
       "followed": "No followers known to this device yet.",
       "following": "You are not following anyone yet.",
-      "muted": "No muted users yet."
+      "muted": "No muted users yet.",
+      "blocking": "No blocked users yet."
     },
-    "loading": "Loading follows and mutes…",
+    "loading": "Loading follows, mutes, and blocks…",
     "mutedBadge": "Muted",
     "tabs": {
       "followed": "Followers",
       "following": "Following",
-      "muted": "Muted"
+      "muted": "Muted",
+      "blocking": "Blocked"
     },
     "tabsLabel": "Social connections",
-    "title": "Follow & Mute"
+    "title": "Follow, Mute & Block",
+    "blockedBadge": "Blocked"
   },
   "feed": {
     "noAuthorPosts": "This user hasn't posted publicly yet.",

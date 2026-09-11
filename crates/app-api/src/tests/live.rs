@@ -222,3 +222,85 @@ async fn muted_author_is_filtered_from_live_and_game_lists() {
     );
     assert!(games_after.iter().all(|room| room.room_id != room_id));
 }
+
+// #961: ブロック関係はどちらの向きでも配信・ゲーム部屋の一覧から host を隠す。
+#[tokio::test]
+async fn blocked_author_is_filtered_from_live_and_game_lists_in_both_directions() {
+    let (local_app, local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+        shared_apps_with_memory_services();
+    let topic = "kukuri:topic:block-live-game";
+    let local_pubkey = local_keys.public_key_hex();
+    let remote_pubkey = remote_keys.public_key_hex();
+
+    let session_id = remote_app
+        .create_live_session(
+            topic,
+            CreateLiveSessionInput {
+                title: "blocked live".into(),
+                description: "hidden".into(),
+            },
+        )
+        .await
+        .expect("create live session");
+    let room_id = remote_app
+        .create_game_room(
+            topic,
+            CreateGameRoomInput {
+                title: "blocked room".into(),
+                description: "hidden".into(),
+                participants: vec!["Alice".into(), "Bob".into()],
+            },
+        )
+        .await
+        .expect("create game room");
+
+    let assert_visible = |visible: bool, label: &'static str| {
+        let local_app = &local_app;
+        let session_id = session_id.clone();
+        let room_id = room_id.clone();
+        async move {
+            let live = local_app
+                .list_live_sessions(topic)
+                .await
+                .unwrap_or_else(|_| panic!("list live sessions {label}"));
+            let games = local_app
+                .list_game_rooms(topic)
+                .await
+                .unwrap_or_else(|_| panic!("list game rooms {label}"));
+            assert_eq!(
+                live.iter().any(|session| session.session_id == session_id),
+                visible,
+                "live {label}"
+            );
+            assert_eq!(
+                games.iter().any(|room| room.room_id == room_id),
+                visible,
+                "game {label}"
+            );
+        }
+    };
+
+    assert_visible(true, "before block").await;
+
+    local_app
+        .block_author(remote_pubkey.as_str())
+        .await
+        .expect("local blocks host");
+    assert_visible(false, "while blocking").await;
+    local_app
+        .unblock_author(remote_pubkey.as_str())
+        .await
+        .expect("local unblocks host");
+    assert_visible(true, "after unblock").await;
+
+    remote_app
+        .block_author(local_pubkey.as_str())
+        .await
+        .expect("host blocks local");
+    assert_visible(false, "while blocked by host").await;
+    remote_app
+        .unblock_author(local_pubkey.as_str())
+        .await
+        .expect("host revokes block");
+    assert_visible(true, "after revoke").await;
+}

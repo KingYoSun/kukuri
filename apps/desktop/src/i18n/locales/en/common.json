@@ -108,7 +108,8 @@
     "failedToUpdateMuteState": "Failed to update the mute.",
     "quoteRepostRequiresCommentary": "Add a comment before reposting.",
     "unsupportedAttachmentType": "Unsupported attachment type: {{name}}.",
-    "failedToWithdrawConsents": "Failed to withdraw community node consents."
+    "failedToWithdrawConsents": "Failed to withdraw community node consents.",
+    "failedToUpdateBlockState": "Failed to update the block."
   },
   "feed": {
     "contentUnavailable": "Content unavailable.",

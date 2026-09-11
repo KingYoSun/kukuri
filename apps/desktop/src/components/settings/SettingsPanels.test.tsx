@@ -9,6 +9,7 @@ import { ConnectivityPanel } from './ConnectivityPanel';
 import { DeveloperPanel } from './DeveloperPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { ReactionsPanel } from './ReactionsPanel';
+import { SafetyPanel } from './SafetyPanel';
 import {
   createAppearancePanelFixture,
   createCommunityNodePanelFixture,
@@ -782,4 +783,27 @@ test('developer panel shortcuts follow the current controlled mode', async () =>
   rerender(<DeveloperPanel {...props} developerModeEnabled={false} />);
   expect(screen.getByRole('status')).toHaveTextContent('Developer mode is off.');
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+// #961: セーフティ設定はミュートとブロックの違いを説明し、一覧への導線を持つ。
+test('safety panel explains mute versus block and opens each list', async () => {
+  const user = userEvent.setup();
+  const onOpenMutedUsers = vi.fn();
+  const onOpenBlockedUsers = vi.fn();
+
+  render(
+    <SafetyPanel
+      adultContentEnabled={false}
+      onAdultContentEnabledChange={vi.fn()}
+      onOpenMutedUsers={onOpenMutedUsers}
+      onOpenBlockedUsers={onOpenBlockedUsers}
+    />
+  );
+
+  expect(screen.getByText(/Mute hides a user's posts/)).toBeInTheDocument();
+  expect(screen.getByText(/Block is signed with your account/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Open muted users' }));
+  expect(onOpenMutedUsers).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Open blocked users' }));
+  expect(onOpenBlockedUsers).toHaveBeenCalledTimes(1);
 });

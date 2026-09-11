@@ -669,6 +669,7 @@ export function DesktopShellPage({
       resetProfileDraft={shellActions.resetProfileDraft}
       handleRelationshipAction={shellActions.handleRelationshipAction}
       handleMuteAction={shellActions.handleMuteAction}
+      handleBlockAction={shellActions.handleBlockAction}
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
     />
   );
@@ -970,6 +971,8 @@ export function DesktopShellPage({
         localeSaveFailed={localeSaveFailed}
         syncRoute={syncRoute}
         setSettingsOpen={setSettingsOpen}
+        focusPrimarySection={focusPrimarySection}
+        openProfileConnections={openProfileConnections}
         viewModels={viewModels}
         handleImportPeer={shellActions.handleImportPeer}
         handleSaveDiscoverySeeds={shellActions.handleSaveDiscoverySeeds}

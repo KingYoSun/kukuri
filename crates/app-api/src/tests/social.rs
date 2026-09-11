@@ -511,3 +511,242 @@ async fn social_graph_derives_friend_of_friend_and_clears_after_unfollow() {
     assert!(!c_view.friend_of_friend);
     assert!(c_view.friend_of_friend_via_pubkeys.is_empty());
 }
+
+// #961: ブロックはミュートと同じ読み出し経路で、どちらの向きでも投稿を見た目上隠す。
+// 取得・保存の禁止ではなく、hydrate 済みの Active edge に基づく表示上の非表示。
+async fn assert_remote_content_visibility(
+    local_app: &AppService,
+    topic: &str,
+    remote_pubkey: &str,
+    root_id: &str,
+    reply_id: &str,
+    visible: bool,
+    label: &str,
+) {
+    let timeline = local_app
+        .list_timeline(topic, None, 20)
+        .await
+        .unwrap_or_else(|_| panic!("timeline {label}"));
+    let thread = local_app
+        .list_thread(topic, root_id, None, 20)
+        .await
+        .unwrap_or_else(|_| panic!("thread {label}"));
+    let profile = local_app
+        .list_profile_timeline(remote_pubkey, None, 20)
+        .await
+        .unwrap_or_else(|_| panic!("profile {label}"));
+    let bookmarks = local_app
+        .list_bookmarked_posts()
+        .await
+        .unwrap_or_else(|_| panic!("bookmarks {label}"));
+    assert_eq!(
+        timeline.items.iter().any(|post| post.object_id == root_id),
+        visible,
+        "timeline root {label}"
+    );
+    assert_eq!(
+        timeline.items.iter().any(|post| post.object_id == reply_id),
+        visible,
+        "timeline reply {label}"
+    );
+    assert_eq!(
+        thread.items.iter().any(|post| post.object_id == root_id),
+        visible,
+        "thread root {label}"
+    );
+    assert_eq!(
+        profile.items.iter().any(|post| post.object_id == root_id),
+        visible,
+        "profile root {label}"
+    );
+    assert_eq!(
+        bookmarks.iter().any(|item| item.post.object_id == root_id),
+        visible,
+        "bookmark root {label}"
+    );
+}
+
+#[tokio::test]
+async fn blocking_author_hides_posts_until_unblocked() {
+    let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+        shared_apps_with_memory_services();
+    let topic = "kukuri:topic:block-filter";
+    let remote_pubkey = remote_keys.public_key_hex();
+    let root_id = remote_app
+        .create_post(topic, "blocked root", None)
+        .await
+        .expect("create root post");
+    let reply_id = remote_app
+        .create_post(topic, "blocked reply", Some(root_id.as_str()))
+        .await
+        .expect("create reply post");
+    local_app
+        .bookmark_post(topic, root_id.as_str())
+        .await
+        .expect("bookmark blocked author post");
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        true,
+        "before block",
+    )
+    .await;
+
+    local_app
+        .block_author(remote_pubkey.as_str())
+        .await
+        .expect("block remote author");
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        false,
+        "while blocking",
+    )
+    .await;
+
+    let unblocked = local_app
+        .unblock_author(remote_pubkey.as_str())
+        .await
+        .expect("unblock remote author");
+    assert!(!unblocked.blocking);
+    assert!(!unblocked.muted);
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        true,
+        "after unblock",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn blocked_by_author_hides_their_posts_until_revoked_but_mute_persists() {
+    let (local_app, local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+        shared_apps_with_memory_services();
+    let topic = "kukuri:topic:blocked-by-filter";
+    let local_pubkey = local_keys.public_key_hex();
+    let remote_pubkey = remote_keys.public_key_hex();
+    let root_id = remote_app
+        .create_post(topic, "blocker root", None)
+        .await
+        .expect("create root post");
+    let reply_id = remote_app
+        .create_post(topic, "blocker reply", Some(root_id.as_str()))
+        .await
+        .expect("create reply post");
+    local_app
+        .bookmark_post(topic, root_id.as_str())
+        .await
+        .expect("bookmark blocker post");
+
+    remote_app
+        .block_author(local_pubkey.as_str())
+        .await
+        .expect("remote blocks local");
+    let view = local_app
+        .get_author_social_view(remote_pubkey.as_str())
+        .await
+        .expect("author view while blocked by");
+    assert!(view.blocked_by);
+    assert!(!view.blocking);
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        false,
+        "while blocked by",
+    )
+    .await;
+
+    // ミュート中の相手はブロック解除後も隠れたまま。
+    local_app
+        .mute_author(remote_pubkey.as_str())
+        .await
+        .expect("mute blocker");
+    remote_app
+        .unblock_author(local_pubkey.as_str())
+        .await
+        .expect("remote revokes block");
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        false,
+        "after revoke while muted",
+    )
+    .await;
+    local_app
+        .unmute_author(remote_pubkey.as_str())
+        .await
+        .expect("unmute blocker");
+    assert_remote_content_visibility(
+        &local_app,
+        topic,
+        remote_pubkey.as_str(),
+        root_id.as_str(),
+        reply_id.as_str(),
+        true,
+        "after revoke and unmute",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn repost_of_blocked_author_is_hidden() {
+    let (local_app, _local_keys, remote_app, remote_keys, _store, _docs_sync, _blob_service) =
+        shared_apps_with_memory_services();
+    let topic = "kukuri:topic:block-repost";
+    let remote_pubkey = remote_keys.public_key_hex();
+    let source_id = remote_app
+        .create_post(topic, "blocked source", None)
+        .await
+        .expect("create blocked source post");
+    let visible_local_id = local_app
+        .create_post(topic, "visible local post", None)
+        .await
+        .expect("create visible local post");
+    let repost_id = local_app
+        .create_repost(
+            topic,
+            topic,
+            source_id.as_str(),
+            Some("quote blocked source"),
+        )
+        .await
+        .expect("create quote repost");
+
+    local_app
+        .block_author(remote_pubkey.as_str())
+        .await
+        .expect("block source author");
+
+    let timeline_after = local_app
+        .list_timeline(topic, None, 20)
+        .await
+        .expect("timeline after block");
+    assert!(
+        timeline_after
+            .items
+            .iter()
+            .all(|post| post.object_id != source_id && post.object_id != repost_id)
+    );
+    assert!(
+        timeline_after
+            .items
+            .iter()
+            .any(|post| post.object_id == visible_local_id)
+    );
+}
