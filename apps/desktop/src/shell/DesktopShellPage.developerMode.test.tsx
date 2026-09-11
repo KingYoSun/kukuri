@@ -190,3 +190,30 @@ test('developer settings open the diagnostic report without leaving the drawer',
   expect(window.location.hash).toContain('settings=release');
   expect(within(drawer).getByRole('button', { name: 'Copy Report' })).toBeVisible();
 });
+
+// #978: OFF のあいだはログ IPC を呼ばず、ON で表示時に 1 回、「更新」で明示的にもう 1 回読む。
+test('developer log viewer reads backend logs only while the mode is on', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const readDesktopLogs = vi.spyOn(api, 'readDesktopLogs');
+  render(<App api={api} />);
+
+  const drawer = await openSettingsSection(user, 'developer');
+  expect(readDesktopLogs).not.toHaveBeenCalled();
+  expect(within(drawer).queryByRole('heading', { name: 'Logs' })).not.toBeInTheDocument();
+
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
+  const region = await within(drawer).findByRole('region', { name: 'Recent logs, 12 lines' });
+  expect(within(region).getByText(/desktop profile lease acquired/)).toBeVisible();
+  expect(readDesktopLogs).toHaveBeenCalledTimes(1);
+  expect(readDesktopLogs).toHaveBeenLastCalledWith(null, null);
+
+  await user.click(within(drawer).getByRole('button', { name: 'Refresh logs' }));
+  await waitFor(() => expect(readDesktopLogs).toHaveBeenCalledTimes(2));
+  expect(readDesktopLogs).toHaveBeenLastCalledWith(12, null);
+  expect(within(drawer).getByRole('region', { name: 'Recent logs, 12 lines' })).toBeVisible();
+
+  await user.click(within(drawer).getByRole('checkbox', { name: 'Enable developer mode' }));
+  expect(within(drawer).queryByRole('heading', { name: 'Logs' })).not.toBeInTheDocument();
+  expect(readDesktopLogs).toHaveBeenCalledTimes(2);
+});

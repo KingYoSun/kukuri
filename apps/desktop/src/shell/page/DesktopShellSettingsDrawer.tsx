@@ -12,6 +12,7 @@ import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { KeyboardPanel } from '@/components/settings/KeyboardPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
+import { DesktopShellDeveloperLogs } from '@/shell/page/DesktopShellDeveloperLogs';
 import type { PrimarySection, ProfileConnectionsView, SettingsSection } from '@/components/shell/types';
 
 import type { SupportedLocale } from '@/i18n';
@@ -372,6 +373,7 @@ export function DesktopShellSettingsDrawer({
             // The selected panel unmounts; keep keyboard focus on the destination nav.
             document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
           }}
+          logs={developerModeEnabled ? <DesktopShellDeveloperLogs api={api} /> : null}
         />
       ),
     },

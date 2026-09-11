@@ -4,6 +4,7 @@ import { type DesktopMockApiOptions } from './desktopMockModel';
 import { createMockRuntime } from './mockRuntime';
 import { createChannelsMock } from './api/channels';
 import { createConnectivityMock } from './api/connectivity';
+import { createDeveloperLogsMock } from './api/developerLogs';
 import { createDirectMessagesMock } from './api/directMessages';
 import { createLiveGameMock } from './api/liveGame';
 import { createNotificationsMock } from './api/notifications';
@@ -28,6 +29,7 @@ export function createDesktopMockApi(options?: DesktopMockApiOptions): DesktopAp
     ...createLiveGameMock(runtime),
     ...createChannelsMock(runtime),
     ...createConnectivityMock(runtime),
+    ...createDeveloperLogsMock(),
   };
   return api;
 }

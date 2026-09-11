@@ -107,3 +107,41 @@ test('keyboard enables mode, visits each diagnosis and restores focus on close',
   await expect(drawer).not.toBeVisible();
   await expect(page.getByTestId('control-center-trigger')).toBeFocused();
 });
+
+// #978: 開発者モード ON 時だけログビューアが現れ、コピー／書き出しは利用者操作でだけ起きる。
+for (const width of [1280, 390]) {
+  test(`developer log viewer lists backend lines and exports only on request at ${width}`, async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('kukuri.desktop.locale', 'en');
+      localStorage.setItem('kukuri.desktop.theme', 'dark');
+      localStorage.setItem('kukuri.desktop.developer-mode', 'false');
+    });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=developer');
+    const drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('heading', { name: en.developer.logs.title })).toHaveCount(0);
+    await drawer.getByRole('checkbox', { name: en.developer.mode.label }).check();
+
+    const region = drawer.getByRole('region', { name: 'Recent logs, 12 lines' });
+    await region.scrollIntoViewIfNeeded();
+    await expect(region).toBeVisible();
+    await expect(region).toContainText('desktop profile lease acquired');
+    await expect(region).toContainText('ERROR');
+    // 長い 1 行は領域内で折り返し、document も領域も横に溢れない。
+    expect(await region.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+    const exportButton = drawer.getByRole('button', { name: en.developer.logs.export });
+    await exportButton.scrollIntoViewIfNeeded();
+    const download = page.waitForEvent('download');
+    await exportButton.click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('kukuri-logs.txt');
+    await expect(drawer.getByText(en.developer.logs.exported)).toBeVisible();
+
+    await drawer.getByRole('button', { name: en.developer.logs.refresh }).click();
+    await expect(region).toContainText('blob preview generated');
+    await drawer.getByRole('checkbox', { name: en.developer.mode.label }).uncheck();
+    await expect(drawer.getByRole('heading', { name: en.developer.logs.title })).toHaveCount(0);
+  });
+}

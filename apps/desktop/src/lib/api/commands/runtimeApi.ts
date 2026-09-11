@@ -19,6 +19,7 @@ import type {
   CommunityNodeUserAdvisoryRequest,
   CustomReactionAssetView,
   DesktopApi,
+  DesktopLogSnapshot,
   DirectMessageConversationView,
   DirectMessageStatusView,
   DirectMessageTimelineView,
@@ -954,6 +955,11 @@ export const runtimeApi: DesktopApi = {
   readCommunityNodeIndexingStatus: command('readCommunityNodeIndexingStatus', (request) =>
     invokeDesktop<IndexingStatusResponse>('read_community_node_indexing_status', {
       request: request satisfies CommunityNodeIndexingStatusRequest,
+    })),
+  readDesktopLogs: command('readDesktopLogs', (afterSeq, limit) =>
+    invokeDesktop<DesktopLogSnapshot>('read_desktop_logs', {
+      afterSeq: afterSeq ?? null,
+      limit: limit ?? null,
     })),
   submitCommunityNodeReport: command('submitCommunityNodeReport', async (request) => {
     return invokeDesktop<SubmitCommunityNodeReportResult>('submit_community_node_report', {

@@ -23,6 +23,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{
     commands::background_notifications::OsNotificationBackground,
+    commands::developer_logs::DeveloperLogState,
     restore_lifecycle::{
         DesktopOperationState, RestoreActivationOrchestrationFailure, RestoreStartupAction,
         activate_pending_restore, advance_committed_restore_to_consent,
@@ -36,7 +37,7 @@ use crate::{
         build_desktop_state, consent_required_status, failed_status, load_app_consent_store,
         resolve_app_data_dir, resolve_db_path,
     },
-    tracing::init_tracing,
+    tracing::{desktop_log_buffer, init_tracing},
 };
 
 pub(crate) async fn initialize_desktop_state(app_handle: AppHandle) -> DesktopStartupStatus {
@@ -309,6 +310,8 @@ pub fn run() {
             startup_state.set_status(initial_status);
             app.manage(startup_state);
             app.manage(OsNotificationBackground::new(app.handle()));
+            // #978: 開発者向けログ閲覧。buffer は init_tracing が組んだ process 全体の1つ。
+            app.manage(DeveloperLogState::new(desktop_log_buffer()));
             if let Err(error) = build_tray(app.handle()) {
                 error!(%error, "failed to build system tray");
             } else {
@@ -335,6 +338,8 @@ pub fn run() {
             tauri::generate_handler![
             commands::startup::get_desktop_startup_status,
             commands::system_locale::get_system_locales,
+            commands::developer_logs::set_developer_mode_enabled,
+            commands::developer_logs::read_desktop_logs,
             desktop_lifecycle::restart_after_update,
             app_update::check_app_update,
             app_update::download_app_update,

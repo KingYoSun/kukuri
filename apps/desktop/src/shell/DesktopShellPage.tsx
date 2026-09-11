@@ -44,6 +44,7 @@ import { setRecordEntry } from '@/shell/stateUpdates';
 import { useDesktopShellData } from '@/shell/useDesktopShellData';
 import { useDesktopShellRouting } from '@/shell/useDesktopShellRouting';
 import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
+import { useDeveloperModeBridge } from '@/shell/useDeveloperModeBridge';
 import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
 import { useOsNotificationActivation } from '@/shell/useOsNotificationActivation';
 import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
@@ -275,6 +276,7 @@ export function DesktopShellPage({
     activeGameRooms,
   } = viewModels;
   useOsNotificationBridge();
+  useDeveloperModeBridge(developerModeEnabled);
   const { handleOpenNotification } = shellActions;
   const handleActivateOsNotification = useCallback(
     async (notification: Parameters<typeof handleOpenNotification>[0]) => {
