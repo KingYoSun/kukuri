@@ -96,6 +96,8 @@ export function ComposerPanel({
   const { t } = useTranslation(['common']);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const attachmentStatusId = useId();
+  // #965: 対応形式は選ぶ前に見える位置へ置き、ボタンの説明としても渡す。
+  const attachmentFormatsId = useId();
   const clearActiveTarget = replyTarget ? onClearReply : onClearRepost;
   const bannerAriaLabel = replyTarget ? t('composer.clearReply') : t('composer.clearQuoteRepost');
   const {
@@ -243,7 +245,7 @@ export function ComposerPanel({
             type='button'
             variant='secondary'
             disabled={attachmentsDisabled}
-            aria-describedby={attachmentStatusId}
+            aria-describedby={`${attachmentStatusId} ${attachmentFormatsId}`}
             onClick={() => attachmentInputRef.current?.click()}
           >
             {t('composer.chooseFiles')}
@@ -254,6 +256,9 @@ export function ComposerPanel({
               : t('composer.selectedFiles', { count: draftMediaItems.length })}
           </span>
         </div>
+        <p id={attachmentFormatsId} className='composer-attachment-formats'>
+          {t('composer.supportedFormats')}
+        </p>
         <Input
           key={attachmentInputKey}
           ref={attachmentInputRef}
@@ -280,7 +285,11 @@ export function ComposerPanel({
         </label>
       ) : null}
 
-      {composerError ? <p className='error error-inline'>{composerError}</p> : null}
+      {composerError ? (
+        <p className='error error-inline' role='alert'>
+          {composerError}
+        </p>
+      ) : null}
 
       <ComposerDraftPreviewList items={draftMediaItems} onRemove={onRemoveDraftAttachment} />
 

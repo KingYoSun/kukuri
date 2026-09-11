@@ -67,7 +67,9 @@
     "writeQuoteRepost": "Add a comment",
     "writeReply": "Write a reply",
     "adultLabel": "Label this post as adult material (self-declared)",
-    "supportedFiles": "Supported files",
+    "supportedFiles": "Images and videos",
+    "allFiles": "All files",
+    "supportedFormats": "Only images and videos can be attached. Text, PDF, and other files are not supported.",
     "emptyDraft": "Write something or attach a file before posting.",
     "keyboardHint": "Esc closes, Ctrl+Enter sends.",
     "keyboardHelp": "Keyboard shortcuts"
@@ -110,7 +112,8 @@
     "failedToUpdateFollowState": "Failed to update the follow.",
     "failedToUpdateMuteState": "Failed to update the mute.",
     "quoteRepostRequiresCommentary": "Add a comment before reposting.",
-    "unsupportedAttachmentType": "Unsupported attachment type: {{name}}.",
+    "unsupportedAttachmentType": "The file “{{name}}” cannot be attached. Only images and videos can be attached.",
+    "unsupportedAttachmentTypes": "The file “{{name}}” and {{others}} more cannot be attached. Only images and videos can be attached.",
     "failedToWithdrawConsents": "Failed to withdraw community node consents.",
     "failedToUpdateBlockState": "Failed to update the block."
   },

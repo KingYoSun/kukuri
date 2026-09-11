@@ -46,3 +46,20 @@ export async function fileToCreateAttachment(
 ): Promise<CreateAttachmentInput> {
   return blobToCreateAttachment(file, file.name, role);
 }
+
+type TranslateAttachmentMessage = (key: string, options?: Record<string, unknown>) => string;
+
+// #965: 非対応ファイルの理由は投稿・返信・DM で同じ文言にする。先頭のファイル名と残り件数だけを
+// 出し、対応形式(画像と動画)の説明は locale 側の文言が持つ。判定自体は caller が所有する。
+export function formatUnsupportedAttachmentMessage(
+  translate: TranslateAttachmentMessage,
+  rejectedNames: string[]
+): string | null {
+  const [name, ...others] = rejectedNames;
+  if (name === undefined) {
+    return null;
+  }
+  return others.length === 0
+    ? translate('common:errors.unsupportedAttachmentType', { name })
+    : translate('common:errors.unsupportedAttachmentTypes', { name, others: others.length });
+}

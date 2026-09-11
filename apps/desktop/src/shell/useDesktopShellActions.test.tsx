@@ -14,7 +14,7 @@
  *   (H6 のリファクタで無意味に割れるため)。固定するのは api 呼び出し引数
  *   (toHaveBeenCalledWith)・store 状態遷移・キー/フィールド単位の値のみ。
  */
-import { act, renderHook } from '@testing-library/react';
+import { act } from '@testing-library/react';
 import type { FormEvent } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -22,31 +22,23 @@ import type {
   BookmarkedPostView,
   CommunityNodeNodeStatus,
   CommunityNodePoliciesResponse,
-  DesktopApi,
   PostView,
   ReactionStateView,
   RecentReactionView,
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import i18n from '@/i18n';
-import type { DesktopShellState, DraftMediaItem } from '@/shell/store';
 import { columnDraftKey, setColumnDraft } from '@/shell/slices/columnDrafts';
 import {
   activeWorkspaceColumn,
   activeWorkspaceScope,
   primarySectionForColumn,
 } from '@/shell/slices/workspace';
-import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
-import {
-  createShellHookHarness,
-  resetWindowHash,
-} from '@/shell/testSupport/renderShellHook';
+import { renderActionsHook } from '@/shell/testSupport/renderShellActions';
+import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
 
 const SELF_PUBKEY = 'f'.repeat(64);
 const AUTHOR_A_PUBKEY = 'a'.repeat(64);
-
-// key をそのまま返す stub。文言 assert を locale リソースから切り離す。
-const stubTranslate = (key: string) => key;
 
 function buildPost(overrides: Partial<PostView> = {}): PostView {
   return {
@@ -92,105 +84,6 @@ function directMessageFormEvent(value: string) {
       },
     } as unknown as FormEvent<HTMLFormElement>,
     preventDefault,
-  };
-}
-
-type RenderActionsOptions = {
-  /** mock api のうち差し替えたいメソッドだけを vi.fn で上書きする。 */
-  api?: Partial<DesktopApi>;
-  /** render 前の store プリセット(act 不要)。current を受けて patch を返す。 */
-  preset?: (current: DesktopShellState) => Partial<DesktopShellState>;
-};
-
-// 21 引数を全て vi.fn / mock api / stub で配線する共通ハーネス。
-function renderActionsHook(options: RenderActionsOptions = {}) {
-  const harness = createShellHookHarness();
-  if (options.preset) {
-    harness.store.getState().patchState(options.preset(harness.store.getState()));
-  }
-
-  const api: DesktopApi = { ...createDesktopMockApi(), ...options.api };
-  const loadTopics = vi.fn(async () => undefined);
-  const refreshVisibleTimelineAfterPublish = vi.fn(async () => undefined);
-  const syncRoute = vi.fn();
-  const openDirectMessagePane = vi.fn(async () => undefined);
-  const openAuthorDetail = vi.fn(async () => undefined);
-  const openThread = vi.fn(async () => undefined);
-  const setLiveCreateDialogOpen = vi.fn();
-  const setGameCreateDialogOpen = vi.fn();
-  const setProfileAvatarPreviewUrl = vi.fn();
-  const setProfileAvatarInputKey = vi.fn();
-  const releaseDraftPreview = vi.fn();
-  const rememberDraftPreview = vi.fn();
-  const releaseDirectMessageDraftPreview = vi.fn();
-  const releaseAllDirectMessageDraftPreviews = vi.fn();
-  const rememberDirectMessageDraftPreview = vi.fn();
-  const buildImageDraftItem = vi.fn(
-    async (file: File): Promise<DraftMediaItem> => ({
-      id: `image-item-${file.name}`,
-      source_name: file.name,
-      preview_url: `blob:image-item-${file.name}`,
-      attachments: [],
-    })
-  );
-  const buildVideoDraftItem = vi.fn(
-    async (file: File): Promise<DraftMediaItem> => ({
-      id: `video-item-${file.name}`,
-      source_name: file.name,
-      preview_url: `blob:video-item-${file.name}`,
-      attachments: [],
-    })
-  );
-
-  const rendered = renderHook(
-    () =>
-      useDesktopShellActions({
-        api,
-        translate: stubTranslate,
-        loadTopics,
-        refreshVisibleTimelineAfterPublish,
-        syncRoute,
-        openDirectMessagePane,
-        openAuthorDetail,
-        openThread,
-        setLiveCreateDialogOpen,
-        setGameCreateDialogOpen,
-        setProfileAvatarPreviewUrl,
-        setProfileAvatarInputKey,
-        releaseDraftPreview,
-        rememberDraftPreview,
-        releaseDirectMessageDraftPreview,
-        releaseAllDirectMessageDraftPreviews,
-        rememberDirectMessageDraftPreview,
-        buildImageDraftItem,
-        buildVideoDraftItem,
-      }),
-    { wrapper: harness.wrapper }
-  );
-
-  return {
-    ...rendered,
-    store: harness.store,
-    api,
-    mocks: {
-      loadTopics,
-      refreshVisibleTimelineAfterPublish,
-      syncRoute,
-      openDirectMessagePane,
-      openAuthorDetail,
-      openThread,
-      setLiveCreateDialogOpen,
-      setGameCreateDialogOpen,
-      setProfileAvatarPreviewUrl,
-      setProfileAvatarInputKey,
-      releaseDraftPreview,
-      rememberDraftPreview,
-      releaseDirectMessageDraftPreview,
-      releaseAllDirectMessageDraftPreviews,
-      rememberDirectMessageDraftPreview,
-      buildImageDraftItem,
-      buildVideoDraftItem,
-    },
   };
 }
 
@@ -917,4 +810,5 @@ describe('useDesktopShellActions', () => {
       error: 'offline',
     });
   });
+
 });
