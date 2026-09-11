@@ -14,39 +14,31 @@
  *   (H6 のリファクタで無意味に割れるため)。固定するのは api 呼び出し引数
  *   (toHaveBeenCalledWith)・store 状態遷移・キー/フィールド単位の値のみ。
  */
-import { act, renderHook } from '@testing-library/react';
-import type { ChangeEvent, FormEvent } from 'react';
+import { act } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type {
   BookmarkedPostView,
   CommunityNodeNodeStatus,
   CommunityNodePoliciesResponse,
-  DesktopApi,
   PostView,
   ReactionStateView,
   RecentReactionView,
 } from '@/lib/api';
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import i18n from '@/i18n';
-import type { DesktopShellState, DraftMediaItem } from '@/shell/store';
 import { columnDraftKey, setColumnDraft } from '@/shell/slices/columnDrafts';
 import {
   activeWorkspaceColumn,
   activeWorkspaceScope,
   primarySectionForColumn,
 } from '@/shell/slices/workspace';
-import { useDesktopShellActions } from '@/shell/useDesktopShellActions';
-import {
-  createShellHookHarness,
-  resetWindowHash,
-} from '@/shell/testSupport/renderShellHook';
+import { renderActionsHook } from '@/shell/testSupport/renderShellActions';
+import { resetWindowHash } from '@/shell/testSupport/renderShellHook';
 
 const SELF_PUBKEY = 'f'.repeat(64);
 const AUTHOR_A_PUBKEY = 'a'.repeat(64);
-
-// key をそのまま返す stub。文言 assert を locale リソースから切り離す。
-const stubTranslate = (key: string) => key;
 
 function buildPost(overrides: Partial<PostView> = {}): PostView {
   return {
@@ -92,116 +84,6 @@ function directMessageFormEvent(value: string) {
       },
     } as unknown as FormEvent<HTMLFormElement>,
     preventDefault,
-  };
-}
-
-// 添付選択は ChangeEvent を受けるため files だけを持つ stub を渡す。
-function attachmentChangeEvent(files: File[]) {
-  return { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
-}
-
-// 補間値まで固定したい文言は key と options を連結する stub を使う。
-const recordingTranslate = (key: string, options?: Record<string, unknown>) =>
-  options ? `${key}:${JSON.stringify(options)}` : key;
-
-type RenderActionsOptions = {
-  /** mock api のうち差し替えたいメソッドだけを vi.fn で上書きする。 */
-  api?: Partial<DesktopApi>;
-  /** 既定は key をそのまま返す stub。補間値を固定したい test だけ差し替える。 */
-  translate?: (key: string, options?: Record<string, unknown>) => string;
-  /** render 前の store プリセット(act 不要)。current を受けて patch を返す。 */
-  preset?: (current: DesktopShellState) => Partial<DesktopShellState>;
-};
-
-// 21 引数を全て vi.fn / mock api / stub で配線する共通ハーネス。
-function renderActionsHook(options: RenderActionsOptions = {}) {
-  const harness = createShellHookHarness();
-  if (options.preset) {
-    harness.store.getState().patchState(options.preset(harness.store.getState()));
-  }
-
-  const api: DesktopApi = { ...createDesktopMockApi(), ...options.api };
-  const loadTopics = vi.fn(async () => undefined);
-  const refreshVisibleTimelineAfterPublish = vi.fn(async () => undefined);
-  const syncRoute = vi.fn();
-  const openDirectMessagePane = vi.fn(async () => undefined);
-  const openAuthorDetail = vi.fn(async () => undefined);
-  const openThread = vi.fn(async () => undefined);
-  const setLiveCreateDialogOpen = vi.fn();
-  const setGameCreateDialogOpen = vi.fn();
-  const setProfileAvatarPreviewUrl = vi.fn();
-  const setProfileAvatarInputKey = vi.fn();
-  const releaseDraftPreview = vi.fn();
-  const rememberDraftPreview = vi.fn();
-  const releaseDirectMessageDraftPreview = vi.fn();
-  const releaseAllDirectMessageDraftPreviews = vi.fn();
-  const rememberDirectMessageDraftPreview = vi.fn();
-  const buildImageDraftItem = vi.fn(
-    async (file: File): Promise<DraftMediaItem> => ({
-      id: `image-item-${file.name}`,
-      source_name: file.name,
-      preview_url: `blob:image-item-${file.name}`,
-      attachments: [],
-    })
-  );
-  const buildVideoDraftItem = vi.fn(
-    async (file: File): Promise<DraftMediaItem> => ({
-      id: `video-item-${file.name}`,
-      source_name: file.name,
-      preview_url: `blob:video-item-${file.name}`,
-      attachments: [],
-    })
-  );
-
-  const rendered = renderHook(
-    () =>
-      useDesktopShellActions({
-        api,
-        translate: options.translate ?? stubTranslate,
-        loadTopics,
-        refreshVisibleTimelineAfterPublish,
-        syncRoute,
-        openDirectMessagePane,
-        openAuthorDetail,
-        openThread,
-        setLiveCreateDialogOpen,
-        setGameCreateDialogOpen,
-        setProfileAvatarPreviewUrl,
-        setProfileAvatarInputKey,
-        releaseDraftPreview,
-        rememberDraftPreview,
-        releaseDirectMessageDraftPreview,
-        releaseAllDirectMessageDraftPreviews,
-        rememberDirectMessageDraftPreview,
-        buildImageDraftItem,
-        buildVideoDraftItem,
-      }),
-    { wrapper: harness.wrapper }
-  );
-
-  return {
-    ...rendered,
-    store: harness.store,
-    api,
-    mocks: {
-      loadTopics,
-      refreshVisibleTimelineAfterPublish,
-      syncRoute,
-      openDirectMessagePane,
-      openAuthorDetail,
-      openThread,
-      setLiveCreateDialogOpen,
-      setGameCreateDialogOpen,
-      setProfileAvatarPreviewUrl,
-      setProfileAvatarInputKey,
-      releaseDraftPreview,
-      rememberDraftPreview,
-      releaseDirectMessageDraftPreview,
-      releaseAllDirectMessageDraftPreviews,
-      rememberDirectMessageDraftPreview,
-      buildImageDraftItem,
-      buildVideoDraftItem,
-    },
   };
 }
 
@@ -929,82 +811,4 @@ describe('useDesktopShellActions', () => {
     });
   });
 
-  // #965: 非対応ファイルは読み込まずに理由(ファイル名 + 対応形式)を composer に出し、
-  // 対応ファイルだけを下書きへ追加する。
-  test('unsupported Column Draft attachments show one reason with the rejected count and are never read', async () => {
-    const readAsDataURL = vi.spyOn(FileReader.prototype, 'readAsDataURL');
-    const target = {
-      columnId: 'timeline-public',
-      action: 'post' as const,
-      scope: { topicId: 'topic-a', channelId: null },
-    };
-    const view = renderActionsHook({
-      translate: recordingTranslate,
-      preset: (current) => ({
-        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
-          ...draft,
-          content: 'keep me',
-          expanded: true,
-        })),
-      }),
-    });
-
-    await act(async () => {
-      await view.result.current.handleColumnDraftAttachmentSelection(
-        target,
-        attachmentChangeEvent([
-          new File(['notes'], 'notes.txt', { type: 'text/plain' }),
-          new File(['image'], 'photo.png', { type: 'image/png' }),
-          new File(['pdf'], 'report.pdf', { type: 'application/pdf' }),
-          new File(['?'], 'unknown.bin', { type: '' }),
-        ])
-      );
-    });
-
-    const draft = view.store.getState().columnDraftsByKey[columnDraftKey(target)];
-    expect(draft).toMatchObject({
-      content: 'keep me',
-      expanded: true,
-      pending: false,
-      attachmentInputKey: 1,
-      mediaItems: [{ id: 'image-item-photo.png' }],
-      error: 'common:errors.unsupportedAttachmentTypes:{"name":"notes.txt","others":2}',
-    });
-    expect(view.mocks.buildImageDraftItem).toHaveBeenCalledTimes(1);
-    expect(view.mocks.buildVideoDraftItem).not.toHaveBeenCalled();
-    expect(readAsDataURL).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await view.result.current.handleColumnDraftAttachmentSelection(
-        target,
-        attachmentChangeEvent([new File(['notes'], 'only.txt', { type: 'text/plain' })])
-      );
-    });
-    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
-      attachmentInputKey: 2,
-      mediaItems: [{ id: 'image-item-photo.png' }],
-      error: 'common:errors.unsupportedAttachmentType:{"name":"only.txt"}',
-    });
-    expect(view.mocks.buildImageDraftItem).toHaveBeenCalledTimes(1);
-    readAsDataURL.mockRestore();
-  });
-
-  test('unsupported DM attachment shows the same reason and keeps the DM draft untouched', async () => {
-    const view = renderActionsHook({ translate: recordingTranslate });
-
-    await act(async () => {
-      await view.result.current.handleDirectMessageAttachmentSelection(
-        attachmentChangeEvent([new File(['notes'], 'notes.txt', { type: 'text/plain' })])
-      );
-    });
-
-    expect(view.store.getState()).toMatchObject({
-      directMessageError: 'common:errors.unsupportedAttachmentType:{"name":"notes.txt"}',
-      directMessageDraftMediaItems: [],
-      directMessageAttachmentInputKey: 1,
-    });
-    expect(view.mocks.buildImageDraftItem).not.toHaveBeenCalled();
-    expect(view.mocks.buildVideoDraftItem).not.toHaveBeenCalled();
-    expect(view.mocks.rememberDirectMessageDraftPreview).not.toHaveBeenCalled();
-  });
 });

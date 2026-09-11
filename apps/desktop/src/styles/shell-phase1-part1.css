@@ -64,14 +64,6 @@
   margin-bottom: 0;
 }
 
-/* #965: 添付欄の対応形式案内。composer hint と同じ補助文の階層に置く。 */
-.composer-attachment-formats {
-  margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--muted-foreground);
-}
-
 .draft-attachment-list {
   display: grid;
   gap: var(--space-sm);

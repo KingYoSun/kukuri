@@ -62,8 +62,8 @@
 
 ## 作業・検証の結果
 
-- T1: 上記の失敗 test 2 件を基準 commit で確認。
-- T2: `ComposerPanel.tsx` に `composer.supportedFormats` の段落を追加し、ボタンの `aria-describedby` を件数 + 案内の 2 要素にした。error 段落に `role='alert'`。`shell-phase1-part1.css` に `.composer-attachment-formats`（composer hint と同じ 0.8rem / `--muted-foreground`。新しい色 token なし）。
+- T1: 上記の失敗 test 2 件を基準 commit で確認。添付の handler test は `useDesktopShellActions.attachments.test.tsx` に置き、`renderActionsHook` などの共通ハーネスを `shell/testSupport/renderShellActions.tsx` へ抽出した（既存の characterization test は同じハーネスを import する。CI の `oversized-files` が 1000 行超の新規 file として `useDesktopShellActions.test.tsx` と `shell-phase1-part1.css` を検出したため、baseline を更新せず分割した）。
+- T2: `ComposerPanel.tsx` に `composer.supportedFormats` の段落を追加し、ボタンの `aria-describedby` を件数 + 案内の 2 要素にした。error 段落に `role='alert'`。`shell-phase1-part4.css` の composer hint の隣に `.composer-attachment-formats`（hint と同じ 0.8rem / `--muted-foreground`。新しい色 token なし）。
 - T3: `lib/attachments.ts` に `formatUnsupportedAttachmentMessage` を追加。`useDesktopShellActions.ts` は非対応名を集めて 1 文にし、poster 失敗は別文として連結。`composeInteractions.ts` も同 helper を使う。
 - T4: `file_dialog.rs` に「すべてのファイル」filter（`*`）を追加。既定は従来どおり MIME filter。filter 名は `composer.supportedFiles`（「画像と動画」）、追加 filter は `composer.allFiles`。Rust test に filter 文言を追加。
 - T5: `ComposerPanel.stories.tsx` に `RejectedAttachment`。`composer-localization.spec.ts` に ja / en の非対応選択 2 件（案内、accessible description、alert 文言、部分成功、本文保持、input reset、focus、入力で alert が消える）。
@@ -78,10 +78,21 @@
 | targeted Vitest（actions / ComposerPanel / footer / i18n / attachments） | 成功 |
 | `composer-localization.spec.ts`（chromium） | 9 件成功（新規 2 件を含む） |
 | 全体 `eslint` / `tsc` / Vitest / Storybook build / Playwright chromium / visual smoke | PR 本文の「検証とリスク」を参照 |
-| `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib file_dialog` | PR 本文を参照 |
+| `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib file_dialog` | 2 件成功（locale ごとの title / cancel / filter / all files） |
 | `cargo xtask tauri-check` / `e2e-smoke` | PR 本文を参照 |
 
 Playwright は repo 固定の chromium build が container に無いため、`/opt/pw-browsers/chromium` を `executablePath` に指定する未 commit の local config で実行した。
+
+### before / after（browser、mock API、1280×800）
+
+| 条件 | before（`704c72c`） | after |
+| --- | --- | --- |
+| ja dark、本文入力のみ | [before](assets/issue-965/composer-before-ja-dark.png) | [after](assets/issue-965/composer-after-ja-dark.png)（案内文が追加） |
+| ja dark、`.txt` + `.png` + `.pdf` を選択 | [before](assets/issue-965/composer-before-rejected-ja-dark.png)（「未対応の添付タイプです: notes.txt」のみ） | [after](assets/issue-965/composer-after-rejected-ja-dark.png)（「「notes.txt」ほか 1 件は添付できません。画像と動画のみ添付できます。」） |
+| en light、本文入力のみ | [before](assets/issue-965/composer-before-en-light.png) | [after](assets/issue-965/composer-after-en-light.png) |
+| en light、同 3 file を選択 | [before](assets/issue-965/composer-before-rejected-en-light.png) | [after](assets/issue-965/composer-after-rejected-en-light.png) |
+
+before は基準 commit の worktree を build して同じ script で撮影した。
 
 ### 未確認の境界
 

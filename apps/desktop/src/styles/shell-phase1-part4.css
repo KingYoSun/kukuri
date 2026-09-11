@@ -18,6 +18,14 @@
   color: var(--muted-foreground);
 }
 
+/* #965: 添付欄の対応形式案内。composer hint と同じ補助文の階層に置く。 */
+.shell-phase1 .composer-attachment-formats {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
 .shell-phase1 .shell-column-composer-hint-link {
   padding: 0;
   border: 0;
