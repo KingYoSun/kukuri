@@ -178,8 +178,12 @@ content が index に入る条件は次の AND とする:
   永続化せず、表示 state でだけ保持する（再取得で再構築できる transient な写し）。
 - contract: `indexing_status_returns_own_requests_only` /
   `indexing_status_private_target_requires_membership_proof` /
-  `indexing_status_reads_do_not_mutate_scope_state`（`crates/cn-user-api/tests/indexing_requests.rs`、
-  `crates/desktop-runtime/src/tests/community_node/index_query.rs`）。
+  `indexing_status_reads_do_not_mutate_scope_state`。実装 test は
+  `crates/cn-user-api/tests/indexing_requests.rs` の
+  `indexing_status_returns_own_requests_only_and_public_target_support`（1 件目と 3 件目を同じ
+  test 内の `scope_state_counts` 比較で固定）と
+  `indexing_status_private_target_requires_membership_proof`、client 側は
+  `crates/desktop-runtime/src/tests/community_node/indexing_status.rs`。
 
 #### Feature Data Classification（read 面）
 - Feature 名: community node indexing status read（自分の索引申請状態 + 対象の supported 判定）

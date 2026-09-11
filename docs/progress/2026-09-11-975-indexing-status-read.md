@@ -102,3 +102,16 @@ sensitive sink: server は DB 読取りと secret 復号（既存 helper）の�
 - Regression: `community-index.spec.ts` の「申請後に確認し直すと再申請できる」期待は、承認済み判断 1（申請済み対象は再申請を塞ぐ）による意図した変更で、spec を新契約に合わせた。
 - New-requirement: 非公開チャンネルの `supported` を空状態から読む（所属証明の自動送信）は対象外のまま。必要なら別 Issue。
 - Optional-hardening: harness scenario への状態読取り step 追加。
+
+## 独立監査（2026-09-11、別コンテキスト）
+
+- 対象 commit: `9c8fb7d`（PR #985 head）
+- Scope revision: `975-plan-v1 / 2026-09-11`
+- リスク区分: C
+- inventory: 合計 14 / 適合 14 / 不適合 0 / 未分類 0（入口 8: route 登録、runtime facade、Tauri command、CLI registry + parity + schema、`runtimeApi`、mock、dialog の 4 呼出し、workspace の空状態 effect。sink 6: `require_indexing_gate`、`parse_scope_pair`、`require_channel_membership`、`list_indexing_requests_for_requester` + `is_topic_supported`、secret ヘッダ付与 + `private_channel_indexing_secret`、token 読取り + 401 再認証 1 回）
+- AC / INVAR evidence: AC-1〜4、INVAR-1〜4 すべてに実装 symbol と test を対応付け、監査者自身の実行で成功を確認（詳細は PR #985 の監査 comment）
+- 実行した validation: cn-user-api `indexing_requests` 13 / `activation_gate` 7 / `index_query` 6、desktop-runtime `indexing_status` 4、cn-core `index_scope` 9、cn-protocol `index_contract` 6、kukuri-cli `command_parity` 5、Vitest 4 file 62 件。TR-1〜6 をコード読みで照合
+- blocker: 0件
+- non-blocker とした事項: (1) Optional-hardening: GET 専用の「鍵未設定」test は無く、共有 helper の分岐と POST 側 test で担保。(2) Optional-hardening（doc 整合）: ADR §2.8 の test 参照が実名・実 file と食い違っていた → 監査後 delta として docs のみ修正。(3) Optional-hardening: 空状態は own request `approved` を `supported` 実値より優先表示するため、承認後に operator が supported から外した稀なケースで文言が食い違い得る（dialog は両者を別表示、再申請は冪等）。(4) Existing-gap（#698 由来、本 diff で不変）: 適格一覧の内容変化で dialog が選択 node を先頭へ戻す。
+- 判定: PASS
+- 監査後 delta: ADR 0025 §2.8 の test 参照修正（docs のみ。code・test の変更なし）
