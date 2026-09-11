@@ -37,6 +37,9 @@ export function NotificationsPanel() {
         <h3>{t('settings:notifications.title')}</h3>
         <small>{t('settings:notifications.summary')}</small>
       </CardHeader>
+      <p className='text-sm text-[var(--muted-foreground-soft)]'>
+        {t('settings:notifications.description')}
+      </p>
 
       <section className='min-w-0 space-y-3'>
         <h4 className='text-base font-semibold text-foreground'>

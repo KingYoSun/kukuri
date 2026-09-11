@@ -60,7 +60,7 @@ test('notification settings deep link opens the section and persists toggles thr
   });
 });
 
-test('the notifications column header opens the notification settings section', async () => {
+test('the notifications inbox action opens the notification settings section without touching read state', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi({
     notifications: [buildNotification({ notification_id: 'n-1', preview_text: 'hello' })],
@@ -83,7 +83,7 @@ test('the empty notifications inbox offers the notification settings as its next
   const user = userEvent.setup();
   renderAtHash('#/notifications?topic=kukuri%3Atopic%3Ageneral', createDesktopMockApi());
   expect(await screen.findByText('No notifications yet.')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Open notification settings' }));
+  await user.click(screen.getByRole('button', { name: 'Notification settings' }));
   const drawer = await screen.findByRole('dialog', { name: 'Settings' });
   expect(within(drawer).getByRole('checkbox', { name: 'Enable OS notifications' })).toBeVisible();
   await user.click(within(drawer).getByRole('button', { name: 'Close settings' }));

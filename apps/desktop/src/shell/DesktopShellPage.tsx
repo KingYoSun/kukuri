@@ -839,7 +839,6 @@ export function DesktopShellPage({
       }
       onSelectTimelineView={selectColumnTimelineView}
       onRefreshNotifications={refreshNotificationsColumn}
-      onOpenNotificationSettings={openNotificationSettings}
       onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
       onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
       onOpenConversationAuthor={(peerPubkey, parentColumnId) =>

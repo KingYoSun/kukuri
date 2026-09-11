@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Settings, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2 } from 'lucide-react';
 
 import { ColumnComposerFooter } from '@/components/shell/ColumnComposerFooter';
 import { ColumnDomainActionFooter } from '@/components/shell/ColumnDomainActionFooter';
@@ -79,8 +79,6 @@ type DesktopShellColumnWorkspaceProps = {
   renderMessagesSurface: (column: ColumnState) => ReactNode;
   renderNotificationsSurface: (column: ColumnState) => ReactNode;
   onRefreshNotifications: () => void;
-  /** #962: 通知の受信設定(設定 > 通知)を開く。一覧の状態や既読は変えない。 */
-  onOpenNotificationSettings: () => void;
   onRefreshConversation: (peerPubkey: string) => void;
   onClearConversation: (peerPubkey: string) => void;
   onOpenConversationAuthor: (peerPubkey: string, parentColumnId: string) => void;
@@ -111,7 +109,6 @@ export function DesktopShellColumnWorkspace({
   renderMessagesSurface,
   renderNotificationsSurface,
   onRefreshNotifications,
-  onOpenNotificationSettings,
   onRefreshConversation,
   onClearConversation,
   onOpenConversationAuthor,
@@ -418,14 +415,6 @@ export function DesktopShellColumnWorkspace({
             onClick={onRefreshNotifications}
           >
             <RefreshCw className='size-4' aria-hidden='true' />
-          </IconButton>
-          <IconButton
-            variant='ghost'
-            type='button'
-            label={t('notifications.settings')}
-            onClick={onOpenNotificationSettings}
-          >
-            <Settings className='size-4' aria-hidden='true' />
           </IconButton>
         </div>
       );

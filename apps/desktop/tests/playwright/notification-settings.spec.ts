@@ -11,7 +11,6 @@ const COPY = {
   ja: {
     settings: '設定',
     headerAction: '通知の受信設定',
-    emptyAction: '通知の受信設定を開く',
     empty: '通知はまだありません。',
     enable: 'OS 通知を有効にする',
     quiet: '静音モード',
@@ -19,11 +18,11 @@ const COPY = {
     logs: 'ログ',
     developerToggle: '開発者モードを有効にする',
     copyReport: 'レポートをコピー',
+    columnTitle: '通知',
   },
   en: {
     settings: 'Settings',
     headerAction: 'Notification settings',
-    emptyAction: 'Open notification settings',
     empty: 'No notifications yet.',
     enable: 'Enable OS notifications',
     quiet: 'Quiet mode',
@@ -31,6 +30,7 @@ const COPY = {
     logs: 'Logs',
     developerToggle: 'Enable developer mode',
     copyReport: 'Copy Report',
+    columnTitle: 'Notifications',
   },
 } as const;
 
@@ -68,13 +68,15 @@ for (const { locale, theme, width, height } of [
 ] as const) {
   const copy = COPY[locale];
 
-  test(`${locale} ${theme} notifications column header opens the notification settings`, async ({ page }) => {
+  test(`${locale} ${theme} notifications inbox action opens the notification settings`, async ({ page }) => {
     await seed(page, locale, theme, false);
     await page.setViewportSize({ width, height });
     await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
     await expect(page.getByText('browser mock reply notification')).toBeVisible();
     const action = page.getByRole('button', { name: copy.headerAction, exact: true });
     await expect(action).toBeVisible();
+    // 導線は本文側に置き、Column header の title / 要約 / 更新は変えない。
+    await expect(page.locator('.shell-column-header').filter({ hasText: copy.columnTitle }).first()).toBeVisible();
     await action.focus();
     await page.keyboard.press('Enter');
     const settings = page.getByRole('dialog', { name: copy.settings, exact: true });
@@ -108,7 +110,7 @@ for (const { locale, theme, width, height } of [
     await page.setViewportSize({ width, height });
     await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
     await expect(page.getByText(copy.empty, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: copy.emptyAction, exact: true }).click();
+    await page.getByRole('button', { name: copy.headerAction, exact: true }).click();
     const settings = page.getByRole('dialog', { name: copy.settings, exact: true });
     await expect(settings.getByRole('checkbox', { name: copy.enable, exact: true })).toBeVisible();
     await settings.locator('.shell-settings-close').click();

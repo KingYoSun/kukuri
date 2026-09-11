@@ -609,7 +609,8 @@
   },
   "notifications": {
     "title": "通知",
-    "summary": "OS 通知として表示する種類を選びます。アプリ内の通知一覧はこの設定に関係なく確認できます。",
+    "summary": "OS 通知の受け取り方",
+    "description": "OS 通知として表示する種類を選びます。アプリ内の通知一覧はこの設定に関係なく確認できます。",
     "osNotifications": {
       "title": "OS 通知",
       "permission": "状態: {{permission}}",

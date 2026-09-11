@@ -14,9 +14,9 @@ import { SettingsStoryFrame } from './SettingsStoryFrame';
 const meta = {
   title: 'Settings/NotificationsPanel',
   component: NotificationsPanel,
-  render: (args) => (
+  render: () => (
     <SettingsStoryFrame width='wide'>
-      <NotificationsPanel {...args} />
+      <NotificationsPanel />
     </SettingsStoryFrame>
   ),
 } satisfies Meta<typeof NotificationsPanel>;
@@ -56,9 +56,9 @@ export const NotificationServiceChecking: Story = {
 };
 
 export const Narrow: Story = {
-  render: (args) => (
+  render: () => (
     <SettingsStoryFrame width='narrow'>
-      <NotificationsPanel {...args} />
+      <NotificationsPanel />
     </SettingsStoryFrame>
   ),
   beforeEach: () => notificationState('available'),

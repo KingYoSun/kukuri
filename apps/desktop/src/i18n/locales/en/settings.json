@@ -609,7 +609,8 @@
   },
   "notifications": {
     "title": "Notifications",
-    "summary": "Choose which events show OS notifications. The in-app notification list stays available regardless of these settings.",
+    "summary": "How OS notifications arrive",
+    "description": "Choose which events show OS notifications. The in-app notification list stays available regardless of these settings.",
     "osNotifications": {
       "title": "OS Notifications",
       "permission": "Status: {{permission}}",

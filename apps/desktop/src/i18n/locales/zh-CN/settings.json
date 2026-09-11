@@ -609,7 +609,8 @@
   },
   "notifications": {
     "title": "通知",
-    "summary": "选择哪些事件显示为系统通知。无论此设置如何，应用内的通知列表都可查看。",
+    "summary": "系统通知的接收方式",
+    "description": "选择哪些事件显示为系统通知。无论此设置如何，应用内的通知列表都可查看。",
     "osNotifications": {
       "title": "系统通知",
       "permission": "状态: {{permission}}",
