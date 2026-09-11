@@ -79,7 +79,7 @@
 | AC-2 | `sectionCopy('backup')`／`sectionCopy('account')`、Control Center の `openSettings('backup')`。`settings expose a backup section with the create and restore actions without developer mode`、`the Control Center system section opens backup & restore directly`、`backup and account deep links open their sections instead of the default section`、browser spec `Control Center opens backup & restore and the sections cross-link`（ja dark 1280×840、en light 390×844） |
 | AC-3 | `deviceBackup.keyOnlyHint`／`accountKey.scopeNotice` と相互 button。`backup and account sections explain the scope difference and link to each other`、browser spec の相互移動と focus |
 | AC-4 | `backup-discoverability.spec.ts`（nav 全項目の可視域判定 1280×840／1280×768、Enter／Escape、1280／700／390 での横 overflow なし、移動先 nav item への focus）、`localization-layout.spec.ts` の 3 locale 狭幅 nav に `backup`／`account` を追加、`developer-mode.spec.ts` の keyboard 経路、視覚 `settings-backup-wide-dark`。既存の `DeviceBackupPanel.test.tsx` 3 件と `AccountKeyPanel.test.tsx` 4 件は無変更で成功 |
-| AC-5 | 本記録、PR 本文、独立監査記録（PR head 固定後に別コンテキストで実施） |
+| AC-5 | 本記録、PR 本文、[独立監査記録](2026-09-11-967-independent-audit.md)（PR head `4bd220c` に対し別コンテキストで実施、PASS、inventory 12/12 適合、blocker 0） |
 | INVAR-1 | 新規入口は `changeSettingsSection`／`openDiagnosticSettings`／`openSettings` だけを呼ぶ。`DesktopShellPage.backupDiscoverability.test.tsx` の全 test で deviceBackup（choose／create／preview／restore／cancel）と identity（export／import／preview／switch）の spy 呼出が 0 回 |
 | INVAR-2 | 追加した文言はパスフレーズ・鍵・復号内容を含まない。log 追加なし |
 | INVAR-3 | DeviceBackupPanel／AccountKeyPanel の handler、`lib/api/deviceBackup.ts`、`lib/api/identity.ts`、`src-tauri` は無変更。既存 panel test 7 件と `cargo xtask scenario desktop_device_backup_restore` の対象コードに差分なし |
