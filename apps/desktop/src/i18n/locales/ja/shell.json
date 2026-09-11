@@ -92,7 +92,7 @@
         "storage": "保存済みレイアウトをローカルストレージへ書き込めませんでした。"
       }
     },
-    "createJoinChannel": "プライベートチャンネルを作成または参加",
+    "createJoinChannel": "プライベートチャンネル作成・参加",
     "shareChannel": "選択中のチャンネルを共有",
     "release": "リリースと更新",
     "settings": "設定",
@@ -266,7 +266,7 @@
     "communityNodeUnavailableTitle": "コミュニティノードを利用できません",
     "viewScope": "表示範囲",
     "privateChannelEntry": "プライベートチャンネル",
-    "privateChannelEntryLabel": "プライベートチャンネルを作成または参加",
+    "privateChannelEntryLabel": "プライベートチャンネル作成・参加",
     "channelSettingsEntry": "設定と共有",
     "channelSettingsEntryLabel": "{{channel}} のチャンネル設定と共有を開く"
   },

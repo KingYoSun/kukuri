@@ -1,0 +1,22 @@
+# 2026-09-11 全丸ボタンの高密度化とavatarの全丸固定
+
+- Status: current
+- Supersedes: None
+- Superseded by: None
+- PR: TBD
+- Preview: [スレッド+プロフィール 変更前](assets/2026-09-11-button-density/before-thread-profile.jpg)、[同 変更後](assets/2026-09-11-button-density/after-thread-profile.jpg)、[コントロールセンター 変更前](assets/2026-09-11-button-density/before-control-center.jpg)、[同 変更後](assets/2026-09-11-button-density/after-control-center.jpg)
+- Surface / user / purpose: 全surface共通のtextボタン、icon-only control、投稿カード、profile overview、Control Center。閲覧者・投稿者が1画面で読める情報量を増やし、ボタン内の不自然な改行をなくす。
+- Summary: textボタンを全丸のまま高さ2rem（`sm`は1.75rem）、横padding 0.625rem（`sm`は0.5rem）へ縮小。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remへ縮小し、avatarは大きさに関わらず常に`--radius-pill`（全丸）に固定。投稿カードの余白と投稿meta／actionsの間隔を1段詰める。文字サイズは変更しない。Control Centerの「場所」topic行はtopic名だけで1行を確保し、操作列を次の行へ置く。文言「プライベートチャンネルを作成または参加」を「プライベートチャンネル作成・参加」へ変更。
+- 候補比較: A（全丸・高さ2.25rem）、B（角丸12px・Aと同密度）、C（角丸8px・高密度）、D（全丸・Cと同密度）を同条件で撮影し、Dを採用。avatarは全案共通で全丸とする方針を先に決定した。
+- Conditions:
+  - Platform: Linux / Chromium（Playwright、browser mock `VITE_KUKURI_DESKTOP_MOCK=1`）
+  - Viewport: 1400×980、700×980
+  - Theme: dark
+  - Locale: ja（比較撮影）、baselineはen
+  - State: 初期5 Column、Thread／Profile pane展開、Control Center展開、狭幅のThread page
+- Accessibility / interaction: accessible name、role、focus ring、tooltipは変更なし。desktopのpointer targetは最小1.75rem（`sm`）となる。Mobile layoutの44px目標は`mobile-column-workspace.css`の既存ruleで維持。
+- Performance: CSS値とclass名の変更のみ。新規購読・listener・描画経路なし。
+- Validation: `pnpm lint`成功、`pnpm typecheck`成功、`pnpm test`（Vitest 1467件中1件が全体実行時に5秒timeout、同fileの単独再実行で4件成功）、Playwright chromium project 251件（初回8件失敗はja文言の期待値とmobileの44px touch目標で、spec更新とmobile CSS追加後に対象2 spec 29件成功）、visual project 27件（非CIのためsnapshot比較はskip、到達smokeとして成功）、`storybook:build`。Linux visual baselineはCI workflowで再生成する。
+- Not verified: Tauri実機（Windows / WebKitGTK）、200% zoom、light themeの視覚確認、screen reader実測。Linux visual baselineはCIの「Kukuri Visual Baseline」workflowで再生成する。
+- Review result: 利用者がスクリーンショット4案を比較しDを選択。avatar全丸は利用者指示。
+- Exceptions: DESIGN.md §11に「avatarは常に全丸」とボタン密度の基準を追記。token値は変更しない。

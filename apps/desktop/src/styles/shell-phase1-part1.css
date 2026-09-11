@@ -840,11 +840,15 @@
 .button {
   border: 0;
   border-radius: var(--radius-pill);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-2xs) 0.625rem;
   color: var(--primary-foreground);
   background: var(--surface-button-primary);
   font-weight: 700;
   cursor: pointer;
+}
+
+.button-sm {
+  padding: 0.125rem var(--space-xs);
 }
 
 .button-secondary {
@@ -860,9 +864,9 @@
 }
 
 .button-icon {
-  inline-size: 2.1rem;
-  block-size: 2.1rem;
-  min-inline-size: 2.1rem;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  min-inline-size: 1.75rem;
   padding: 0;
   border-radius: var(--radius-input);
 }
@@ -960,7 +964,7 @@
 .post-card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: var(--space-md);
+  padding: var(--space-sm);
   background: var(--surface-panel-soft);
   min-width: 0;
 }
@@ -975,6 +979,8 @@
   justify-content: center;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
+  /* avatar は角丸の例外として常に全丸 */
+  border-radius: var(--radius-pill);
   background: var(--surface-avatar);
   color: var(--foreground-strong);
   font-weight: 700;
@@ -982,15 +988,13 @@
 }
 
 .author-avatar-sm {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius);
-  font-size: var(--text-body-reading);
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: var(--text-caption);
 }
 
 .author-avatar-lg {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: var(--radius-panel);
-  font-size: var(--text-h1);
+  width: 3rem;
+  height: 3rem;
+  font-size: var(--text-h2);
 }

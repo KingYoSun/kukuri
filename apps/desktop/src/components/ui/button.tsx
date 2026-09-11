@@ -6,7 +6,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'button inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors disabled:pointer-events-none',
+  'button inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:pointer-events-none',
   {
     variants: {
       variant: {
@@ -15,9 +15,9 @@ const buttonVariants = cva(
         ghost: 'button-ghost text-foreground shadow-none hover:bg-[var(--surface-button-ghost-hover)]',
       },
       size: {
-        default: 'min-h-11 px-4 py-3',
-        sm: 'min-h-9 px-3 py-2 text-sm',
-        icon: 'button-icon size-10 p-0',
+        default: 'min-h-8',
+        sm: 'button-sm min-h-7 text-sm',
+        icon: 'button-icon size-7 p-0',
       },
     },
     defaultVariants: {

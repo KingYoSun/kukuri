@@ -202,7 +202,8 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 - dark-first。`<html data-theme='dark|light'>`で切り替え、OSの`prefers-color-scheme`へ自動追従しない。
 - fontは`--font-sans`、技術識別子は`--font-mono`とtabular numeralsを使う。
 - surfaceはbase、accent、muted、softの段階で構成し、primaryはwarm-orange、accent／focusはcool-teal、dangerはdestructive familyを使う。
-- panelは`--radius-panel`、input／Noticeは`--radius-input`、pill controlは`--radius-pill`を使う。
+- panelは`--radius-panel`、input／Noticeは`--radius-input`、pill controlは`--radius-pill`を使う。avatarは大きさに関わらず常に`--radius-pill`（全丸）とし、角丸へ戻さない。
+- textボタンは全丸のまま高さ2rem（`sm`は1.75rem）、横paddingは0.625rem（`sm`は0.5rem）を基準とし、既に小さい文字を縮めずに周辺の余白で密度を確保する。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remを基準にする。
 - elevationは`--shadow-panel`、`--shadow-dropdown`、`--shadow-button-primary`に限定する。
 
 ### 11.1 現行token契約

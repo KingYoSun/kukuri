@@ -123,7 +123,7 @@
 .shell-phase1 .post-card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: var(--space-md);
+  padding: var(--space-sm);
   background: var(--surface-panel-soft);
 }
 
@@ -307,9 +307,9 @@
 }
 
 .shell-phase1 .shell-icon-button {
-  inline-size: 2.1rem;
-  block-size: 2.1rem;
-  min-inline-size: 2.1rem;
+  inline-size: 2rem;
+  block-size: 2rem;
+  min-inline-size: 2rem;
   padding: 0;
   border-radius: var(--radius-input);
   color: var(--foreground);
@@ -776,7 +776,7 @@
 .shell-phase1 .shell-control-center-action-list,
 .shell-phase1 .shell-control-center-place-actions {
   display: grid;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
 }
 
 .shell-phase1 .shell-control-center-add-grid {
@@ -805,16 +805,16 @@
 
 .shell-phase1 .shell-control-center-column-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.75rem 2.75rem;
+  grid-template-columns: minmax(0, 1fr) 2rem 2rem;
   gap: var(--space-2xs);
   align-items: center;
 }
 
 .shell-phase1 .shell-control-center-column-row > .button {
-  inline-size: 2.75rem;
-  min-inline-size: 2.75rem;
-  block-size: 2.75rem;
-  min-block-size: 2.75rem;
+  inline-size: 2rem;
+  min-inline-size: 2rem;
+  block-size: 2rem;
+  min-block-size: 2rem;
 }
 
 .shell-phase1 .shell-control-center-column-focus {
@@ -876,10 +876,11 @@
   list-style: none;
 }
 
+/* topic 名だけで 1 行を確保し、操作列は次の行へ置く（名前の見切れ防止） */
 .shell-phase1 .shell-control-center-place-list .topic-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-xs);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2xs);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: var(--space-xs);
@@ -893,7 +894,7 @@
 .shell-phase1 .shell-control-center-place-list .topic-link,
 .shell-phase1 .shell-control-center-place-list .topic-subitem {
   min-width: 0;
-  min-height: 2.75rem;
+  min-height: 2rem;
   border: 0;
   border-radius: var(--radius);
   padding: var(--space-xs) var(--space-sm);
@@ -912,6 +913,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2xs);
+}
+
+.shell-phase1 .shell-control-center-place-list .topic-actions {
+  justify-content: flex-end;
 }
 
 .shell-phase1 .shell-control-center-place-list .topic-diagnostic,
@@ -937,8 +942,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
+  min-width: 2rem;
+  min-height: 2rem;
   border: 1px solid transparent;
   border-radius: var(--radius);
   background: transparent;
