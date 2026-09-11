@@ -12,7 +12,7 @@ import {
   type CommunityIndexingTarget,
 } from '@/components/core/CommunityIndexingRequestDialog';
 import { DesktopShellTesterFeedbackDialog } from './page/DesktopShellTesterFeedbackDialog';
-import { type ProfileConnectionsView, type SettingsSection } from '@/components/shell/types';
+import { type SettingsSection } from '@/components/shell/types';
 
 import { runtimeApi } from '@/lib/api';
 import {
@@ -480,14 +480,6 @@ export function DesktopShellPage({
   const handleOpenTimelineSection = useCallback(
     () => focusPrimarySection('timeline'),
     [focusPrimarySection]
-  );
-  // #961: 設定からの導線は Profile Column を前面にしてから一覧を開く。
-  const openProfileConnectionsFromSettings = useCallback(
-    (view: ProfileConnectionsView) => {
-      focusPrimarySection('profile');
-      openProfileConnections(view);
-    },
-    [focusPrimarySection, openProfileConnections]
   );
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
@@ -979,7 +971,8 @@ export function DesktopShellPage({
         localeSaveFailed={localeSaveFailed}
         syncRoute={syncRoute}
         setSettingsOpen={setSettingsOpen}
-        openProfileConnections={openProfileConnectionsFromSettings}
+        focusPrimarySection={focusPrimarySection}
+        openProfileConnections={openProfileConnections}
         viewModels={viewModels}
         handleImportPeer={shellActions.handleImportPeer}
         handleSaveDiscoverySeeds={shellActions.handleSaveDiscoverySeeds}

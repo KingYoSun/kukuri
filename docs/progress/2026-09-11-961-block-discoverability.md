@@ -31,7 +31,7 @@
 | --- | --- |
 | AC-1 | `ProfileOverviewPanel` の `blockingCount` ボタン、`routes.ts` の `isProfileConnectionsView`。`profile overview connection count buttons open the requested connections tab`（hash に `connectionsView=blocking`）、`routes.unit.test.ts` |
 | AC-2 | `ProfileConnectionsPanel` の `onToggleBlock` → `handleBlockAction`。成功後は既存の `loadTopics` → `loadProfileSection` で一覧・件数を再取得。`blocking from the muted list moves the user into the blocked list`、`connection rows expose block and unblock next to mute` |
-| AC-3 | `SafetyPanel` の説明 2 件と導線 2 件、`DesktopShellSettingsDrawer` → `openProfileConnectionsFromSettings`。3 locale の `settings.safety.social.*`。`safety panel explains mute versus block and opens each list`、`safety settings open the blocked users list and close the drawer`、`localization-layout.spec.ts` の `connectionsView=blocking` route |
+| AC-3 | `SafetyPanel` の説明 2 件と導線 2 件、`DesktopShellSettingsDrawer` の `openSocialConnections`（設定を閉じ、Profile Column を前面にして一覧を開く）。3 locale の `settings.safety.social.*`。`safety panel explains mute versus block and opens each list`、`safety settings open the blocked users list and close the drawer`、`localization-layout.spec.ts` の `connectionsView=blocking` route |
 | AC-4 | `AuthorDetailCard` の `localActions` に Block。`author report local actions offer block next to mute` |
 | AC-5 | `current_hidden_author_pubkeys` と 6 caller。Rust 4 contracts（双方向、Revoked で再表示、mute 併用、repost、live / game） |
 | INVAR-1 | 既存ミュート contracts 7 件、`following` への正規化 test、既存タブの統合 test を維持 |

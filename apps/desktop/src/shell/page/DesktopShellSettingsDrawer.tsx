@@ -10,7 +10,7 @@ import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
-import type { ProfileConnectionsView, SettingsSection } from '@/components/shell/types';
+import type { PrimarySection, ProfileConnectionsView, SettingsSection } from '@/components/shell/types';
 
 import type { SupportedLocale } from '@/i18n';
 import type { CustomReactionCropRect, DesktopApi } from '@/lib/api';
@@ -41,6 +41,7 @@ type DesktopShellSettingsDrawerProps = {
   localeSaveFailed?: boolean;
   syncRoute: SyncRoute;
   setSettingsOpen: (open: boolean, focusTrigger?: boolean) => void;
+  focusPrimarySection: (section: PrimarySection) => void;
   openProfileConnections: (view: ProfileConnectionsView) => void;
   viewModels: Pick<
     ViewModels,
@@ -82,6 +83,7 @@ export function DesktopShellSettingsDrawer({
   localeSaveFailed,
   syncRoute,
   setSettingsOpen,
+  focusPrimarySection,
   openProfileConnections,
   viewModels,
   handleImportPeer,
@@ -171,9 +173,11 @@ export function DesktopShellSettingsDrawer({
     document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
   };
 
-  // #961: 設定からミュート／ブロック一覧へ移動する。一覧の正本はプロフィールの connections 画面。
+  // #961: 設定からミュート／ブロック一覧へ移動する。一覧の正本はプロフィールの connections 画面で、
+  // Profile Column を前面にしてから開く。
   const openSocialConnections = (view: ProfileConnectionsView) => {
     setSettingsOpen(false);
+    focusPrimarySection('profile');
     openProfileConnections(view);
   };
 
