@@ -74,6 +74,8 @@ test('Control Center exposes Columns, Places, Activity, and System and restores 
   expect(within(controlCenter).getByRole('button', { name: /^Notifications/ })).toBeInTheDocument();
   expect(within(controlCenter).getByRole('button', { name: 'Messages' })).toBeInTheDocument();
   expect(within(controlCenter).getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+  // #964: ショートカットを知らなくても、通常の GUI(コントロールセンター)から案内へ到達できる。
+  expect(within(controlCenter).getByRole('button', { name: 'Keyboard' })).toBeInTheDocument();
 
   fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -344,3 +346,31 @@ test('desktop shell exposes the Timeline Column and settings drawer restores tri
   });
 });
 
+// #964: 案内はコントロールセンターと投稿作成の hint から開け、開いても下書きと投稿作成は残る。
+test('keyboard guidance opens from the Control Center and from the composer hint without losing the draft', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  const controlCenter = await openControlCenter(user);
+  await user.click(within(controlCenter).getByRole('button', { name: 'Keyboard' }));
+  const drawer = await screen.findByRole('dialog', { name: 'Settings' });
+  expect(within(drawer).getByTestId('settings-section-keyboard')).toHaveAttribute('aria-current', 'location');
+  expect(within(drawer).getByRole('heading', { name: 'Keyboard' })).toBeVisible();
+  expect(window.location.hash).toContain('settings=keyboard');
+  await user.click(within(drawer).getByRole('button', { name: 'Close settings' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole('button', { name: /^Post to / }));
+  const composerInput = screen.getByPlaceholderText('Write a post');
+  await user.type(composerInput, 'draft survives help');
+  await user.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }));
+  const reopened = await screen.findByRole('dialog', { name: 'Settings' });
+  expect(within(reopened).getByRole('heading', { name: 'Keyboard' })).toBeVisible();
+  await user.keyboard('{Escape}');
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+  expect(screen.getByPlaceholderText('Write a post')).toHaveValue('draft survives help');
+});

@@ -832,6 +832,7 @@ export function DesktopShellPage({
       onJoinLiveSession={shellActions.handleJoinLiveSession}
       onLeaveLiveSession={shellActions.handleLeaveLiveSession}
       onOpenGameCreate={() => dialogs.setGameCreateDialogOpen(true)}
+      onOpenKeyboardHelp={() => handleOpenSettingsSection('keyboard')}
       onOpenLiveCreate={() => dialogs.setLiveCreateDialogOpen(true)}
       timelineViewItems={viewModels.timelineViewItems}
       onSelectTimelineTopic={(column, topicId) =>

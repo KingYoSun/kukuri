@@ -202,6 +202,10 @@
       "description": "本地亮色、暗色与语言选择。",
       "label": "外观与语言"
     },
+    "keyboard": {
+      "description": "已分配的按键，以及每个按键生效的界面与焦点条件。",
+      "label": "键盘操作"
+    },
     "community-node": {
       "description": "社区节点配置、认证、同意与刷新操作。",
       "label": "社区节点"

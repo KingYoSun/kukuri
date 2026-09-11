@@ -1,5 +1,6 @@
 import { MessageSquare, PenLine, Reply } from 'lucide-react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ComposerPanel } from '@/components/core/ComposerPanel';
@@ -21,6 +22,8 @@ type ColumnComposerFooterProps = {
   locale: string;
   mentionCandidates?: MentionCandidate[];
   onActivate: () => void;
+  /// #964: 案内(設定 > キーボード操作)を開く。未指定なら hint 文だけを表示する。
+  onOpenKeyboardHelp?: () => void;
   onAttachmentSelection: (
     target: ColumnDraftTarget,
     event: ChangeEvent<HTMLInputElement>
@@ -48,6 +51,7 @@ export function ColumnComposerFooter({
   locale,
   mentionCandidates,
   onActivate,
+  onOpenKeyboardHelp,
   onAttachmentSelection,
   onRemoveAttachment,
   onSubmit,
@@ -58,6 +62,7 @@ export function ColumnComposerFooter({
   const storedDraft = useDesktopShellStore((state) => state.columnDraftsByKey[key]);
   const draft = storedDraft ?? createColumnDraft(target);
   const setColumnDraftsByKey = useDesktopShellFieldSetter('columnDraftsByKey');
+  const settingsOpen = useDesktopShellStore((state) => state.shellChromeState.settingsOpen);
   const Icon = ICON_BY_ACTION[target.action];
   const actionLabel = t(LABEL_KEY_BY_ACTION[target.action]);
   const draftMediaViews: ComposerDraftMediaView[] = draft.mediaItems.map((item) => ({
@@ -74,10 +79,41 @@ export function ColumnComposerFooter({
   const updateDraft = (update: Parameters<typeof setColumnDraft>[2]) => {
     setColumnDraftsByKey((current) => setColumnDraft(current, target, update));
   };
+  // #964: 閉じた後は開始元(折りたたみボタン)へ focus を戻す。restart 復元などで
+  // expanded が外部から false になった場合は focus を奪わない。
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef(false);
+  useEffect(() => {
+    if (draft.expanded || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    primaryActionRef.current?.focus();
+  }, [draft.expanded]);
+  const collapse = () => {
+    restoreFocusRef.current = true;
+    updateDraft((current) => ({ ...current, expanded: false }));
+  };
+  // #964: Esc は投稿作成を閉じる。メンション候補が消費した Escape(defaultPrevented)と
+  // IME 変換中は扱わず、消費した場合は global の Escape cascade(#765)が pane を閉じないよう
+  // preventDefault する。下書き・返信先・投稿先は store に残す。
+  // 案内(設定 drawer)を hint link から開いた直後は focus が composer に残るため、drawer が
+  // 開いている間の Escape は drawer 側(global cascade)に委ねる。
+  const onComposerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key !== 'Escape' ||
+      event.defaultPrevented ||
+      event.nativeEvent.isComposing ||
+      settingsOpen
+    ) {
+      return;
+    }
+    event.preventDefault();
+    collapse();
+  };
 
   if (!draft.expanded) {
     return (
       <Button
+        ref={primaryActionRef}
         className='shell-column-primary-action min-h-11 min-w-11'
         variant='primary'
         size={active ? 'default' : 'icon'}
@@ -98,19 +134,21 @@ export function ColumnComposerFooter({
   }
 
   return (
-    <div className='shell-column-composer'>
+    <div className='shell-column-composer' onKeyDown={onComposerKeyDown}>
       <div className='shell-column-composer-heading'>
         <strong>{actionLabel}</strong>
-        <Button
-          variant='ghost'
-          size='sm'
-          className='min-h-11'
-          type='button'
-          onClick={() => updateDraft((current) => ({ ...current, expanded: false }))}
-        >
+        <Button variant='ghost' size='sm' className='min-h-11' type='button' onClick={collapse}>
           {t('actions.close')}
         </Button>
       </div>
+      <p className='shell-column-composer-hint'>
+        <span>{t('composer.keyboardHint')}</span>
+        {onOpenKeyboardHelp ? (
+          <button type='button' className='shell-column-composer-hint-link' onClick={onOpenKeyboardHelp}>
+            {t('composer.keyboardHelp')}
+          </button>
+        ) : null}
+      </p>
       <ComposerPanel
         mode={target.action}
         value={draft.content}

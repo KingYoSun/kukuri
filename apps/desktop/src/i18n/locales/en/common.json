@@ -67,7 +67,10 @@
     "writeQuoteRepost": "Add a comment",
     "writeReply": "Write a reply",
     "adultLabel": "Label this post as adult material (self-declared)",
-    "supportedFiles": "Supported files"
+    "supportedFiles": "Supported files",
+    "emptyDraft": "Write something or attach a file before posting.",
+    "keyboardHint": "Esc closes, Ctrl+Enter sends.",
+    "keyboardHelp": "Keyboard shortcuts"
   },
   "audience": {
     "allJoined": "All joined",

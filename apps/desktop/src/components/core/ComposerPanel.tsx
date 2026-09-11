@@ -114,7 +114,14 @@ export function ComposerPanel({
   });
   const onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
     onMentionKeyDown(event);
-    if (event.defaultPrevented || submitDisabled || event.key !== 'Enter' || !event.ctrlKey) {
+    // #964: IME 変換中(isComposing)の Ctrl+Enter は確定操作であり送信しない。
+    if (
+      event.defaultPrevented ||
+      submitDisabled ||
+      event.key !== 'Enter' ||
+      !event.ctrlKey ||
+      event.nativeEvent.isComposing
+    ) {
       return;
     }
     event.preventDefault();

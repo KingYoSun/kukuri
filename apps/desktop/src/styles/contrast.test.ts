@@ -57,17 +57,33 @@ const LIGHT_PAIRS: Pair[] = [
 ];
 
 // Focus ring is semi-transparent: composite over each backdrop before comparing.
-const RING_BACKDROPS = ['--surface-panel', '--background', '--surface-input'];
+// #964: the ring is an outline drawn outside the control, so the backdrop is the surrounding
+// surface (panel / background / input) or, for compact secondary controls, the button itself.
+const RING_BACKDROPS = [
+  '--surface-panel',
+  '--background',
+  '--surface-input',
+  '--surface-panel-soft',
+  '--surface-button-secondary',
+];
 
 type Rgb = readonly [number, number, number];
 
-function lightTokens(css: string) {
-  const match = css.match(/:root\[data-theme='light'\]\s*\{([\s\S]*?)\n\}/);
-  if (!match) throw new Error("tokens.css light block not found");
+function themeTokens(css: string, blockPattern: RegExp, label: string) {
+  const match = css.match(blockPattern);
+  if (!match) throw new Error(`tokens.css ${label} block not found`);
   const entries = [...match[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(
     (declaration) => [declaration[1], declaration[2].trim()] as const
   );
   return new Map(entries);
+}
+
+function lightTokens(css: string) {
+  return themeTokens(css, /:root\[data-theme='light'\]\s*\{([\s\S]*?)\n\}/, 'light');
+}
+
+function darkTokens(css: string) {
+  return themeTokens(css, /:root,\s*:root\[data-theme='dark'\]\s*\{([\s\S]*?)\n\}/, 'dark');
 }
 
 function parseHex(value: string): Rgb {
@@ -120,6 +136,25 @@ describe('light theme WCAG 2.2 AA contrast (Issue #828)', () => {
       expect(ratio).toBeGreaterThanOrEqual(minimum);
     }
   );
+
+  it.each(RING_BACKDROPS)('--ring composited over %s is at least 3:1', (backdropToken) => {
+    const backdrop = parseHex(tokenValue(backdropToken));
+    const ring = parseRgba(tokenValue('--ring'));
+    const ratio = contrastRatio(compositeOver(ring.rgb, ring.alpha, backdrop), backdrop);
+    expect(ratio).toBeGreaterThanOrEqual(NON_TEXT);
+  });
+});
+
+// #964: keyboard focus must stay visible on the default dark theme too. Only the focus ring is
+// gated here; the wider dark-theme text audit remains tracked separately (Issue #824).
+describe('dark theme focus ring contrast (Issue #964)', () => {
+  const tokens = darkTokens(readFileSync(TOKENS_PATH, 'utf8'));
+
+  function tokenValue(name: string) {
+    const value = tokens.get(name);
+    if (!value) throw new Error(`dark token not declared: ${name}`);
+    return value;
+  }
 
   it.each(RING_BACKDROPS)('--ring composited over %s is at least 3:1', (backdropToken) => {
     const backdrop = parseHex(tokenValue(backdropToken));

@@ -67,7 +67,10 @@
     "writeQuoteRepost": "コメントを追加",
     "writeReply": "返信を書く",
     "adultLabel": "この投稿を成人向けとして申告する",
-    "supportedFiles": "対応するファイル"
+    "supportedFiles": "対応するファイル",
+    "emptyDraft": "本文を入力するか、ファイルを添付してから送信してください。",
+    "keyboardHint": "Esc で閉じる、Ctrl+Enter で送信。",
+    "keyboardHelp": "キーボード操作"
   },
   "audience": {
     "allJoined": "参加済みすべて",

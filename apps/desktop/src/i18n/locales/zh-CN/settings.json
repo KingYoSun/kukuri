@@ -480,6 +480,72 @@
       "dataRetention": "数据保留"
     }
   },
+  "keyboard": {
+    "title": "键盘操作",
+    "summary": "当前已分配的按键，以及每个按键生效的界面与焦点条件。所有操作也都可以用鼠标完成。",
+    "columns": {
+      "keys": "按键",
+      "action": "操作",
+      "condition": "生效条件"
+    },
+    "groups": {
+      "composer": {
+        "title": "撰写",
+        "rows": {
+          "esc": {
+            "action": "关闭撰写面板。草稿、回复对象和发送目标会保留。",
+            "condition": "焦点位于撰写面板内，提及建议已关闭，且不在输入法组合状态"
+          },
+          "ctrlEnter": {
+            "action": "发送，且只发送一次。",
+            "condition": "焦点在正文中，有正文或附件，且没有正在发送。输入法组合中只确认文字"
+          },
+          "tab": {
+            "action": "移到下一个控件（Shift+Tab 返回）。",
+            "condition": "撰写面板内：关闭、正文、选择文件、成人内容标记、发送"
+          },
+          "arrows": {
+            "action": "在提及建议中移动。",
+            "condition": "在正文中输入 @ 且建议已打开"
+          },
+          "enter": {
+            "action": "选定提及建议（Tab 相同）。没有建议时插入换行。",
+            "condition": "焦点在正文中"
+          }
+        }
+      },
+      "screens": {
+        "title": "界面与列表",
+        "rows": {
+          "esc": {
+            "action": "关闭设置、控制中心、对话框和菜单。焦点不在输入框时，也会关闭线程和个人资料详情。",
+            "condition": "相应界面已打开"
+          },
+          "tab": {
+            "action": "显示“跳转到工作区”链接。",
+            "condition": "焦点位于页面顶部"
+          },
+          "columnMenu": {
+            "action": "打开栏目菜单并在项目间移动（Home / End 跳到两端，Esc 关闭）。",
+            "condition": "焦点在栏目菜单按钮或菜单项上"
+          },
+          "timelineTabs": {
+            "action": "切换时间线视图（信息流 / 书签）。",
+            "condition": "焦点在视图切换标签上"
+          },
+          "postMenu": {
+            "action": "打开帖子操作菜单（菜单键也可以）。",
+            "condition": "焦点在帖子卡片上"
+          },
+          "media": {
+            "action": "切换到上一个或下一个媒体。",
+            "condition": "正在查看器中查看媒体"
+          }
+        }
+      }
+    },
+    "unassigned": "其他按键（例如 ?、Ctrl+/、Ctrl+K、Ctrl+N）目前尚未分配。"
+  },
   "safety": {
     "title": "安全",
     "summary": "成人内容显示设置，以及用户静音与屏蔽。",

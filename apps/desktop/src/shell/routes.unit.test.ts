@@ -31,6 +31,7 @@ describe('isSettingsSection', () => {
   test.each([
     'about',
     'appearance',
+    'keyboard',
     'safety',
     'notifications',
     'connectivity',

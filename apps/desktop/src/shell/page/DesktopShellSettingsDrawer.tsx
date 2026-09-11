@@ -9,6 +9,7 @@ import { DiscoveryPanel } from '@/components/settings/DiscoveryPanel';
 import { NotificationsPanel } from '@/components/settings/NotificationsPanel';
 import { ReleasePanel } from '@/components/settings/ReleasePanel';
 import { ReactionsPanel } from '@/components/settings/ReactionsPanel';
+import { KeyboardPanel } from '@/components/settings/KeyboardPanel';
 import { SafetyPanel } from '@/components/settings/SafetyPanel';
 import { SettingsDrawer } from '@/components/shell/SettingsDrawer';
 import type { PrimarySection, ProfileConnectionsView, SettingsSection } from '@/components/shell/types';
@@ -206,6 +207,10 @@ export function DesktopShellSettingsDrawer({
           localeSaveFailed={localeSaveFailed}
         />
       ),
+    },
+    {
+      ...sectionCopy('keyboard'),
+      content: <KeyboardPanel />,
     },
     {
       ...sectionCopy('safety'),

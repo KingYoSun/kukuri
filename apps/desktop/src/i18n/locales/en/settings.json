@@ -480,6 +480,72 @@
       "dataRetention": "Data retention"
     }
   },
+  "keyboard": {
+    "title": "Keyboard",
+    "summary": "Keys that are assigned today, and the screen or focus each one needs. Every action is also available with the mouse.",
+    "columns": {
+      "keys": "Keys",
+      "action": "Action",
+      "condition": "Works when"
+    },
+    "groups": {
+      "composer": {
+        "title": "Composer",
+        "rows": {
+          "esc": {
+            "action": "Close the composer. The draft, reply target, and destination are kept.",
+            "condition": "Focus is inside the composer, mention suggestions are closed, and no IME composition is active"
+          },
+          "ctrlEnter": {
+            "action": "Send. It sends exactly once.",
+            "condition": "Focus is in the text field, there is text or an attachment, and nothing is sending. During IME composition it only confirms the text"
+          },
+          "tab": {
+            "action": "Move to the next control (Shift+Tab moves back).",
+            "condition": "Inside the composer: Close, text, Choose files, adult label, then the send button"
+          },
+          "arrows": {
+            "action": "Move through mention suggestions.",
+            "condition": "You typed @ in the text and suggestions are open"
+          },
+          "enter": {
+            "action": "Pick the mention suggestion (Tab does the same). Without suggestions it inserts a line break.",
+            "condition": "Focus is in the text field"
+          }
+        }
+      },
+      "screens": {
+        "title": "Screens and lists",
+        "rows": {
+          "esc": {
+            "action": "Close settings, the Control Center, dialogs, and menus. When focus is outside a text field it also closes thread and profile details.",
+            "condition": "That surface is open"
+          },
+          "tab": {
+            "action": "Reveal the “Skip to workspace” link.",
+            "condition": "Focus is at the top of the page"
+          },
+          "columnMenu": {
+            "action": "Open a Column menu and move through its items (Home / End jump to the ends, Esc closes).",
+            "condition": "Focus is on a Column menu button or item"
+          },
+          "timelineTabs": {
+            "action": "Switch the Timeline view (feed / bookmarks).",
+            "condition": "Focus is on the view tabs"
+          },
+          "postMenu": {
+            "action": "Open the post action menu (the Menu key works too).",
+            "condition": "Focus is on a post card"
+          },
+          "media": {
+            "action": "Go to the previous or next media item.",
+            "condition": "A media item is open in the viewer"
+          }
+        }
+      }
+    },
+    "unassigned": "Other keys (for example ?, Ctrl+/, Ctrl+K, Ctrl+N) are not assigned yet."
+  },
   "safety": {
     "title": "Safety",
     "summary": "Adult material display, plus user mute and block.",

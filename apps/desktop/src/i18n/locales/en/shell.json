@@ -202,6 +202,10 @@
       "description": "Local light, dark, and language selection.",
       "label": "Language & theme"
     },
+    "keyboard": {
+      "description": "Assigned keys and the screen or focus each one needs.",
+      "label": "Keyboard"
+    },
     "community-node": {
       "description": "Configured community nodes, auth, consent, and refresh actions.",
       "label": "Community Node"
