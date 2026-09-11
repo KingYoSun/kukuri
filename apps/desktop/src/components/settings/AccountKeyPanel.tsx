@@ -33,7 +33,12 @@ function errorMessage(error: unknown): string {
 
 // #859: アカウント鍵の export / import と複数アカウント管理(ADR 0047)。
 // 平文秘密鍵はこのパネルにも IPC にも一切現れない。export は暗号化 envelope のみ。
-export function AccountKeyPanel() {
+type AccountKeyPanelProps = {
+  // #967: 端末全体のバックアップ／復元(設定 > バックアップと復元)への案内。section 移動だけを行う。
+  onOpenDeviceBackup?: () => void;
+};
+
+export function AccountKeyPanel({ onOpenDeviceBackup }: AccountKeyPanelProps = {}) {
   const { t } = useTranslation(['settings']);
 
   const [accounts, setAccounts] = useState<AccountsSnapshot | null>(null);
@@ -159,6 +164,11 @@ export function AccountKeyPanel() {
       </CardHeader>
 
       <Notice>{t('settings:accountKey.scopeNotice')}</Notice>
+      {onOpenDeviceBackup ? (
+        <Button variant='secondary' type='button' onClick={onOpenDeviceBackup}>
+          {t('settings:accountKey.openBackup')}
+        </Button>
+      ) : null}
 
       <section className='space-y-3'>
         <h4 className='text-sm font-semibold text-foreground'>

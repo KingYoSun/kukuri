@@ -34,6 +34,7 @@ describe('isSettingsSection', () => {
     'keyboard',
     'safety',
     'notifications',
+    'backup',
     'connectivity',
     'discovery',
     'community-node',

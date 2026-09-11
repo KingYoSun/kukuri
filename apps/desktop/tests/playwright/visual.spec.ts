@@ -340,6 +340,22 @@ test.describe('visual regression smoke', () => {
     await expect(page).toHaveScreenshot('settings-notifications-wide-dark.png');
   });
 
+  // #967: settings drawer / backup & restore（作成・復元の入口。nav 密度と section 追加の回帰も兼ねる）
+  test('settings backup wide dark', async ({ page }) => {
+    await seedAppearance(page, 'dark');
+    await page.setViewportSize(WIDE);
+    await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral&settings=backup');
+    const settingsDialog = page.getByRole('dialog', { name: 'Settings' });
+    await expect(settingsDialog).toBeVisible();
+    await expect(settingsDialog.getByTestId('settings-section-backup')).toHaveAttribute(
+      'aria-current',
+      'location'
+    );
+    await expect(settingsDialog.getByRole('heading', { name: 'Create backup' })).toBeVisible();
+    await settleForShot(page, 'dark');
+    await expect(page).toHaveScreenshot('settings-backup-wide-dark.png');
+  });
+
   // 11: settings drawer / connectivity（スクロール drawer・フォーム群）
   test('settings connectivity wide dark', async ({ page }) => {
     await seedAppearance(page, 'dark');

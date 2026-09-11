@@ -85,7 +85,7 @@ test('keyboard enables mode, visits each diagnosis and restores focus on close',
   const drawer = page.getByRole('dialog', { name: 'Settings' });
   const developer = drawer.getByTestId('settings-section-developer');
   await developer.click();
-  await page.keyboard.press('Tab'); // Account nav
+  // #967: Developer is the last nav item, so one Tab reaches the mode checkbox.
   await page.keyboard.press('Tab'); // Mode checkbox
   await expect(drawer.getByRole('checkbox')).toBeFocused();
   await page.keyboard.press('Space');
@@ -100,7 +100,6 @@ test('keyboard enables mode, visits each diagnosis and restores focus on close',
     for (let step = 0; step < 5 - index; step++) await page.keyboard.press('Tab');
     await expect(developer).toBeFocused();
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(drawer.getByRole('checkbox')).toBeFocused();
   }

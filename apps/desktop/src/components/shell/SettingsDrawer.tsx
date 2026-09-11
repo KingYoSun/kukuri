@@ -42,6 +42,15 @@ export function SettingsDrawer({
       setVisited((previous) => previous.includes(currentSection.id) ? previous : [...previous, currentSection.id]);
     }
   }, [currentSection.id, currentSection.keepMounted]);
+  // #967: 短い window では nav が scroll するため、選択中 section の nav item を可視域へ入れる。
+  // focus は動かさない(deep link / 診断導線の既存 focus 挙動を維持する)。
+  React.useEffect(() => {
+    if (!open) return;
+    const item = document.getElementById(`${drawerId}-section-${currentSection.id}`);
+    if (item && typeof item.scrollIntoView === 'function') {
+      item.scrollIntoView({ block: 'nearest' });
+    }
+  }, [open, drawerId, currentSection.id]);
 
   return (
     <>

@@ -198,7 +198,7 @@
     },
     "account": {
       "label": "账户",
-      "description": "账户密钥的导出、导入与切换。"
+      "description": "仅导出、导入代表你身份的账户密钥，以及切换账户。"
     },
     "appearance": {
       "description": "本地亮色、暗色与语言选择。",
@@ -239,6 +239,10 @@
     "notifications": {
       "label": "通知",
       "description": "系统通知类别、静音模式和预览文本设置。"
+    },
+    "backup": {
+      "label": "备份与恢复",
+      "description": "创建并恢复本设备数据的加密备份。"
     }
   },
   "workspace": {

@@ -227,6 +227,16 @@ export function DesktopShellSettingsDrawer({
       ...sectionCopy('notifications'),
       content: <NotificationsPanel />,
     },
+    // #967: 端末全体のバックアップ／復元と、鍵だけの移行(アカウント)を別 section にし、
+    // 相互に案内する。入口の移動は section と URL だけを変え、backup / export の sink を呼ばない。
+    {
+      ...sectionCopy('backup'),
+      content: <DeviceBackupPanel onOpenAccountKeys={() => openDiagnosticSettings('account')} />,
+    },
+    {
+      ...sectionCopy('account'),
+      content: <AccountKeyPanel onOpenDeviceBackup={() => openDiagnosticSettings('backup')} />,
+    },
     {
       ...sectionCopy('connectivity'),
       content: (
@@ -363,15 +373,6 @@ export function DesktopShellSettingsDrawer({
             document.getElementById(`${SHELL_SETTINGS_ID}-section-${section}`)?.focus();
           }}
         />
-      ),
-    },
-    {
-      ...sectionCopy('account'),
-      content: (
-        <div className='space-y-5'>
-          <DeviceBackupPanel />
-          <AccountKeyPanel />
-        </div>
       ),
     },
   ];
