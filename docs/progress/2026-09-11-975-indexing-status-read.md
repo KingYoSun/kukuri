@@ -114,4 +114,4 @@ sensitive sink: server は DB 読取りと secret 復号（既存 helper）の�
 - blocker: 0件
 - non-blocker とした事項: (1) Optional-hardening: GET 専用の「鍵未設定」test は無く、共有 helper の分岐と POST 側 test で担保。(2) Optional-hardening（doc 整合）: ADR §2.8 の test 参照が実名・実 file と食い違っていた → 監査後 delta として docs のみ修正。(3) Optional-hardening: 空状態は own request `approved` を `supported` 実値より優先表示するため、承認後に operator が supported から外した稀なケースで文言が食い違い得る（dialog は両者を別表示、再申請は冪等）。(4) Existing-gap（#698 由来、本 diff で不変）: 適格一覧の内容変化で dialog が選択 node を先頭へ戻す。
 - 判定: PASS
-- 監査後 delta: ADR 0025 §2.8 の test 参照修正（docs のみ）。CI `linux-rust-tests` の失敗を受けて `crates/kukuri-cli/tests/daemon_linux.rs` の registry 総数 assertion を 135 → 136 へ更新（test の期待値のみ。監査対象の入口・sink・guard に変更なし）
+- 監査後 delta: ADR 0025 §2.8 の test 参照修正（docs のみ）。CI `linux-rust-tests` の失敗を受けて `crates/kukuri-cli/tests/daemon_linux.rs` の registry 総数 assertion を 135 → 136 へ更新、desktop-runtime `tests/support/lock_contract.rs` の lock 分類表に `indexing_status.rs` の `CommunityNodeServer` 取得 4 件を宣言し合計を 128 → 132 へ更新（いずれも test の期待値のみ。監査対象の入口・sink・guard に変更なし）
