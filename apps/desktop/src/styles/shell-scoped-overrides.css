@@ -527,40 +527,6 @@
   min-width: 0;
 }
 
-/* scope 行: 左に scope(label または Select)、右にプライベートチャンネル入口(Issue #966)。 */
-.shell-phase1 .shell-column-scope-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2xs) var(--space-xs);
-  min-width: 0;
-}
-
-.shell-phase1 .shell-column-scope-row > p,
-.shell-phase1 .shell-column-scope-row > .shell-column-context-control {
-  flex: 1 1 6rem;
-  min-width: 0;
-}
-
-.shell-phase1 .shell-column-scope-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2xs);
-}
-
-.shell-phase1 .shell-column-scope-action {
-  min-height: 1.75rem;
-  padding: 0 var(--space-xs);
-  font-size: var(--text-caption);
-  color: var(--muted-foreground);
-}
-
-.shell-phase1 .shell-column-scope-action:hover,
-.shell-phase1 .shell-column-scope-action:focus-visible {
-  color: var(--foreground);
-}
-
 .shell-phase1 .shell-column-title-row h2 {
   min-width: 0;
   overflow: hidden;
@@ -825,41 +791,6 @@
   justify-content: flex-start;
   white-space: normal;
   text-align: left;
-}
-
-.shell-phase1 .shell-control-center-place-hint {
-  margin: 0;
-  padding: 0 var(--space-sm);
-  color: var(--muted-foreground);
-  font-size: var(--text-caption);
-}
-
-.shell-phase1 .shell-control-center-place-list .topic-channel-empty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2xs) var(--space-xs);
-  padding: 0 var(--space-sm);
-  color: var(--muted-foreground);
-  font-size: var(--text-caption);
-}
-
-.shell-phase1 .shell-control-center-place-list .topic-channel-empty-action {
-  min-height: 2.75rem;
-  border: 0;
-  border-radius: var(--radius);
-  padding: var(--space-xs) var(--space-sm);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--text-caption);
-  cursor: pointer;
-}
-
-.shell-phase1 .shell-control-center-place-list .topic-channel-empty-action:hover,
-.shell-phase1 .shell-control-center-place-list .topic-channel-empty-action:focus-visible {
-  background: var(--surface-button-ghost-hover);
 }
 
 .shell-phase1 .shell-control-center-column-list {
