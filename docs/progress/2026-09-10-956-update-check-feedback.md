@@ -145,7 +145,17 @@ v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」
 
 ### 検証結果
 
-（実行中。完了後に更新する）
+remote session（Linux、Playwright 1.62.1、環境同梱 Chromium を `executablePath` で指定。CJK フォントなし、GTK / WebKitGTK dev ライブラリなし）で実行した。
+
+- 対象4 file の Vitest（`ReleasePanel.update.test.tsx`、`useAppUpdateStore.test.ts`、`ProfileRefreshButton.test.tsx`、`DesktopShellPage.updateSchedule.test.tsx`）: 39件成功。秒表示への変更後も同じ。
+- `pnpm lint`、`pnpm typecheck`: 成功。
+- `release-update-feedback.spec.ts`: 18件成功（時:分、時:分:秒の両方で確認）。変更前は18件失敗。
+- browser 全件（`--project=chromium`）: 267件成功。visual（`--project=visual`）: 31件成功。CJK フォント不在のため比較は smoke のみで、比較は CI の `linux-desktop-browser` に委ねる（release panel は visual.spec の対象外）。
+- Storybook build: 成功。
+- `cargo xtask check`: fmt / clippy 成功。tauri-check は `gdk-sys` の build script が GTK dev ライブラリ不在で失敗（環境起因。PR は `src-tauri` を触らない）。CI の Linux job に委ねる。
+- `cargo xtask desktop-ui-check` の Vitest 全体: shell-integration の17件が timeout（5000ms / 10000ms）で失敗。基準 commit `fd96677` を detached で checkout して同じ file を実行しても timeout するため、この環境の速度に起因し本差分起因ではない。CI の `linux-desktop-ui` は成功。
+- `cargo xtask oversized-files`: 成功（縮小 note のみ）。`git diff --check`: 成功。
+- 実機確認: ユーザー判断で不要。screen reader の読み上げ実測は未実施。
 
 ### 独立監査（PR head ace4c6d15e7a67001c488b1d04f3635d91005076）
 
@@ -160,3 +170,7 @@ v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」
 - blocker: 0件
 - non-blocker（Optional-hardening）: (1) `a slow check stays pending beyond one second` の unmount 時 timer 0 は既に発火済み timer を数えており、生きた timer の解放は共有 hook の `ProfileRefreshButton.test.tsx` で担保。(2) download／install 失敗時の `lastCheckedAt` 保持は code reading で確認、test では未 assert。(3) download／install 失敗の alert にも前回の確認時刻が付く（作業記録どおり、INVAR-3 に抵触しない）。(4) browser spec は1秒の下限自体を assert せず、component fake-timer test で担保。記録面: 本節の「検証結果」を最終結果で埋めること。
 - 判定: PASS
+
+#### 監査後 delta（ace4c6d..5ba518c）
+
+d48630d は docs のみ。5ba518c はユーザー判断による秒表示への変更で、`formatLocalizedClockTime` を削除して既存 `formatLocalizedTime` に置換し、component test / browser spec の期待、DESIGN.md、本記録を更新した。別コンテキストの delta 監査: 削除 helper の参照0、`formatLocalizedTime` 本体は無変更で既存 caller 14 file に影響なし、表示経路・store・hook・scheduler・診断限定・focus／scroll に変更なし。対象4 file の Vitest 39件、`tsc --noEmit`、delta 4 file の eslint、`git diff --check` 成功。blocker 0。判定: PASS。
