@@ -244,6 +244,7 @@ export function DesktopShellPage({
     api,
     translate,
     loadTopics,
+    refreshProfile: loadProfileSection,
     refreshVisibleTimelineAfterPublish,
     syncRoute,
     openDirectMessagePane,
@@ -844,6 +845,7 @@ export function DesktopShellPage({
       onOpenChannelManager={channelEntries.openChannelManagerForColumn}
       onOpenChannelSettings={channelEntries.openChannelSettingsForColumn}
       onRefreshNotifications={refreshNotificationsColumn}
+      onRefreshProfile={loadProfileSection}
       onRefreshConversation={(peerPubkey) => void refreshConversationColumn(peerPubkey)}
       onClearConversation={(peerPubkey) => void clearConversationColumn(peerPubkey)}
       onOpenConversationAuthor={(peerPubkey, parentColumnId) =>

@@ -325,10 +325,12 @@ export function useDesktopShellDataEffects({
 
   useEffect(() => {
     let disposed = false;
+    const saveRevision = storeApi.getState().profileSaveRevision;
     void (async () => {
       try {
         const profile = await api.getMyProfile();
-        if (disposed) {
+        if (disposed || storeApi.getState().profileHasLoaded ||
+          storeApi.getState().profileSaveRevision !== saveRevision) {
           return;
         }
         setLocalProfile(profile);
@@ -404,7 +406,7 @@ export function useDesktopShellDataEffects({
       return;
     }
     void loadProfileSection().catch(() => undefined);
-  }, [hasOwnProfileColumn, loadProfileSection, shellChromeState.activePrimarySection]);
+  }, [hasOwnProfileColumn, loadProfileSection]);
 
   useEffect(() => {
     if (!selectedAuthorPubkey) {

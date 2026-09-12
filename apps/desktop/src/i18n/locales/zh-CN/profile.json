@@ -109,6 +109,9 @@
     "title": "我的资料"
   },
   "overview": {
+    "refresh": "刷新个人资料",
+    "refreshing": "正在刷新个人资料",
+    "noUsername": "未设置用户名",
     "edit": "编辑资料",
     "avatarAlt": "{{name}}的头像",
     "followedCount_one": "{{count}} 位关注者",

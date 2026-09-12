@@ -109,6 +109,9 @@
     "title": "My Profile"
   },
   "overview": {
+    "refresh": "Refresh profile",
+    "refreshing": "Refreshing profile",
+    "noUsername": "Username not set",
     "edit": "Edit Profile",
     "avatarAlt": "{{name}}'s profile picture",
     "followedCount_one": "{{count}} follower",

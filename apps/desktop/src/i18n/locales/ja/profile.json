@@ -109,6 +109,9 @@
     "title": "マイプロフィール"
   },
   "overview": {
+    "refresh": "プロフィールを更新",
+    "refreshing": "プロフィールを更新中",
+    "noUsername": "ユーザー名未設定",
     "edit": "プロフィールを編集",
     "avatarAlt": "{{name}}のプロフィール画像",
     "followedCount_one": "フォロワー {{count}}人",

@@ -68,6 +68,7 @@ describe.each(expectations)('accessible names in $locale', (expected) => {
       <>
         <ProfileOverviewPanel
           authorLabel='Alex'
+          username='alex'
           about={null}
           picture='data:image/png;base64,AA=='
           status='ready'

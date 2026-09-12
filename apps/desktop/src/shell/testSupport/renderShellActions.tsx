@@ -83,6 +83,7 @@ export function renderActionsHook(options: RenderActionsOptions = {}) {
         api,
         translate: options.translate ?? stubTranslate,
         loadTopics,
+        refreshProfile: vi.fn(async () => undefined),
         refreshVisibleTimelineAfterPublish,
         syncRoute,
         openDirectMessagePane,

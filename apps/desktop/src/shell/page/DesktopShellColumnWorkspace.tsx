@@ -81,6 +81,7 @@ type DesktopShellColumnWorkspaceProps = {
   renderMessagesSurface: (column: ColumnState) => ReactNode;
   renderNotificationsSurface: (column: ColumnState) => ReactNode;
   onRefreshNotifications: () => void;
+  onRefreshProfile: () => Promise<void>;
   onRefreshConversation: (peerPubkey: string) => void;
   onClearConversation: (peerPubkey: string) => void;
   onOpenConversationAuthor: (peerPubkey: string, parentColumnId: string) => void;
@@ -116,6 +117,7 @@ export function DesktopShellColumnWorkspace({
   renderMessagesSurface,
   renderNotificationsSurface,
   onRefreshNotifications,
+  onRefreshProfile,
   onRefreshConversation,
   onClearConversation,
   onOpenConversationAuthor,
@@ -144,6 +146,8 @@ export function DesktopShellColumnWorkspace({
     (state) => state.directMessageTimelineByPeer
   );
   const notifications = useDesktopShellStore((state) => state.notifications);
+  const profileRefreshing = useDesktopShellStore((state) => state.profileRefreshing);
+  const profileSaving = useDesktopShellStore((state) => state.profileSaving);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
   const mediaObjectUrls = useDesktopShellStore((state) => state.mediaObjectUrls);
@@ -441,6 +445,24 @@ export function DesktopShellColumnWorkspace({
     return undefined;
   }
   const renderHeaderActions = (column: ColumnState) => {
+    if (column.kind === 'profile' && !column.entityId) {
+      return (
+        <div className='shell-column-context-actions' data-column-preserve-activation>
+          <IconButton
+            variant='ghost'
+            type='button'
+            label={t(profileRefreshing ? 'profile:overview.refreshing' : 'profile:overview.refresh')}
+            aria-busy={profileRefreshing}
+            aria-disabled={profileRefreshing || profileSaving}
+            onClick={() => {
+              if (!profileRefreshing && !profileSaving) void onRefreshProfile();
+            }}
+          >
+            <RefreshCw className={`size-4${profileRefreshing ? ' profile-refresh-spinning' : ''}`} aria-hidden='true' />
+          </IconButton>
+        </div>
+      );
+    }
     if (column.kind === 'timeline') {
       return (
         <TimelineViewIconTabs

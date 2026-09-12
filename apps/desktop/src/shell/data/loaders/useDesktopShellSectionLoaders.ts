@@ -151,9 +151,15 @@ export function useDesktopShellSectionLoaders({
   );
 
   const loadProfileSection = useCallback(async () => {
+    const state = storeApi.getState();
+    if (!state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)) return;
     const requestId = ++profileRequestId.current;
+    const saveRevision = state.profileSaveRevision;
+    const isCurrent = () => requestId === profileRequestId.current &&
+      saveRevision === storeApi.getState().profileSaveRevision;
+    state.patchState({ profileRefreshing: true });
     setProfileError(null);
-    setProfilePanelState({ status: 'loading', error: null });
+    setProfilePanelState({ status: state.profileHasLoaded ? 'ready' : 'loading', error: null });
     try {
       const [profile, following, followed, muted, blocking] = await Promise.all([
         api.getMyProfile(),
@@ -167,8 +173,9 @@ export function useDesktopShellSectionLoaders({
         null,
         VISIBLE_TIMELINE_LIMIT
       );
-      if (requestId !== profileRequestId.current) return;
+      if (!isCurrent()) return;
       startTransition(() => {
+        storeApi.getState().patchState({ profileHasLoaded: true });
         setLocalProfile(profile);
         if (!storeApi.getState().profileDirty) {
           setProfileDraft(profileInputFromProfile(profile));
@@ -184,13 +191,17 @@ export function useDesktopShellSectionLoaders({
         setSocialConnectionsPanelState({ status: 'ready', error: null });
       });
     } catch (error) {
-      if (requestId !== profileRequestId.current) return;
+      if (!isCurrent()) return;
       const message = messageFromError(
         error,
         translate('common:errors.failedToLoadProfile')
       );
       setProfileError(message);
       setProfilePanelState({ status: 'error', error: message });
+    } finally {
+      if (requestId === profileRequestId.current) {
+        storeApi.getState().patchState({ profileRefreshing: false });
+      }
     }
   }, [
     api,
@@ -481,7 +492,9 @@ export function useDesktopShellSectionLoaders({
       if (activePrimarySection === 'game') {
         tasks.push(loadGameSection(topic, selectedChannelId));
       }
-      if (state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)) {
+      // Section navigation may bootstrap a missing profile, but never refresh a confirmed one.
+      if (!state.profileHasLoaded && !state.profileRefreshing && state.profilePanelState.status === 'loading' &&
+        state.workspaceState.columns.some((column) => column.kind === 'profile' && !column.entityId)) {
         tasks.push(loadProfileSection());
       }
       if (selectedAuthorPubkey) {

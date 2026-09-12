@@ -41,6 +41,85 @@ function setup() {
 }
 
 describe('useDesktopShellSectionLoaders', () => {
+  test('section navigation does not refetch a confirmed profile', async () => {
+    const { api, hook } = setup();
+    await act(async () => hook.result.current.loadProfileSection());
+    const read = vi.spyOn(api, 'getMyProfile');
+    await act(async () => hook.result.current.loadShellSections('kukuri:topic:general'));
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test('an empty profile remains confirmed after refresh failure and recovers on retry', async () => {
+    const { api, hook, store } = setup();
+    expect(store.getState().profileHasLoaded).toBe(false);
+    await act(async () => hook.result.current.loadProfileSection());
+    expect(store.getState().profileHasLoaded).toBe(true);
+    vi.spyOn(api, 'listProfileTimeline').mockRejectedValueOnce(new Error('refresh failed'));
+    await act(async () => hook.result.current.loadProfileSection());
+    expect(store.getState()).toMatchObject({
+      profileHasLoaded: true, profileRefreshing: false, profileTimeline: [], profileError: 'refresh failed',
+    });
+    await act(async () => hook.result.current.loadProfileSection());
+    expect(store.getState()).toMatchObject({ profileHasLoaded: true, profileRefreshing: false, profileError: null });
+  });
+
+  test('an older completion cannot stop the latest profile refresh', async () => {
+    const { api, hook, store } = setup();
+    const first = createDeferred<TimelineView>();
+    const latest = createDeferred<TimelineView>();
+    const read = vi.spyOn(api, 'listProfileTimeline')
+      .mockReturnValueOnce(first.promise).mockReturnValueOnce(latest.promise);
+    let firstLoad!: Promise<void>;
+    let latestLoad!: Promise<void>;
+    act(() => { firstLoad = hook.result.current.loadProfileSection(); });
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    act(() => { latestLoad = hook.result.current.loadProfileSection(); });
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await act(async () => { first.resolve({ items: [], next_cursor: null }); await firstLoad; });
+    expect(store.getState().profileRefreshing).toBe(true);
+    expect(store.getState().profileHasLoaded).toBe(false);
+    await act(async () => { latest.resolve({ items: [], next_cursor: null }); await latestLoad; });
+    expect(store.getState().profileRefreshing).toBe(false);
+    expect(store.getState().profileHasLoaded).toBe(true);
+  });
+
+  test.each(['success', 'failure'])('a read started before saving cannot apply its %s', async (outcome) => {
+    const { api, hook, store } = setup();
+    await act(async () => hook.result.current.loadProfileSection());
+    const old = createDeferred<TimelineView>();
+    const read = vi.spyOn(api, 'listProfileTimeline').mockReturnValue(old.promise);
+    let loading!: Promise<void>;
+    act(() => { loading = hook.result.current.loadProfileSection(); });
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    const saved = await api.setMyProfile({ display_name: 'Saved name', name: 'saved-user' });
+    act(() => store.getState().patchState({
+      localProfile: saved, profileSaveRevision: 1, profileDirty: true,
+      profileDraft: { display_name: 'Next unsaved name' },
+    }));
+    await act(async () => {
+      if (outcome === 'success') old.resolve({ items: [], next_cursor: null });
+      else old.reject(new Error('old read failed'));
+      await loading;
+    });
+    expect(store.getState().localProfile).toEqual(saved);
+    expect(store.getState().profileDraft.display_name).toBe('Next unsaved name');
+    expect(store.getState().profileError).toBeNull();
+    expect(store.getState().profileRefreshing).toBe(false);
+  });
+
+  test('refreshing a confirmed empty profile retains its ready state', async () => {
+    const { api, hook, store } = setup();
+    await act(async () => hook.result.current.loadProfileSection());
+    const deferred = createDeferred<TimelineView>();
+    const read = vi.spyOn(api, 'listProfileTimeline').mockReturnValue(deferred.promise);
+    let loading!: Promise<void>;
+    act(() => { loading = hook.result.current.loadProfileSection(); });
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    const pendingState = store.getState().profilePanelState;
+    await act(async () => { deferred.resolve({ items: [], next_cursor: null }); await loading; });
+    expect(pendingState).toEqual({ status: 'ready', error: null });
+  });
+
   test('manifest completion resolves the index using consent received after the request started', async () => {
     const { api, hook, store } = setup();
     const node = 'https://first.example';

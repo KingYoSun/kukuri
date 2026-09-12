@@ -227,6 +227,7 @@ export function DesktopShellPrimarySurface({
     profileDirty,
     profileError,
     profilePanelState,
+    profileHasLoaded,
     profileSaving,
     recentReactions,
     selectedLiveSessionId,
@@ -275,6 +276,7 @@ export function DesktopShellPrimarySurface({
       profileDirty: s.profileDirty,
       profileError: s.profileError,
       profilePanelState: s.profilePanelState,
+      profileHasLoaded: s.profileHasLoaded,
       profileSaving: s.profileSaving,
       recentReactions: s.recentReactions,
       selectedLiveSessionId: s.selectedLiveSessionId,
@@ -774,12 +776,12 @@ export function DesktopShellPrimarySurface({
             ) : (
               <ProfileOverviewPanel
                 authorLabel={profileAuthorLabel}
+                username={localProfile?.name ?? null}
                 about={localProfile?.about ?? null}
                 picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)}
                 status={profilePanelState.status}
                 error={profileError ?? profilePanelState.error}
-                postCount={profilePanelState.status !== 'ready' && viewModels.profileTimelinePostViews.length === 0
-                  ? null : viewModels.profileTimelinePostViews.length}
+                postCount={profileHasLoaded ? viewModels.profileTimelinePostViews.length : null}
                 followingCount={socialConnections.following.length}
                 followedCount={socialConnections.followed.length}
                 mutedCount={socialConnections.muted.length}
@@ -797,7 +799,7 @@ export function DesktopShellPrimarySurface({
               </Button>
             ) : null}
             {profileMode !== 'connections' &&
-            (profilePanelState.status === 'ready' || viewModels.profileTimelinePostViews.length > 0) ? (
+            profileHasLoaded ? (
               <Card className='shell-workspace-card'>
                 <TimelineFeed
                   posts={viewModels.profileTimelinePostViews}

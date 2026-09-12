@@ -53,6 +53,7 @@ type UseDesktopShellActionsArgs = {
   api: DesktopApi;
   translate: Translate;
   loadTopics: (topics: string[], activeTopic: string, currentThread: string | null) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   refreshVisibleTimelineAfterPublish: (
     topic: string,
     currentThread: string | null,
@@ -117,6 +118,7 @@ export function useDesktopShellActions({
   api,
   translate,
   loadTopics,
+  refreshProfile,
   refreshVisibleTimelineAfterPublish,
   syncRoute,
   openDirectMessagePane,
@@ -365,6 +367,7 @@ export function useDesktopShellActions({
     getState: storeApi.getState,
     translate,
     loadTopics,
+    refreshProfile,
     syncRoute,
     activePrivateChannel,
     activeTopic,
@@ -435,6 +438,7 @@ export function useDesktopShellActions({
     api,
     translate,
     loadTopics,
+    refreshProfile,
     syncRoute,
     openDirectMessagePane,
     openAuthorDetail,
