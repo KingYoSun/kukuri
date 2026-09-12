@@ -42,7 +42,8 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - 技術識別子は通常画面では人が判別できる名前と短い補助情報に置き換える。完全値はcontext menu等の明示操作でコピー可能にし、Developer modeと診断画面では表示してよい。
 - product UIとdiagnostics UIを視覚的・構造的に分け、diagnosticsはControl Center、Settings、inline Noticeの補助階層へ置く。
 - 開発者設定ではモードの有効／無効を文字で示し、有効時は接続・ディスカバリー・コミュニティノードの診断へ同じ設定drawer内で移動できるようにする。有効化だけで自動遷移せず、移動後は対象sectionへfocusを引き継ぐ。設定drawerとbackdropはworkspaceのdock／page indicatorより前面に置き、診断操作を妨げたり背景の操作を受け付けたりしない。
-- warm-orangeをprimary action、cool-tealをaccent、focus、selected stateに限定する。dark-firstのdeep-navy、Column Canvas、topic-firstの情報構造をkukuri固有の基盤とする。
+- Graphite / Orange（Issue #996の採用済みA案）を両themeに適用する。lightは白と中立グレー、darkは無彩色チャコールを基盤とし、カラム本文は`#212121`とする。warm-orangeをprimary actionに使い、focus・selected・activeは局所的な橙系で識別する。青みのあるcharcoal案は採用しない。大面積の青／茶、第二のブランド色としてのteal／mint、色付き光彩を使わない。Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
+- 装飾用の弱い境界と操作識別用の強い境界を分ける。成功・警告・エラー・接続状態は意味色とlabel／iconを維持し、ブランド色に一括置換しない。
 - 半透明gradient、過剰なcard nesting、装飾目的の巨大見出しで階層を作らず、solid surface、境界、余白、弱い拡散影で表す。
 - 外部trendや一般的な禁止リストより、既存brief、token、component、受け入れ済みADRを優先する。
 
@@ -255,108 +256,108 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | global | `--motion-distance-control-center` | `2rem` |
 | global | `--blur-hud` | `14px` |
 | global | `--surface-metaverse` | `#101318` |
-| dark | `--background` | `#101923` |
-| dark | `--shell-background` | `#101923` |
-| dark | `--foreground` | `#f6f1e8` |
-| dark | `--foreground-strong` | `#fff7ef` |
-| dark | `--muted-foreground` | `#cbbdae` |
-| dark | `--muted-foreground-soft` | `#a89b8f` |
-| dark | `--surface-panel` | `#0c1721` |
-| dark | `--surface-panel-solid` | `#0c1721` |
-| dark | `--surface-panel-accent` | `#162231` |
-| dark | `--surface-panel-muted` | `#13202c` |
-| dark | `--surface-panel-soft` | `#182632` |
-| dark | `--surface-input` | `#101b26` |
-| dark | `--surface-raised` | `#1b2a36` |
+| dark | `--background` | `#171717` |
+| dark | `--shell-background` | `#171717` |
+| dark | `--foreground` | `#e9e9e7` |
+| dark | `--foreground-strong` | `#fafafa` |
+| dark | `--muted-foreground` | `#a7a7a3` |
+| dark | `--muted-foreground-soft` | `#a7a7a3` |
+| dark | `--surface-panel` | `#212121` |
+| dark | `--surface-panel-solid` | `#212121` |
+| dark | `--surface-panel-accent` | `#262626` |
+| dark | `--surface-panel-muted` | `#292929` |
+| dark | `--surface-panel-soft` | `#292929` |
+| dark | `--surface-input` | `#262626` |
+| dark | `--surface-raised` | `#333333` |
 | dark | `--surface-button-primary` | `#f59d62` |
 | dark | `--surface-button-primary-hover` | `#ee8f4e` |
-| dark | `--surface-button-secondary` | `#233241` |
-| dark | `--surface-button-ghost` | `#1a2734` |
-| dark | `--surface-button-ghost-hover` | `#223241` |
-| dark | `--surface-active` | `#17393c` |
-| dark | `--surface-overlay` | `#071019` |
-| dark | `--surface-avatar` | `#21303d` |
-| dark | `--surface-media-loading` | `#1a2734` |
-| dark | `--surface-media-ready` | `#173439` |
-| dark | `--surface-skeleton` | `#243442` |
-| dark | `--surface-selection` | `#d98b55` |
-| dark | `--surface-accent-soft` | `#17393c` |
+| dark | `--surface-button-secondary` | `#333333` |
+| dark | `--surface-button-ghost` | `#292929` |
+| dark | `--surface-button-ghost-hover` | `#383838` |
+| dark | `--surface-active` | `#34302b` |
+| dark | `--surface-overlay` | `#141414` |
+| dark | `--surface-avatar` | `#333333` |
+| dark | `--surface-media-loading` | `#292929` |
+| dark | `--surface-media-ready` | `#26382e` |
+| dark | `--surface-skeleton` | `#333333` |
+| dark | `--surface-selection` | `#60412b` |
+| dark | `--surface-accent-soft` | `#34302b` |
 | dark | `--surface-warning-soft` | `#463423` |
 | dark | `--surface-destructive-soft` | `#4a2b22` |
 | dark | `--surface-info-soft` | `#203449` |
-| dark | `--surface-badge-neutral` | `#1a2734` |
-| dark | `--surface-contrast` | `#20303c` |
-| dark | `--border-subtle` | `#2a3a4a` |
-| dark | `--border-subtle-strong` | `#39495a` |
-| dark | `--border-accent` | `#2d7b76` |
-| dark | `--border-warning` | `#a36b40` |
-| dark | `--border-destructive` | `#a35e49` |
+| dark | `--surface-badge-neutral` | `#292929` |
+| dark | `--surface-contrast` | `#333333` |
+| dark | `--border-subtle` | `#3c3c3a` |
+| dark | `--border-subtle-strong` | `#83837e` |
+| dark | `--border-accent` | `#bc855f` |
+| dark | `--border-warning` | `#bf9358` |
+| dark | `--border-destructive` | `#cc8979` |
 | dark | `--primary-start` | `#f59d62` |
 | dark | `--primary-end` | `#f59d62` |
-| dark | `--primary-foreground` | `#0e1b26` |
-| dark | `--accent` | `#00b3a4` |
-| dark | `--accent-foreground` | `#eafffb` |
-| dark | `--destructive` | `#ffb48a` |
+| dark | `--primary-foreground` | `#211810` |
+| dark | `--accent` | `#f59d62` |
+| dark | `--accent-foreground` | `#f5bd99` |
+| dark | `--destructive` | `#ffb4ab` |
 | dark | `--warning` | `#e6b066` |
-| dark | `--danger` | `#ffb48a` |
-| dark | `--ring` | `rgba(0, 179, 164, 0.8)` |
-| dark | `--shadow-panel` | `0 18px 60px rgba(2, 7, 15, 0.22)` |
-| dark | `--shadow-dropdown` | `0 12px 32px rgba(2, 7, 15, 0.12)` |
-| dark | `--shadow-button-primary` | `0 10px 28px rgba(245, 157, 98, 0.16)` |
-| dark | `--scrollbar-track` | `#12202c` |
-| dark | `--scrollbar-thumb` | `#2a4d56` |
-| dark | `--scrollbar-thumb-hover` | `#38717c` |
-| light | `--background` | `#f4efe6` |
-| light | `--shell-background` | `#f4efe6` |
-| light | `--foreground` | `#21303b` |
-| light | `--foreground-strong` | `#15202a` |
-| light | `--muted-foreground` | `#5f6c76` |
-| light | `--muted-foreground-soft` | `#626d77` |
+| dark | `--danger` | `#ffb4ab` |
+| dark | `--ring` | `rgba(245, 157, 98, 0.9)` |
+| dark | `--shadow-panel` | `0 18px 60px rgba(0, 0, 0, 0.18)` |
+| dark | `--shadow-dropdown` | `0 12px 32px rgba(0, 0, 0, 0.18)` |
+| dark | `--shadow-button-primary` | `0 10px 28px rgba(0, 0, 0, 0.12)` |
+| dark | `--scrollbar-track` | `#212121` |
+| dark | `--scrollbar-thumb` | `#777773` |
+| dark | `--scrollbar-thumb-hover` | `#93938f` |
+| light | `--background` | `#f4f4f3` |
+| light | `--shell-background` | `#f4f4f3` |
+| light | `--foreground` | `#242424` |
+| light | `--foreground-strong` | `#171717` |
+| light | `--muted-foreground` | `#62625f` |
+| light | `--muted-foreground-soft` | `#62625f` |
 | light | `--surface-panel` | `#ffffff` |
 | light | `--surface-panel-solid` | `#ffffff` |
-| light | `--surface-panel-accent` | `#f5ede2` |
-| light | `--surface-panel-muted` | `#edf2f6` |
-| light | `--surface-panel-soft` | `#e6edf2` |
-| light | `--surface-input` | `#f8f4ee` |
-| light | `--surface-raised` | `#dde5ec` |
+| light | `--surface-panel-accent` | `#ececea` |
+| light | `--surface-panel-muted` | `#f7f7f5` |
+| light | `--surface-panel-soft` | `#f7f7f5` |
+| light | `--surface-input` | `#ffffff` |
+| light | `--surface-raised` | `#e5e5e2` |
 | light | `--surface-button-primary` | `#d77d45` |
 | light | `--surface-button-primary-hover` | `#c86f38` |
-| light | `--surface-button-secondary` | `#dfe6ec` |
-| light | `--surface-button-ghost` | `#edf2f6` |
-| light | `--surface-button-ghost-hover` | `#e3ebf1` |
-| light | `--surface-active` | `#d8eee9` |
-| light | `--surface-overlay` | `#d7dfe7` |
-| light | `--surface-avatar` | `#dfe8ee` |
-| light | `--surface-media-loading` | `#dde5ec` |
-| light | `--surface-media-ready` | `#d8eee9` |
-| light | `--surface-skeleton` | `#e8eef3` |
-| light | `--surface-selection` | `#e9b28c` |
-| light | `--surface-accent-soft` | `#d8eee9` |
+| light | `--surface-button-secondary` | `#ececea` |
+| light | `--surface-button-ghost` | `#f7f7f5` |
+| light | `--surface-button-ghost-hover` | `#e5e5e2` |
+| light | `--surface-active` | `#f8e8dd` |
+| light | `--surface-overlay` | `#d6d6d2` |
+| light | `--surface-avatar` | `#e5e5e2` |
+| light | `--surface-media-loading` | `#ececea` |
+| light | `--surface-media-ready` | `#e5eee7` |
+| light | `--surface-skeleton` | `#e5e5e2` |
+| light | `--surface-selection` | `#f0c9ac` |
+| light | `--surface-accent-soft` | `#f8e8dd` |
 | light | `--surface-warning-soft` | `#f6e7d9` |
 | light | `--surface-destructive-soft` | `#f6dfd4` |
 | light | `--surface-info-soft` | `#dce7f4` |
-| light | `--surface-badge-neutral` | `#edf2f6` |
-| light | `--surface-contrast` | `#dde5ec` |
-| light | `--border-subtle` | `#cad3db` |
-| light | `--border-subtle-strong` | `#b7c2cb` |
-| light | `--border-accent` | `#4f8b84` |
+| light | `--surface-badge-neutral` | `#ececea` |
+| light | `--surface-contrast` | `#e5e5e2` |
+| light | `--border-subtle` | `#d6d6d2` |
+| light | `--border-subtle-strong` | `#85857f` |
+| light | `--border-accent` | `#a44a21` |
 | light | `--border-warning` | `#a67839` |
 | light | `--border-destructive` | `#b56a50` |
 | light | `--primary-start` | `#d77d45` |
 | light | `--primary-end` | `#d77d45` |
-| light | `--primary-foreground` | `#0e1b26` |
-| light | `--accent` | `#0c756c` |
-| light | `--accent-foreground` | `#143633` |
+| light | `--primary-foreground` | `#20160e` |
+| light | `--accent` | `#a44a21` |
+| light | `--accent-foreground` | `#713717` |
 | light | `--destructive` | `#9d4d36` |
 | light | `--warning` | `#845e21` |
 | light | `--danger` | `#9d4d36` |
-| light | `--ring` | `rgba(12, 117, 108, 0.8)` |
-| light | `--shadow-panel` | `0 18px 48px rgba(33, 48, 59, 0.12)` |
-| light | `--shadow-dropdown` | `0 12px 32px rgba(33, 48, 59, 0.1)` |
-| light | `--shadow-button-primary` | `0 10px 24px rgba(215, 125, 69, 0.18)` |
-| light | `--scrollbar-track` | `#edf2f6` |
-| light | `--scrollbar-thumb` | `#b8c6d2` |
-| light | `--scrollbar-thumb-hover` | `#93a8b8` |
+| light | `--ring` | `rgba(164, 74, 33, 0.9)` |
+| light | `--shadow-panel` | `0 18px 48px rgba(0, 0, 0, 0.08)` |
+| light | `--shadow-dropdown` | `0 12px 32px rgba(0, 0, 0, 0.10)` |
+| light | `--shadow-button-primary` | `0 10px 24px rgba(0, 0, 0, 0.08)` |
+| light | `--scrollbar-track` | `#f4f4f3` |
+| light | `--scrollbar-thumb` | `#85857f` |
+| light | `--scrollbar-thumb-hover` | `#62625f` |
 <!-- TOKEN_CONTRACT_END -->
 
 ### 11.2 提案token

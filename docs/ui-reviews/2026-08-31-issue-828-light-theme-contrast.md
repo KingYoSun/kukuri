@@ -1,8 +1,8 @@
 # 2026-08-31 Issue #828 light theme contrast
 
-- Status: current
+- Status: superseded
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [Graphite / Orange（配色のみ）](2026-09-12-issue-996-graphite-orange-theme.md)
 - PR: [#844](https://github.com/KingYoSun/kukuri/pull/844)
 - Preview: [light theme tokens](assets/issue-828/tokens-light.png) / [dark theme tokens（無変更確認）](assets/issue-828/tokens-dark.png) / [light theme buttons](assets/issue-828/button-light.png)
 - Surface / user / purpose: light theme全surfaceのsemantic color / light theme利用者 / 実使用fg・bg pairをWCAG 2.2 AA（通常文字4.5:1、non-text 3:1）へ揃える

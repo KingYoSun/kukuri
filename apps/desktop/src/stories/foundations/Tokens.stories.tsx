@@ -14,16 +14,29 @@ type Story = StoryObj<typeof meta>;
 const swatches = [
   { name: 'Background', value: 'var(--background)' },
   { name: 'Panel', value: 'var(--surface-panel)' },
+  { name: 'Column body', value: 'var(--surface-panel-solid)' },
   { name: 'Panel Accent', value: 'var(--surface-panel-accent)' },
   { name: 'Panel Muted', value: 'var(--surface-panel-muted)' },
   { name: 'Panel Soft', value: 'var(--surface-panel-soft)' },
   { name: 'Input', value: 'var(--surface-input)' },
   { name: 'Primary Surface', value: 'var(--surface-button-primary)' },
   { name: 'Accent', value: 'var(--accent)' },
+  { name: 'Selected surface', value: 'var(--surface-active)' },
+  { name: 'Control boundary', value: 'var(--border-subtle-strong)' },
   { name: 'Destructive', value: 'var(--destructive)' },
 ];
 
 const semanticPairs = [
+  {
+    name: 'Column body',
+    background: 'var(--surface-panel-solid)',
+    foreground: 'var(--foreground)',
+  },
+  {
+    name: 'Card supporting text',
+    background: 'var(--surface-panel-soft)',
+    foreground: 'var(--muted-foreground)',
+  },
   {
     name: 'Primary action',
     background: 'var(--surface-button-primary)',

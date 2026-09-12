@@ -1,0 +1,156 @@
+[
+  {
+    "theme": "dark",
+    "surface": "columns",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "dark",
+    "surface": "appearance",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "dark",
+    "surface": "composer",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "dark",
+    "surface": "feedback",
+    "incompleteDetails": [
+      {
+        "target": [
+          "div:nth-child(4) > .muted"
+        ],
+        "text": "0 / 2000 文字",
+        "color": "rgb(233, 233, 231)",
+        "ancestors": [
+          {
+            "tag": "P",
+            "classes": "muted",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "extended-module-stack",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "ui-dialog-content panel",
+            "background": "rgb(33, 33, 33)",
+            "opacity": "1"
+          }
+        ],
+        "manualResolution": {
+          "ratio": 13.245354153985327,
+          "minimum": 4.5,
+          "result": "PASS",
+          "basis": "Opaque dialog panel is behind transparent ancestors; all observed opacities are 1."
+        }
+      }
+    ],
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": [
+          [
+            "div:nth-child(4) > .muted"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "theme": "light",
+    "surface": "columns",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "light",
+    "surface": "appearance",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "light",
+    "surface": "composer",
+    "incompleteDetails": [],
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "theme": "light",
+    "surface": "feedback",
+    "incompleteDetails": [
+      {
+        "target": [
+          "div:nth-child(4) > .muted"
+        ],
+        "text": "0 / 2000 文字",
+        "color": "rgb(36, 36, 36)",
+        "ancestors": [
+          {
+            "tag": "P",
+            "classes": "muted",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "extended-module-stack",
+            "background": "rgba(0, 0, 0, 0)",
+            "opacity": "1"
+          },
+          {
+            "tag": "DIV",
+            "classes": "ui-dialog-content panel",
+            "background": "rgb(255, 255, 255)",
+            "opacity": "1"
+          }
+        ],
+        "manualResolution": {
+          "ratio": 15.522910417680388,
+          "minimum": 4.5,
+          "result": "PASS",
+          "basis": "Opaque dialog panel is behind transparent ancestors; all observed opacities are 1."
+        }
+      }
+    ],
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": [
+          [
+            "div:nth-child(4) > .muted"
+          ]
+        ]
+      }
+    ]
+  }
+]

@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// WCAG 2.2 AA gate for the light theme semantic pairs enumerated in Issue #828.
-// The dark theme is out of scope here (audited separately in Issue #824).
+// Real semantic pairs from #828, extended to both Graphite / Orange themes (#996).
 const TOKENS_PATH = resolve(process.cwd(), 'src/styles/tokens.css');
 
 const NORMAL_TEXT = 4.5;
@@ -17,7 +16,7 @@ type Pair = {
 };
 
 // Real usage pairs: bg/fg token names as rendered together in the app.
-const LIGHT_PAIRS: Pair[] = [
+const SEMANTIC_PAIRS: Pair[] = [
   { background: '--surface-button-primary', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary / .shell-skip-link' },
   { background: '--surface-button-primary-hover', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary hover' },
   { background: '--surface-destructive-soft', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'notice/badge destructive, SettingsMetricGrid' },
@@ -54,6 +53,16 @@ const LIGHT_PAIRS: Pair[] = [
   { background: '--surface-panel', foreground: '--border-accent', minimum: NON_TEXT, usage: 'accent selected-state border on panels' },
   { background: '--surface-panel-soft', foreground: '--border-accent', minimum: NON_TEXT, usage: 'accent border on soft panels' },
   { background: '--surface-panel', foreground: '--surface-button-primary', minimum: NON_TEXT, usage: 'primary button boundary against panels' },
+  ...['--surface-panel-soft', '--surface-panel-muted', '--surface-raised', '--surface-active'].flatMap((background) =>
+    ['--foreground', '--muted-foreground', '--muted-foreground-soft'].map((foreground) => ({
+      background, foreground, minimum: NORMAL_TEXT, usage: 'post / selected control / raised surface text',
+    }))
+  ),
+  ...['--surface-input', '--surface-panel', '--surface-panel-accent', '--surface-panel-soft'].map((background) => ({
+    background, foreground: '--border-subtle-strong', minimum: NON_TEXT, usage: 'input/select/textarea identification boundary',
+  })),
+  { background: '--surface-active', foreground: '--accent', minimum: NORMAL_TEXT, usage: 'active and selected controls' },
+  { background: '--surface-button-ghost-hover', foreground: '--foreground', minimum: NORMAL_TEXT, usage: 'ghost button hover' },
 ];
 
 // Focus ring is semi-transparent: composite over each backdrop before comparing.
@@ -120,41 +129,24 @@ function contrastRatio(a: Rgb, b: Rgb) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-describe('light theme WCAG 2.2 AA contrast (Issue #828)', () => {
-  const tokens = lightTokens(readFileSync(TOKENS_PATH, 'utf8'));
+describe.each([
+  ['light', lightTokens], ['dark', darkTokens],
+] as const)('%s theme semantic contrast (Issue #996)', (theme, extract) => {
+  const tokens = extract(readFileSync(TOKENS_PATH, 'utf8'));
 
   function tokenValue(name: string) {
     const value = tokens.get(name);
-    if (!value) throw new Error(`light token not declared: ${name}`);
+    if (!value) throw new Error(`${theme} token not declared: ${name}`);
     return value;
   }
 
-  it.each(LIGHT_PAIRS)(
+  it.each(SEMANTIC_PAIRS)(
     '$foreground on $background is at least $minimum:1 ($usage)',
     ({ background, foreground, minimum }) => {
       const ratio = contrastRatio(parseHex(tokenValue(background)), parseHex(tokenValue(foreground)));
       expect(ratio).toBeGreaterThanOrEqual(minimum);
     }
   );
-
-  it.each(RING_BACKDROPS)('--ring composited over %s is at least 3:1', (backdropToken) => {
-    const backdrop = parseHex(tokenValue(backdropToken));
-    const ring = parseRgba(tokenValue('--ring'));
-    const ratio = contrastRatio(compositeOver(ring.rgb, ring.alpha, backdrop), backdrop);
-    expect(ratio).toBeGreaterThanOrEqual(NON_TEXT);
-  });
-});
-
-// #964: keyboard focus must stay visible on the default dark theme too. Only the focus ring is
-// gated here; the wider dark-theme text audit remains tracked separately (Issue #824).
-describe('dark theme focus ring contrast (Issue #964)', () => {
-  const tokens = darkTokens(readFileSync(TOKENS_PATH, 'utf8'));
-
-  function tokenValue(name: string) {
-    const value = tokens.get(name);
-    if (!value) throw new Error(`dark token not declared: ${name}`);
-    return value;
-  }
 
   it.each(RING_BACKDROPS)('--ring composited over %s is at least 3:1', (backdropToken) => {
     const backdrop = parseHex(tokenValue(backdropToken));

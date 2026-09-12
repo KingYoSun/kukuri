@@ -43,7 +43,7 @@
 .composer textarea,
 .ticket-output {
   width: 100%;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle-strong);
   border-radius: var(--radius-input);
   padding: var(--space-sm) var(--space-md);
   color: inherit;
@@ -157,7 +157,7 @@
 .score-row input,
 .composer select {
   width: 100%;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle-strong);
   border-radius: var(--radius-input);
   padding: var(--space-sm) var(--space-sm);
   color: inherit;

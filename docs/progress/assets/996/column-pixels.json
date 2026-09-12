@@ -1,0 +1,44 @@
+[
+  {
+    "stage": "before",
+    "image": "before-columns-dark-1600.png",
+    "selector": ".shell-phase1 .shell-column-surface[data-column-id^=\"column:timeline:\"]",
+    "rectangle": [
+      240,
+      730,
+      280,
+      770
+    ],
+    "colors": [
+      [
+        1600,
+        [
+          12,
+          23,
+          33
+        ]
+      ]
+    ]
+  },
+  {
+    "stage": "after",
+    "image": "after-columns-dark-1600.png",
+    "selector": ".shell-phase1 .shell-column-surface[data-column-id^=\"column:timeline:\"]",
+    "rectangle": [
+      240,
+      730,
+      280,
+      770
+    ],
+    "colors": [
+      [
+        1600,
+        [
+          33,
+          33,
+          33
+        ]
+      ]
+    ]
+  }
+]

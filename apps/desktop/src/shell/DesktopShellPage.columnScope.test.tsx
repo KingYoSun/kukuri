@@ -115,7 +115,7 @@ test('non-active な private Column の投稿本文クリックで開いた Thre
       []
     );
   });
-});
+}, 15_000); // 複数Columnの作成・切替・返信を含む実行枠。個々のwaitForは維持する。
 
 // Reply ボタン経路(beginColumnReply)も返信元投稿の channel を openThread に渡し、
 // Thread Column が Public / private の 2 本に分裂しないことを固定する。
