@@ -1,10 +1,10 @@
 # Issue #996 Graphite / Orange 配色変更
 
-- 対象: [#996](https://github.com/KingYoSun/kukuri/issues/996)
+- 対象: [#996](https://github.com/KingYoSun/kukuri/issues/996) / [PR #997](https://github.com/KingYoSun/kukuri/pull/997)
 - Scope revision: `2026-09-12-theme-a-v1`
 - 基準commit: `3776c24080a142e80bfc7a3140e2e34473b5dc0e`
 - リスク区分: B（frontend表示責務）。親Issue集約・Reopen・shared guardの変更はなく、独立監査は必須対象外。
-- 現在判定: 検証中。PR／CIと実機の最終結果は完了時に更新する。
+- 実装・ローカルUI gate・実機確認: 完了。最終CI／mergeの現在判定はPR #997とIssue #996を参照する。
 
 ## 変更内容・境界
 
@@ -14,7 +14,7 @@
 
 ## inventoryと逆引き
 
-CodeGraphで`readDesktopTheme`／`writeDesktopTheme`→`App`を確認し、CSSはindex対象外のため直接確認した。production入口は`styles/index.css`の8 stylesheet群（part1〜4を含め計9ファイル）で、import順は変更なし。`@theme inline`は同じsemantic tokenへのaliasを維持する。
+CodeGraphで`readDesktopTheme`／`writeDesktopTheme`→`App`を確認し、CSSはindex対象外のため直接確認した。production入口は`styles/index.css`の9 local stylesheet（part1〜4を含む）で、import順は変更なし。`@theme inline`は同じsemantic tokenへのaliasを維持する。
 
 変更色tokenの直接参照は[利用先一覧](assets/996/token-consumers.json)に記録する。`var()`に加え、`bg-background`／`text-foreground`／`bg-card`／`text-muted-foreground`／`border-border`／`bg-input`／`bg-primary`／`text-primary-foreground`／`text-accent`／`text-accent-foreground`／`text-destructive`等のTailwind aliasは`@theme inline`→同じroot tokenを使う。新規local import・入口・副作用・shared helperは0。以下の全memberを配色適用先として分類した。
 
@@ -32,7 +32,7 @@ inventoryは4group。分類外0、追加・削除0。token値の適合と描画�
 | 条件 | 実装・証拠 |
 | --- | --- |
 | AC-1 | `tokens.css`、DESIGN token契約、Foundationsと比較画像。無彩色の主要面とオレンジ操作 |
-| AC-2 | `theme-palette.spec.ts`のproduction computed background、[変更前](assets/996/before-computed.json)／[変更後](assets/996/after-computed.json)。本文中央の画像採色結果を追加する |
+| AC-2 | `theme-palette.spec.ts`のproduction computed background、[変更前](assets/996/before-computed.json)／[変更後](assets/996/after-computed.json)、[本文中央の画像採色](assets/996/column-pixels.json)。矩形(240,730)〜(280,770)の1600画素が`#212121`で一致 |
 | AC-3 | `contrast.test.ts`の両theme semantic pair＋合成ring、`theme-palette.spec.ts`のportal／入力境界／focus。disabledは既存非操作stateを維持 |
 | AC-4 | `design-contract.test.ts`で全runtime値の一致、Foundations、[採用記録](../ui-reviews/2026-09-12-issue-996-graphite-orange-theme.md)と旧recordの後継参照 |
 | AC-5 | 下記before／after。同一fixtureと日本語、両theme、desktop／narrow。生成画像を実装証拠として使わない |
@@ -56,18 +56,24 @@ browserはChromium、ja-JP、UTC、device scale factor 1、desktop 1600×1000／
 | --- | --- | --- | --- | --- |
 | Columns | [前](assets/996/before-columns-dark-1600.png) / [後](assets/996/after-columns-dark-1600.png) | [前](assets/996/before-columns-light-1600.png) / [後](assets/996/after-columns-light-1600.png) | [前](assets/996/before-columns-dark-390.png) / [後](assets/996/after-columns-dark-390.png) | [前](assets/996/before-columns-light-390.png) / [後](assets/996/after-columns-light-390.png) |
 | 表示設定 | [前](assets/996/before-appearance-dark-1600.png) / [後](assets/996/after-appearance-dark-1600.png) | [前](assets/996/before-appearance-light-1600.png) / [後](assets/996/after-appearance-light-1600.png) | [前](assets/996/before-appearance-dark-390.png) / [後](assets/996/after-appearance-dark-390.png) | [前](assets/996/before-appearance-light-390.png) / [後](assets/996/after-appearance-light-390.png) |
-| 投稿Dialog | [前](assets/996/before-composer-dark-1600.png) / [後](assets/996/after-composer-dark-1600.png) | [前](assets/996/before-composer-light-1600.png) / [後](assets/996/after-composer-light-1600.png) | [前](assets/996/before-composer-dark-390.png) / [後](assets/996/after-composer-dark-390.png) | [前](assets/996/before-composer-light-390.png) / [後](assets/996/after-composer-light-390.png) |
+| 投稿作成 | [前](assets/996/before-composer-dark-1600.png) / [後](assets/996/after-composer-dark-1600.png) | [前](assets/996/before-composer-light-1600.png) / [後](assets/996/after-composer-light-1600.png) | [前](assets/996/before-composer-dark-390.png) / [後](assets/996/after-composer-dark-390.png) | [前](assets/996/before-composer-light-390.png) / [後](assets/996/after-composer-light-390.png) |
+| フィードバックDialog | [前](assets/996/before-feedback-dialog-dark-1600.png) / [後](assets/996/after-feedback-dialog-dark-1600.png) | [前](assets/996/before-feedback-dialog-light-1600.png) / [後](assets/996/after-feedback-dialog-light-1600.png) | [前](assets/996/before-feedback-dialog-dark-390.png) / [後](assets/996/after-feedback-dialog-dark-390.png) | [前](assets/996/before-feedback-dialog-light-390.png) / [後](assets/996/after-feedback-dialog-light-390.png) |
+
+現行の投稿作成はinline表示も使うため、AC-5が許容する「同等のportal面」としてフィードバックDialogを固定し、投稿作成と併せて比較した。送信操作は行っていない。
 
 ## validationと実機
 
 - targeted Vitest: 4ファイル137件PASS（styles contrast／design-contract／css-vars、shellChrome）。
 - targeted Playwright: `theme-palette.spec.ts`の3件PASS。
-- `cargo xtask desktop-ui-check`: 実行中。
-- Linux／Chromium baseline: 更新・比較未完了。Windows非CIのvisual成功は到達smokeのみ。
+- `cargo xtask desktop-ui-check`: PASS。lint／typecheck、Vitest 183ファイル1597件、Storybook build、browser 267件、visual到達31件。
+- Linux／Chromium baseline: Ubuntu24で全再生成後、比較31件PASS。既定の更新では許容差内の色差が残るため`--update-snapshots=all`を使用し、本文画素も確認した。Windows非CIのvisual成功は到達smokeのみ。
+- CI初回の`linux-desktop-browser`: browser操作は成功、visualは30件PASS／1件FAIL。`developer-enabled-ja-dark.png`の差分はログ末尾のmonospace文字の字幅・折り返しのみだった。font指定とlayoutのproduction変更はなく、CIの実画像を確認して当該baselineを採用した。閾値・testは変更しない。
+- [実画面contrast](assets/996/contrast-browser.json): axe-core 4.13.0で両theme×Columns／表示設定／投稿作成／フィードバックの8条件、違反0。フィードバック文字数表示のみ両themeで自動判定保留となり、実効foregroundと透明祖先・不透明panel背景を取得してdark 13.25:1／light 15.52:1を確認した。disabledの例外と区別する。
 - native: 隔離したTauri 2確認用hostでproduction frontendを読み、browser mockデータを使用。OS・WebViewの実描画と実入力を確認するための環境であり、実P2Pやbackend同意処理の検証ではない。今回backend処理は無変更。
-- Windows: ローカルWebView2（Chromium 152）、1280×840、ja。Computer Useで表示設定のdark→light切替を確認。[light設定](assets/996/windows-appearance-light.png)。初回の確認hostにはCommon Controls manifest不足があり、hostだけを修正して起動した。製品の変更ではない。
-- Ubuntu24: `ssh local2`で確認用hostを準備し、ローカルRemote Desktop越しにComputer Useで操作。最終結果を追記する。
-- 未確認: native切替往復と再起動の全結果、Linux visual、共通gate。screen readerの読上げ実測は対象外（accessible name／状態・DOMは無変更）。
+- Windows: ローカルWebView2（Chromium 152）、1280×840、ja。Computer Useでdark→light→darkを切り替え、light／darkそれぞれで終了・再起動後の選択復元を確認。日本語draft入力とEscape、focus復元、dark再起動時の200%表示（CSS viewport 640×420）も確認した。[light設定](assets/996/windows-appearance-light.png)、[dark設定](assets/996/windows-appearance-dark.png)、[入力とfocus](assets/996/windows-composer-focus-light.png)、[dark復元・200%](assets/996/windows-restart-dark-zoom200.png)。初回確認hostのCommon Controls manifest不足はhostだけを修正した。製品の変更ではない。
+- Ubuntu24: `ssh local2`で確認用hostを準備し、ローカルRemote Desktop越しにComputer Useで操作。WebKitGTK 2.52.6、1280×840、ja。dark→light→dark、選択ラベル、Tabのfocus、Escape、light／dark各々の終了・再起動と保存復元を確認。dark再起動は200%（CSS viewport 640×420）で既存1 Column表示へのreflowと文字・操作の可読性を確認。[light設定](assets/996/linux-appearance-light.png)、[darkとkeyboard focus](assets/996/linux-keyboard-dark.png)、[light復元](assets/996/linux-restart-light.png)、[dark復元・200%](assets/996/linux-restart-dark-zoom200.png)。
+- 両OSの[実効色・保存値・viewport](assets/996/native-observations.json)を記録した。記録中の接続表示はmockデータであり、ネットワーク経路の成功証拠ではない。画像中の青いpointer強調はComputer Use側の表示で、製品の光彩ではない。
+- 未実施: screen readerの読上げ実測、Windows OS設定自体のHigh Contrast切替。accessible name／状態・DOM、forced-colors専用規則は変更せず、今回の確認は実contrast・既存a11y／keyboard回帰と対象OSの実描画へ限定した。Rust／CNの追加ローカルsuiteは変更path外のため実行せず、PRの既存必須CIで確認する。
 
 ## 終了・追加発見
 
