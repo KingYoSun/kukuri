@@ -43,6 +43,14 @@ afterEach(async () => {
   await i18n.changeLanguage('en');
 });
 
+function findEnabledCheckButton() {
+  return screen.findByRole(
+    'button',
+    { name: i18n.t('settings:release.update.check') },
+    { timeout: 2000 }
+  );
+}
+
 function renderPanel(showDiagnostics = false) {
   return render(
     <DesktopShellStoreContext.Provider value={createDesktopShellStore()}>
@@ -85,7 +93,8 @@ test.each([false, true])('failed checks always explain recovery and clear the er
   fireEvent.click(screen.getByRole('button', { name: i18n.t('settings:release.update.check') }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent(i18n.t('settings:release.update.errors.unknown'));
-  fireEvent.click(screen.getByRole('button', { name: i18n.t('settings:release.update.check') }));
+  // AC-7: the immediate rejection still keeps the button acknowledged for one second.
+  fireEvent.click(await findEnabledCheckButton());
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(i18n.t('settings:release.update.statuses.up_to_date')));
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(updaterCheck).toHaveBeenCalledTimes(2);
@@ -111,7 +120,7 @@ test('rechecking identifies the previous version as a previous result', async ()
   await act(async () => { await appUpdateStore.getState().checkForUpdate(); });
   let finish!: (value: null) => void;
   updaterCheck.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-  fireEvent.click(screen.getByRole('button', { name: i18n.t('settings:release.update.check') }));
+  fireEvent.click(await findEnabledCheckButton());
   await waitFor(() => expect(updaterCheck).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('status')).toHaveTextContent(i18n.t('settings:release.update.previouslyAvailable', { version: '0.2.2' }));
   expect(screen.queryByText(i18n.t('settings:release.update.available', { version: '0.2.2' }))).not.toBeInTheDocument();
@@ -178,4 +187,95 @@ test.each([
   expect(check).toHaveBeenCalledTimes(1);
   expect(download).not.toHaveBeenCalled();
   expect(restart).not.toHaveBeenCalled();
+});
+
+// #956 Reopen: 高速完了でも「この確認が完了した」ことが分かる（AC-6）。
+function expectedClockTime(locale: string, at: number): string {
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(at);
+}
+
+test.each(['en', 'ja', 'zh-CN'])('an immediate up-to-date result shows when this check completed in %s', async (locale) => {
+  await i18n.changeLanguage(locale);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const startup = Date.UTC(2026, 8, 12, 3, 4, 0);
+  vi.setSystemTime(startup);
+  updaterCheck.mockResolvedValue(null);
+  appUpdateStore.setState({ checkForUpdate: initialStore.checkForUpdate });
+  renderPanel();
+  await act(async () => { await appUpdateStore.getState().checkForUpdate(); });
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent(i18n.t('settings:release.update.statuses.up_to_date'));
+  expect(status).toHaveTextContent(
+    i18n.t('settings:release.update.checkedAt', { time: expectedClockTime(locale, startup) })
+  );
+  const before = status.textContent;
+  const manual = startup + 5 * 60_000;
+  vi.setSystemTime(manual);
+  fireEvent.click(await findEnabledCheckButton());
+  await waitFor(() => expect(updaterCheck).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(status).toHaveTextContent(expectedClockTime(locale, manual)));
+  expect(status).toHaveTextContent(i18n.t('settings:release.update.statuses.up_to_date'));
+  expect(status).not.toHaveTextContent(expectedClockTime(locale, startup));
+  expect(status.textContent).not.toBe(before);
+  expect(download).not.toHaveBeenCalled();
+  expect(restart).not.toHaveBeenCalled();
+});
+
+test('a failed check also shows when it completed without exposing the raw error', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const at = Date.UTC(2026, 8, 12, 3, 4, 0);
+  vi.setSystemTime(at);
+  updaterCheck.mockRejectedValueOnce(new Error('network unavailable: fixture.internal'));
+  appUpdateStore.setState({ checkForUpdate: initialStore.checkForUpdate });
+  renderPanel();
+  fireEvent.click(screen.getByRole('button', { name: i18n.t('settings:release.update.check') }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(i18n.t('settings:release.update.errors.network'));
+  expect(alert).toHaveTextContent(
+    i18n.t('settings:release.update.checkedAt', { time: expectedClockTime('en', at) })
+  );
+  expect(alert).not.toHaveTextContent('fixture.internal');
+});
+
+// #956 Reopen: 確認開始から最低1秒はpendingを保ち、結果の反映は遅らせない（AC-7）。
+test('a fast check keeps the check button pending for one second without delaying the result', async () => {
+  vi.useFakeTimers();
+  updaterCheck.mockImplementation(
+    () => new Promise((resolve) => { setTimeout(() => resolve(null), 50); })
+  );
+  appUpdateStore.setState({ checkForUpdate: initialStore.checkForUpdate });
+  renderPanel();
+  const button = screen.getByRole('button', { name: i18n.t('settings:release.update.check') });
+  fireEvent.click(button);
+  await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+  expect(screen.getByRole('status')).toHaveTextContent(i18n.t('settings:release.update.statuses.up_to_date'));
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('aria-busy', 'true');
+  expect(button).toHaveAccessibleName(i18n.t('settings:release.update.statuses.checking'));
+  fireEvent.click(button);
+  await act(async () => { await vi.advanceTimersByTimeAsync(899); });
+  expect(button).toHaveAttribute('aria-busy', 'true');
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(button).toBeEnabled();
+  expect(button).toHaveAccessibleName(i18n.t('settings:release.update.check'));
+  expect(updaterCheck).toHaveBeenCalledTimes(1);
+  expect(download).not.toHaveBeenCalled();
+});
+
+test('a slow check stays pending beyond one second until the store finishes', async () => {
+  vi.useFakeTimers();
+  let finish!: (value: null) => void;
+  updaterCheck.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  appUpdateStore.setState({ checkForUpdate: initialStore.checkForUpdate });
+  const view = renderPanel();
+  const button = screen.getByRole('button', { name: i18n.t('settings:release.update.check') });
+  fireEvent.click(button);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+  expect(button).toHaveAttribute('aria-busy', 'true');
+  expect(screen.getByRole('status')).toHaveTextContent(i18n.t('settings:release.update.statuses.checking'));
+  await act(async () => { finish(null); });
+  expect(screen.getByRole('status')).toHaveTextContent(i18n.t('settings:release.update.statuses.up_to_date'));
+  expect(button).toBeEnabled();
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
 });

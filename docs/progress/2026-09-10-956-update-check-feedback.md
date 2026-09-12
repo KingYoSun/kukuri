@@ -110,3 +110,67 @@ INV-6のmemberはSettingsDrawerが`sections.map`で描画する全`settings-sect
 - AC-5に含まれる200%の本文不可到達をExisting-gapとして同差分で修正し、INV-6／TR-8へ対応させた。
 - 最初のa11y計測でStoryFrame全体を誤って対象にし、未変更の外部送信説明欄のlight contrast等も拾った。測定対象を変更した更新sectionへ修正して90条件を再実行した。更新section外の再設計・contrast変更は本件に追加しない。
 - 最終差分の必須CI成功とmerge後の対象tree一致を確認してIssueをCloseする。
+
+## Reopen（2026-09-12、Scope revision `956-2026-09-12-v2`）
+
+### 観測と原因
+
+v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」表示の状態から確認を押しても8秒後の画面が押す前と同一だった（Issue comment 3件、クリーン初回セッションを含む）。Windows実機では確認中が一瞬だけ見えた。
+
+原因は修正の欠落ではなく知覚の欠落である。確認は`checking`→`up_to_date`へ数百msで戻り、結果が前回と同じなら画面に差分が残らない。IPC停止なら確認中が残り、失敗ならalertが出るため、他の仮説は観測と一致しない。固定AC-1／AC-2は技術的には満たすが「この確認が実行・完了した」ことが利用者に残らないExisting-gapとして扱い、ユーザー承認のもとで次を追加した。実機確認は不要と承認された。
+
+| ID | 条件 | 実装・検証 |
+| --- | --- | --- |
+| AC-6 | 確認完了時に完了時刻（時:分:秒）を結果と共に通常モードで表示し、結果が前回と同じでも確認ごとに更新する。失敗時も同様 | `UpdateState.lastCheckedAt`（`releaseReadiness.ts`）、`useAppUpdateStore.ts`の確認完了3分岐、`ReleasePanel.tsx`の`checkedAt`行、既存`formatLocalizedTime`。`an immediate up-to-date result shows when this check completed`（3locale）、`a failed check also shows when it completed`、store `checkForUpdate records when a %s check completed`（3結果）、browser 18条件 |
+| AC-7 | 確認開始から最低1秒は確認中のaccessible name・`aria-busy`・無効を保つ。1秒を超える確認は完了まで続く。結果の反映は遅らせない | `useAcknowledgedPending`を`ProfileRefreshButton`から機械的に抽出して両者で使用。`a fast check keeps the check button pending for one second`、`a slow check stays pending beyond one second`、既存`ProfileRefreshButton.test.tsx` 4件は無変更で成功 |
+
+時刻の粒度は計画時に時:分としたが、ユーザー判断（2026-09-12）で秒まで表示する既存`formatLocalizedTime`に変更した。時刻の表示だけのための自動scroll／focus移動は追加しない（INVAR-4）。download／install失敗では直前の確認時刻を保持し、確認の失敗だけが時刻を更新する。
+
+### inventory / transitionの差分
+
+入口・sink・groupの増減は0。INV-2（確認入口）の表示sinkに完了時刻行、ボタンに1秒のacknowledgementが加わる。INV-3（起動／30分周期）の確認完了もstore経由で同じ時刻行を更新する。INV-5のStory `UpToDate`／`UpdateAvailable`／`UpdateCheckFailed`に固定時刻を追加した。
+
+| ID | 事前状態 | sequence | 期待結果 | 許可するI/O | 禁止する副作用 | 証跡 |
+| --- | --- | --- | --- | --- | --- | --- |
+| TR-9 | up_to_date（時刻T0） | 確認→即完了（更新なし） | 最新です＋時刻T1、T0は消える | 確認IPC 1件 | download／install、追加確認 | component 3locale、browser |
+| TR-10 | idle／up_to_date | 確認→100msで完了 | 結果は即反映、ボタンは1000msまで確認中・無効、以後有効 | 確認IPC 1件 | 連打による2件目の確認 | component fake timers |
+| TR-11 | checking（1秒超） | 1500ms経過→完了 | 完了まで確認中、完了後に有効。unmountでtimer 0 | 確認IPC 1件 | timer残留 | component |
+| TR-12 | up_to_date | 確認→失敗 | 理由＋時刻。raw errorは診断限定 | 確認IPC 1件 | 診断文字の露出 | component、browser |
+
+### 変更前後
+
+- component／store: 追加8件が変更前に失敗（`release.update.checkedAt`欠落、`lastCheckedAt`未定義、100ms完了後にボタン有効）。変更後は対象4 fileの39件成功。
+- browser `release-update-feedback.spec.ts`: src変更を退避した変更前は18件すべて`Expected substring: "Checked at"` / `Received: "Up to date"`で失敗。変更後は18件成功（Playwright 1.62.1、環境同梱Chromiumを`executablePath`で指定）。
+- 既存component testの2箇所は、即時完了後も1秒間ボタンが確認中のままになる新契約に合わせ、有効化を待ってからクリックするよう変更した。assertionの削除・弱体化はない。
+
+### 検証結果
+
+remote session（Linux、Playwright 1.62.1、環境同梱 Chromium を `executablePath` で指定。CJK フォントなし、GTK / WebKitGTK dev ライブラリなし）で実行した。
+
+- 対象4 file の Vitest（`ReleasePanel.update.test.tsx`、`useAppUpdateStore.test.ts`、`ProfileRefreshButton.test.tsx`、`DesktopShellPage.updateSchedule.test.tsx`）: 39件成功。秒表示への変更後も同じ。
+- `pnpm lint`、`pnpm typecheck`: 成功。
+- `release-update-feedback.spec.ts`: 18件成功（時:分、時:分:秒の両方で確認）。変更前は18件失敗。
+- browser 全件（`--project=chromium`）: 267件成功。visual（`--project=visual`）: 31件成功。CJK フォント不在のため比較は smoke のみで、比較は CI の `linux-desktop-browser` に委ねる（release panel は visual.spec の対象外）。
+- Storybook build: 成功。
+- `cargo xtask check`: fmt / clippy 成功。tauri-check は `gdk-sys` の build script が GTK dev ライブラリ不在で失敗（環境起因。PR は `src-tauri` を触らない）。CI の Linux job に委ねる。
+- `cargo xtask desktop-ui-check` の Vitest 全体: shell-integration の17件が timeout（5000ms / 10000ms）で失敗。基準 commit `fd96677` を detached で checkout して同じ file を実行しても timeout するため、この環境の速度に起因し本差分起因ではない。CI の `linux-desktop-ui` は成功。
+- `cargo xtask oversized-files`: 成功（縮小 note のみ）。`git diff --check`: 成功。
+- 実機確認: ユーザー判断で不要。screen reader の読み上げ実測は未実施。
+
+### 独立監査（PR head ace4c6d15e7a67001c488b1d04f3635d91005076）
+
+別コンテキストの監査担当が、固定AC / INVARと対象差分 `fd96677..ace4c6d` から入口・sink・状態遷移を再構築した。
+
+- 対象 commit: `ace4c6d15e7a67001c488b1d04f3635d91005076`
+- Scope revision: `956-2026-09-12-v2`
+- リスク区分: B（Reopen）
+- inventory: 合計6 / 適合6 / 不適合0 / 未分類0。`checkForUpdate` caller（ReleasePanel、DesktopShellPage起動／30分interval、downloadUpdateのpendingなし分岐）、`useAcknowledgedPending` caller（ReleasePanel、ProfileRefreshButton）、`lastCheckedAt` の書き込み4箇所・読み取り1箇所、`updateStateFromError` / `updateFailureFromError` の caller 4箇所を登録点から再生成し、作業記録の記載と差0。
+- AC / INVAR evidence: AC-1〜7、INVAR-1〜4 すべてに実装箇所と test 名を対応付け。TR-2／7（busy guard と `checkPending` による click 抑止、周期確認の rising edge）、TR-9〜12（時刻更新、1秒 timer の clear と unmount 解放、download／install 失敗時の前回時刻保持、raw error の診断限定）を code と test で照合。hook 抽出は state／ref／callback／effect が抽出前と同一で、`ProfileRefreshButton.test.tsx` は無変更。
+- 実行した validation: 対象4 file の Vitest 39件成功、`tsc --noEmit` 成功、変更9 file の eslint 成功、`git diff --check` 指摘なし。browser spec、Storybook、visual gate、`cargo xtask` は監査範囲外（本節の「検証結果」と CI に委ねる）。
+- blocker: 0件
+- non-blocker（Optional-hardening）: (1) `a slow check stays pending beyond one second` の unmount 時 timer 0 は既に発火済み timer を数えており、生きた timer の解放は共有 hook の `ProfileRefreshButton.test.tsx` で担保。(2) download／install 失敗時の `lastCheckedAt` 保持は code reading で確認、test では未 assert。(3) download／install 失敗の alert にも前回の確認時刻が付く（作業記録どおり、INVAR-3 に抵触しない）。(4) browser spec は1秒の下限自体を assert せず、component fake-timer test で担保。記録面: 本節の「検証結果」を最終結果で埋めること。
+- 判定: PASS
+
+#### 監査後 delta（ace4c6d..5ba518c）
+
+d48630d は docs のみ。5ba518c はユーザー判断による秒表示への変更で、`formatLocalizedClockTime` を削除して既存 `formatLocalizedTime` に置換し、component test / browser spec の期待、DESIGN.md、本記録を更新した。別コンテキストの delta 監査: 削除 helper の参照0、`formatLocalizedTime` 本体は無変更で既存 caller 14 file に影響なし、表示経路・store・hook・scheduler・診断限定・focus／scroll に変更なし。対象4 file の Vitest 39件、`tsc --noEmit`、delta 4 file の eslint、`git diff --check` 成功。blocker 0。判定: PASS。
