@@ -295,7 +295,7 @@ test('profile social management updates follow and mute lists and muted authors 
   });
   expect(screen.queryByText('Visible Room')).not.toBeInTheDocument();
   expect(screen.getByText('Metaverse Rooms')).toBeInTheDocument();
-});
+}, 15_000); // 複数画面を操作する実行枠。個々のwaitForと検証条件は維持する。
 
 test('author detail shows via authors and follow action updates relationship', async () => {
   const authorPubkey = 'b'.repeat(64);

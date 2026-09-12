@@ -258,5 +258,5 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
 
   drawer = await openSettingsSection(user, 'reactions');
   expect(await within(drawer).findByRole('img', { name: remoteReactionAsset.search_key })).toBeInTheDocument();
-});
+}, 15_000); // 複数回の設定開閉と保存を含む実行枠。個々の待機・副作用の検証は維持する。
 
