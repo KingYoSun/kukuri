@@ -1,6 +1,6 @@
 # #978 開発者向けアプリ内ログの閲覧・書き出し
 
-- 判定: In progress（実装・ローカル検証完了。独立監査・CI・merge の最終結果は Issue の Current status と PR を参照する）
+- 判定: Merge ready（実装・検証・独立監査 PASS・CI 成功。merge 後の確認は Issue の Current status を参照する）
 - Scope revision: `978-2026-09-11-v1`（推奨案で承認済み: 常時 bounded capture + 読み取りだけを開発者モードで gate、backend への in-memory ミラー、手動更新、除外 kind `gui_diagnostics`）
 - 基準 commit: `62d6920`
 - リスク区分: C。新 IPC 2 本、ログ本文（peer / topic / Node URL / DB path 等の識別子を含み得る）の表示・clipboard・file export、shared guard（invoke gate）を通る新入口。外部送信・永続化は増やさない。
@@ -99,7 +99,10 @@ sensitive sink の逆引き: `DesktopLogBuffer::snapshot` の caller は `Develo
 | Playwright `developer-mode.spec.ts`（chromium、`PLAYWRIGHT_BROWSERS_PATH` に pin build 1234 → 環境の 1194 への symlink を置いて実行） | 16 件成功（既存 14 + 新規 2） |
 | Storybook build | 成功 |
 | Tauri crate clippy（`cargo clippy --all-targets -- -D warnings`、CI 対象外） | 本 PR の新規 file に指摘なし。既存 file（`background_notifications.rs`、`file_dialog.rs`、`restore_lifecycle.rs`、`app_update_tests.rs`）に既存の指摘 5 件があり、本 PR では触れない（Optional-hardening） |
-| 全体 Vitest / `cargo xtask rust-test` / `cargo xtask e2e-smoke` | 下記「全体検証」参照 |
+| CI `Kukuri Fast`（head `92a7c00`、run 34657217778） | `linux-rust-static`（doctor / oversized-files / asset-check / rust-check / ipc-types / tauri-check）、`linux-rust-tests`（`cargo xtask rust-test`）、`linux-desktop-ui`（`desktop-lint` + `desktop-test` 1,507 件）、`linux-desktop-browser`（storybook / browser test / 視覚回帰、再生成 baseline で比較成功）、`linux-smoke`（`cargo xtask e2e-smoke`）、`linux-cn`、`linux-cn-e2e`、`linux-community-node`、`windows-fast`（doctor / oversized-files / tauri-check / e2e-smoke / desktop-package）すべて成功。`Kukuri CLI Package`（x86_64 / aarch64）も成功 |
+| 全体 Vitest（ローカル、`npx vitest run`、他 job なし） | 180 ファイル中 172 成功、1,507 件中 1,496 成功・11 件失敗。失敗はすべて `DesktopShellPage.{columnParents,columnScope,detailPanes,messages,profile,socialGraph,timelineView,topics}.test.tsx` の 5 秒 / 10 秒 timeout で、本 PR の対象外。基準 commit `62d6920` の worktree で同じファイルを流しても同じ test が同じ時間で timeout し（profile 10.1 秒、topics / columnScope 5.0〜5.3 秒）、`--testTimeout 30000` では 10 件が成功（残る 1 件は test 自身の 10 秒上限）。この環境（4 core）の遅さと判断し、CI の `linux-desktop-ui`（同 head で全件成功）を証跡とする |
+| `cargo xtask rust-test` / `cargo xtask e2e-smoke`（ローカル） | 実行したが、この session のディスク割当（約 38 GB）を workspace の test build が使い切り、`ring` の C build と `kukuri-cli` の link が `No space left on device` / SIGBUS で中断した（`target/debug` 28 GB）。incremental cache 削除と `CARGO_INCREMENTAL=0` でも再現。未確認のまま残し、同じ command を流す CI の `linux-rust-tests` / `linux-smoke` / `windows-fast`（e2e-smoke）の成功で補う。`cargo test -p kukuri-cli --test command_parity` と Tauri crate の unit test は上記のとおりローカルでも成功 |
+| 独立監査 | [監査記録](2026-09-11-978-independent-audit.md)（対象 `8323266`、PASS、inventory 14 / 14 / 0 / 0、blocker 0）。監査後の delta は `92a7c00`（監査記録と本記録の docs のみ、source 変更なし）と本 commit（本記録の検証結果追記のみ） |
 
 ## UI 証跡と確認の限界
 
