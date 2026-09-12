@@ -110,3 +110,39 @@ INV-6のmemberはSettingsDrawerが`sections.map`で描画する全`settings-sect
 - AC-5に含まれる200%の本文不可到達をExisting-gapとして同差分で修正し、INV-6／TR-8へ対応させた。
 - 最初のa11y計測でStoryFrame全体を誤って対象にし、未変更の外部送信説明欄のlight contrast等も拾った。測定対象を変更した更新sectionへ修正して90条件を再実行した。更新section外の再設計・contrast変更は本件に追加しない。
 - 最終差分の必須CI成功とmerge後の対象tree一致を確認してIssueをCloseする。
+
+## Reopen（2026-09-12、Scope revision `956-2026-09-12-v2`）
+
+### 観測と原因
+
+v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」表示の状態から確認を押しても8秒後の画面が押す前と同一だった（Issue comment 3件、クリーン初回セッションを含む）。Windows実機では確認中が一瞬だけ見えた。
+
+原因は修正の欠落ではなく知覚の欠落である。確認は`checking`→`up_to_date`へ数百msで戻り、結果が前回と同じなら画面に差分が残らない。IPC停止なら確認中が残り、失敗ならalertが出るため、他の仮説は観測と一致しない。固定AC-1／AC-2は技術的には満たすが「この確認が実行・完了した」ことが利用者に残らないExisting-gapとして扱い、ユーザー承認のもとで次を追加した。実機確認は不要と承認された。
+
+| ID | 条件 | 実装・検証 |
+| --- | --- | --- |
+| AC-6 | 確認完了時に完了時刻（時:分、秒なし）を結果と共に通常モードで表示し、結果が前回と同じでも確認ごとに更新する。失敗時も同様 | `UpdateState.lastCheckedAt`（`releaseReadiness.ts`）、`useAppUpdateStore.ts`の確認完了3分岐、`ReleasePanel.tsx`の`checkedAt`行、`formatLocalizedClockTime`。`an immediate up-to-date result shows when this check completed`（3locale）、`a failed check also shows when it completed`、store `checkForUpdate records when a %s check completed`（3結果）、browser 18条件 |
+| AC-7 | 確認開始から最低1秒は確認中のaccessible name・`aria-busy`・無効を保つ。1秒を超える確認は完了まで続く。結果の反映は遅らせない | `useAcknowledgedPending`を`ProfileRefreshButton`から機械的に抽出して両者で使用。`a fast check keeps the check button pending for one second`、`a slow check stays pending beyond one second`、既存`ProfileRefreshButton.test.tsx` 4件は無変更で成功 |
+
+秒の表示はユーザー判断で採用しない。連続再確認の識別や自動テスターの視認ではなく、利用者の使いやすさを優先する。時刻の表示だけのための自動scroll／focus移動は追加しない（INVAR-4）。download／install失敗では直前の確認時刻を保持し、確認の失敗だけが時刻を更新する。
+
+### inventory / transitionの差分
+
+入口・sink・groupの増減は0。INV-2（確認入口）の表示sinkに完了時刻行、ボタンに1秒のacknowledgementが加わる。INV-3（起動／30分周期）の確認完了もstore経由で同じ時刻行を更新する。INV-5のStory `UpToDate`／`UpdateAvailable`／`UpdateCheckFailed`に固定時刻を追加した。
+
+| ID | 事前状態 | sequence | 期待結果 | 許可するI/O | 禁止する副作用 | 証跡 |
+| --- | --- | --- | --- | --- | --- | --- |
+| TR-9 | up_to_date（時刻T0） | 確認→即完了（更新なし） | 最新です＋時刻T1、T0は消える | 確認IPC 1件 | download／install、追加確認 | component 3locale、browser |
+| TR-10 | idle／up_to_date | 確認→100msで完了 | 結果は即反映、ボタンは1000msまで確認中・無効、以後有効 | 確認IPC 1件 | 連打による2件目の確認 | component fake timers |
+| TR-11 | checking（1秒超） | 1500ms経過→完了 | 完了まで確認中、完了後に有効。unmountでtimer 0 | 確認IPC 1件 | timer残留 | component |
+| TR-12 | up_to_date | 確認→失敗 | 理由＋時刻。raw errorは診断限定 | 確認IPC 1件 | 診断文字の露出 | component、browser |
+
+### 変更前後
+
+- component／store: 追加8件が変更前に失敗（`release.update.checkedAt`欠落、`lastCheckedAt`未定義、100ms完了後にボタン有効）。変更後は対象4 fileの39件成功。
+- browser `release-update-feedback.spec.ts`: src変更を退避した変更前は18件すべて`Expected substring: "Checked at"` / `Received: "Up to date"`で失敗。変更後は18件成功（Playwright 1.62.1、環境同梱Chromiumを`executablePath`で指定）。
+- 既存component testの2箇所は、即時完了後も1秒間ボタンが確認中のままになる新契約に合わせ、有効化を待ってからクリックするよう変更した。assertionの削除・弱体化はない。
+
+### 検証結果
+
+（本節はPR前に最終結果で更新する）

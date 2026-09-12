@@ -2,12 +2,23 @@ import { expect, test, type Page } from '@playwright/test';
 
 const copy = {
   en: { release: 'Release and updates', check: 'Check', checking: 'Checking', latest: 'Up to date',
-    failed: 'Could not connect to the update server.' },
+    failed: 'Could not connect to the update server.', checkedAt: 'Checked at' },
   ja: { release: 'リリースと更新', check: '確認', checking: '確認中', latest: '最新です',
-    failed: '更新サーバーに接続できませんでした。' },
+    failed: '更新サーバーに接続できませんでした。', checkedAt: 'に確認しました' },
   'zh-CN': { release: '版本与更新', check: '检查', checking: '正在检查', latest: '已是最新版本',
-    failed: '无法连接到更新服务器。' },
+    failed: '无法连接到更新服务器。', checkedAt: '已于' },
 };
+
+// #956 Reopen: 結果が前回と同じでも、この確認の完了時刻（時:分）で区別できる（AC-6）。
+const CLOCK_START = Date.UTC(2026, 8, 12, 3, 4, 0);
+
+async function advanceClock(page: Page, minutes: number): Promise<string> {
+  const at = CLOCK_START + minutes * 60_000;
+  await page.clock.setFixedTime(at);
+  return page.evaluate((at) => new Intl.DateTimeFormat(
+    document.documentElement.lang, { hour: 'numeric', minute: '2-digit' }
+  ).format(at), at);
+}
 
 async function seedUpdateCheck(page: Page, locale: keyof typeof copy, theme: string) {
   await page.addInitScript(({ locale, theme }) => {
@@ -76,13 +87,17 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
       test(`update feedback ${locale} ${theme} ${viewport.width}`, async ({ page }, testInfo) => {
         await seedUpdateCheck(page, locale, theme);
         await page.setViewportSize(viewport);
+        await page.clock.setFixedTime(CLOCK_START);
         await page.goto('/#/timeline');
         const text = copy[locale];
         await page.getByTestId('control-center-trigger').click();
         await page.locator('.shell-control-center').getByRole('button', { name: text.release, exact: true }).click();
         const dialog = page.getByRole('dialog');
         const status = dialog.getByRole('status');
-        await expect(status).toHaveText(text.latest);
+        const startupTime = await advanceClock(page, 0);
+        await expect(status).toContainText(text.latest);
+        await expect(status).toContainText(text.checkedAt);
+        await expect(status).toContainText(startupTime);
         // A populated live region can still be clipped by a zero-height drawer body.
         await expect(status).toBeInViewport();
         await page.evaluate(() => {
@@ -94,23 +109,33 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
         await expect(status).toHaveText(text.checking);
         await expect(dialog.getByRole('button', { name: text.checking, exact: true })).toBeDisabled();
         await expect(dialog.getByRole('button', { name: text.checking, exact: true })).toHaveAttribute('aria-busy', 'true');
+        const failedTime = await advanceClock(page, 5);
         await settleCheck(page, 'failed');
         await expect(dialog.getByRole('alert')).toContainText(text.failed);
+        await expect(dialog.getByRole('alert')).toContainText(failedTime);
         await expect(dialog).not.toContainText('fixture.internal');
+        // The button stays acknowledged for one second after a fast completion (AC-7).
+        await expect(dialog.getByRole('button', { name: text.check, exact: true })).toBeEnabled();
         await check.click();
         await expect(status).toHaveText(text.checking);
         await expect(dialog.getByRole('alert')).toHaveCount(0);
+        const latestTime = await advanceClock(page, 10);
         await settleCheck(page, 'latest');
-        await expect(status).toHaveText(text.latest);
+        await expect(status).toContainText(text.latest);
+        await expect(status).toContainText(latestTime);
+        await expect(status).not.toContainText(startupTime);
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
         await page.getByTestId('control-center-trigger').click();
         await page.locator('.shell-control-center').getByRole('button', { name: text.release, exact: true }).click();
-        await expect(status).toHaveText(text.latest);
+        await expect(status).toContainText(text.latest);
+        await expect(status).toContainText(latestTime);
         await check.click();
         await expect(status).toHaveText(text.checking);
+        const availableTime = await advanceClock(page, 15);
         await settleCheck(page, 'available');
         await expect(status).toContainText('0.2.2-preview.1');
+        await expect(status).toContainText(availableTime);
         const bounds = await status.boundingBox();
         expect(bounds).not.toBeNull();
         expect(bounds!.x).toBeGreaterThanOrEqual(0);

@@ -7,7 +7,9 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { copyTextToClipboard } from '@/lib/utils';
 import { downloadTextFile } from '@/lib/downloadTextFile';
+import { useAcknowledgedPending } from '@/lib/useAcknowledgedPending';
 import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
+import { formatLocalizedClockTime } from '@/i18n/format';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
@@ -147,6 +149,14 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
     : null;
   const updateBusy = ['checking', 'downloading', 'installing'].includes(updateState.status);
   const updateReadyToRestart = updateState.status === 'ready_to_restart';
+  // #956: 高速完了でも確認の受付を最低1秒示す。結果はstoreの状態をそのまま反映する。
+  const { busy: checkPending, acknowledge: acknowledgeCheck } = useAcknowledgedPending(
+    updateState.status === 'checking'
+  );
+  // #956: 結果が前回と同じでも、この確認がいつ完了したかを時:分で示す。
+  const checkedAtLabel = updateState.lastCheckedAt != null
+    ? t('settings:release.update.checkedAt', { time: formatLocalizedClockTime(updateState.lastCheckedAt) })
+    : null;
   const communityNodeDisclosures = useMemo(
     () => buildCommunityNodeDisclosures(communityNodeConfig, communityNodeManifests),
     [communityNodeConfig, communityNodeManifests]
@@ -176,11 +186,17 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
                   {t('settings:release.update.previouslyAvailable', { version: updateState.availableVersion })}
                 </p>
               ) : null}
+              {updateState.status === 'up_to_date' && checkedAtLabel ? (
+                <p className='text-xs'>{checkedAtLabel}</p>
+              ) : null}
             </Notice>
           ) : null}
           {updateState.availableVersion && ['available', 'downloading'].includes(updateState.status) ? (
             <Notice className='break-words' tone='accent'>
-              {t('settings:release.update.available', { version: updateState.availableVersion })}
+              <p>{t('settings:release.update.available', { version: updateState.availableVersion })}</p>
+              {updateState.status === 'available' && checkedAtLabel ? (
+                <p className='text-xs'>{checkedAtLabel}</p>
+              ) : null}
             </Notice>
           ) : null}
         </div>
@@ -188,6 +204,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           <Notice className='break-words' tone='destructive' role='alert'>
             <div className='space-y-1'>
               <p>{updateErrorMessage}</p>
+              {checkedAtLabel ? <p className='text-xs'>{checkedAtLabel}</p> : null}
               {showDiagnostics ? (
                 <small className='font-mono'>{updateState.lastError}</small>
               ) : null}
@@ -227,12 +244,15 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           <Button
             variant='secondary'
             type='button'
-            disabled={updateBusy || updateReadyToRestart}
-            aria-busy={updateState.status === 'checking'}
-            onClick={() => void checkForUpdate()}
+            disabled={updateBusy || updateReadyToRestart || checkPending}
+            aria-busy={checkPending}
+            onClick={() => {
+              acknowledgeCheck();
+              void checkForUpdate();
+            }}
           >
             <RefreshCw className='size-4' aria-hidden='true' />
-            {t(updateState.status === 'checking'
+            {t(checkPending
               ? 'settings:release.update.statuses.checking'
               : 'settings:release.update.check')}
           </Button>

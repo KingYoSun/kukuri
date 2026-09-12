@@ -118,6 +118,29 @@ describe('app update store', () => {
     }
   );
 
+  // #956 Reopen: 確認の完了時刻はstoreが所有し、結果が同じでも更新される（AC-6 / INVAR-1）。
+  test.each(['up_to_date', 'available', 'failed'])(
+    'checkForUpdate records when a %s check completed',
+    async (outcome) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      if (outcome === 'available') updaterCheck.mockResolvedValue(pendingUpdate({ version: '0.1.9' }));
+      if (outcome === 'failed') updaterCheck.mockRejectedValue(new Error('network unavailable'));
+      expect(INITIAL_UPDATE_STATE.lastCheckedAt).toBeNull();
+      const first = Date.UTC(2026, 8, 12, 3, 4, 0);
+      vi.setSystemTime(first);
+      const started = appUpdateStore.getState().checkForUpdate();
+      expect(appUpdateStore.getState().updateState.lastCheckedAt).toBeNull();
+      await started;
+      expect(appUpdateStore.getState().updateState).toMatchObject({ status: outcome, lastCheckedAt: first });
+      const second = first + 5 * 60_000;
+      vi.setSystemTime(second);
+      await appUpdateStore.getState().checkForUpdate();
+      expect(appUpdateStore.getState().updateState).toMatchObject({ status: outcome, lastCheckedAt: second });
+      expect(updaterCheck).toHaveBeenCalledTimes(2);
+      expect(invoke).not.toHaveBeenCalled();
+    }
+  );
+
   test('a repeated download cannot discard a verified update', async () => {
     const update = pendingUpdate();
     appUpdateStore.setState({

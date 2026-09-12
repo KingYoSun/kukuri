@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
 
 import { IconButton } from '@/components/ui/icon-button';
+import { useAcknowledgedPending } from '@/lib/useAcknowledgedPending';
 
 type ProfileRefreshButtonProps = {
   refreshing: boolean;
@@ -12,26 +12,7 @@ type ProfileRefreshButtonProps = {
 
 export function ProfileRefreshButton({ refreshing, saving, onRefresh }: ProfileRefreshButtonProps) {
   const { t } = useTranslation('profile');
-  const [feedbackPending, setFeedbackPending] = useState(false);
-  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showFeedback = useCallback(() => {
-    if (timeout.current !== null) clearTimeout(timeout.current);
-    setFeedbackPending(true);
-    timeout.current = setTimeout(() => {
-      timeout.current = null;
-      setFeedbackPending(false);
-    }, 1000);
-  }, []);
-
-  useEffect(() => {
-    if (refreshing) showFeedback();
-  }, [refreshing, showFeedback]);
-  useEffect(() => () => {
-    if (timeout.current !== null) clearTimeout(timeout.current);
-  }, []);
-
-  // Keep acknowledgement visible without delaying data application in the loader.
-  const busy = refreshing || feedbackPending;
+  const { busy, acknowledge } = useAcknowledgedPending(refreshing);
   return (
     <IconButton
       variant='ghost'
@@ -41,7 +22,7 @@ export function ProfileRefreshButton({ refreshing, saving, onRefresh }: ProfileR
       aria-disabled={busy || saving}
       onClick={() => {
         if (busy || saving) return;
-        showFeedback();
+        acknowledge();
         void onRefresh();
       }}
     >
