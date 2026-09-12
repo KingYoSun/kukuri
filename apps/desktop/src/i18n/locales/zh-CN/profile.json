@@ -128,6 +128,7 @@
     "title": "资料"
   },
   "connections": {
+    "actionsFor": "{{name}}的操作",
     "back": "返回资料",
     "empty": {
       "followed": "这个设备上还没有已知的关注者。",

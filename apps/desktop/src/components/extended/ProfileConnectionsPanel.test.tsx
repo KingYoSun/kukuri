@@ -6,6 +6,24 @@ import { ProfileConnectionsPanel } from './ProfileConnectionsPanel';
 
 const AUTHOR_ID = 'a'.repeat(64);
 
+test('keeps only the selected relationship action visible and opens other actions from the row menu', async () => {
+  const user = userEvent.setup();
+  const onToggleMute = vi.fn();
+  renderPanel({ onToggleMute });
+  expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Unfollow' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Mute' })).not.toBeInTheDocument();
+  const menu = screen.getByRole('button', { name: 'Actions for Alice' });
+  await user.click(menu);
+  await user.click(screen.getByRole('menuitem', { name: 'Mute' }));
+  expect(onToggleMute).toHaveBeenCalledWith(AUTHOR_ID, false);
+  expect(menu).toHaveFocus();
+  await user.click(menu);
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  expect(menu).toHaveFocus();
+});
+
 type PanelProps = Partial<React.ComponentProps<typeof ProfileConnectionsPanel>>;
 
 function renderPanel(overrides: PanelProps = {}) {
@@ -65,14 +83,15 @@ test('connection rows hide author IDs and copy the complete value from context a
 });
 
 // #961: ブロック一覧タブと、各行からのブロック／解除操作。
-test('connection rows expose block and unblock next to mute, and the blocked tab is listed', async () => {
+test('connection menus expose block and the blocked tab remains available', async () => {
   const user = userEvent.setup();
   const onToggleBlock = vi.fn();
   const onSelectView = vi.fn();
   renderPanel({ onToggleBlock, onSelectView });
 
   expect(screen.getByRole('tab', { name: 'Blocked' })).toHaveAttribute('aria-selected', 'false');
-  await user.click(screen.getByRole('button', { name: 'Block' }));
+  await user.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Block' }));
   expect(onToggleBlock).toHaveBeenCalledWith(AUTHOR_ID, false);
 
   await user.click(screen.getByRole('tab', { name: 'Blocked' }));
@@ -128,4 +147,21 @@ test('the local author row never offers block', () => {
   renderPanel({ localAuthorPubkey: AUTHOR_ID });
   expect(screen.queryByRole('button', { name: 'Block' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Mute' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Actions for Alice' })).not.toBeInTheDocument();
+});
+
+test.each([
+  ['following', 'Unfollow', 'onToggleRelationship', true],
+  ['followed', 'Unfollow', 'onToggleRelationship', true],
+  ['muted', 'Mute', 'onToggleMute', false],
+  ['blocking', 'Block', 'onToggleBlock', false],
+] as const)('the %s view keeps its own action beside the user information', async (activeView, label, callback, value) => {
+  const user = userEvent.setup();
+  const action = vi.fn();
+  renderPanel({ activeView, [callback]: action });
+  await user.click(screen.getByRole('button', { name: label }));
+  expect(action).toHaveBeenCalledExactlyOnceWith(AUTHOR_ID, value);
+  await user.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+  expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+  expect(screen.queryByRole('menuitem', { name: label })).not.toBeInTheDocument();
 });

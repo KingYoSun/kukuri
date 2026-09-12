@@ -250,7 +250,66 @@
 }
 
 .shell-profile-connections-tabs {
-  grid-template-columns: repeat(auto-fit, minmax(min(7rem, 100%), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2xs);
+}
+
+.shell-profile-connections-tabs .shell-tab {
+  padding: var(--space-2xs) var(--space-xs);
+  min-height: 2rem;
+}
+
+.profile-connections-panel {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.profile-connections-toolbar {
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-connection-card {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.profile-connection-header,
+.profile-connection-badges,
+.profile-connection-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.profile-connection-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.profile-connection-badges {
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+
+.shell-phase1 .profile-connection-card .author-detail-copy-stack {
+  flex: 1;
+  gap: var(--space-2xs);
+  overflow-wrap: anywhere;
+}
+
+.profile-connection-primary-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+@container (min-width: 38rem) {
+  .shell-profile-connections-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .shell-community-index-tabs {

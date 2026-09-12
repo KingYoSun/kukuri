@@ -242,14 +242,15 @@ test('profile social management updates follow and mute lists and muted authors 
   });
 
   bobConnectionCard = screen.getByTestId('profile-connection-identifier-target');
-  await user.click(within(bobConnectionCard).getByRole('button', { name: 'Mute' }));
+  await user.click(within(bobConnectionCard).getByRole('button', { name: 'Actions for bob' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Mute' }));
   await waitFor(() => {
     const refreshedCard = screen.getByTestId('profile-connection-identifier-target');
     expect(within(refreshedCard).getByText('Muted')).toBeInTheDocument();
-    expect(
-      within(refreshedCard).getByRole('button', { name: 'Unmute' })
-    ).toBeInTheDocument();
   });
+  await user.click(within(bobConnectionCard).getByRole('button', { name: 'Actions for bob' }));
+  expect(screen.getByRole('menuitem', { name: 'Unmute' })).toBeInTheDocument();
+  await user.keyboard('{Escape}');
 
   await user.click(within(tabs).getByRole('tab', { name: 'Following' }));
   await waitFor(() => {

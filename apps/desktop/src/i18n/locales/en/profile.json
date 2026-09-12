@@ -128,6 +128,7 @@
     "title": "Profile"
   },
   "connections": {
+    "actionsFor": "Actions for {{name}}",
     "back": "Back to profile",
     "empty": {
       "followed": "No followers known to this device yet.",

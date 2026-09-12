@@ -1,4 +1,5 @@
 import { seedConnectivityDiagnostics } from './connectivity-diagnostics-fixture';
+import { seedProfileConnections } from './profile-connections-fixture';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
@@ -26,6 +27,22 @@ const WIDE = { width: 1400, height: 980 } as const;
 const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
+
+for (const { width, locale, theme } of [
+  { width: 1280, locale: 'ja', theme: 'dark' },
+  { width: 390, locale: 'en', theme: 'light' },
+  { width: 1024, locale: 'zh-CN', theme: 'dark' },
+] as const) {
+  test(`compact profile connections ${locale} ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 840 });
+    await seedProfileConnections(page, locale, theme);
+    await page.goto('/#/profile?topic=kukuri%3Atopic%3Ageneral&profileMode=connections&connectionsView=blocking');
+    const profile = page.locator('.shell-column-surface').filter({ has: page.getByTestId('profile-connection-identifier-target') });
+    await expect(profile.getByTestId('profile-connection-identifier-target')).toBeVisible();
+    await settleForShot(page, theme);
+    await expect(profile).toHaveScreenshot(`profile-connections-${locale}-${theme}.png`);
+  });
+}
 
 for (const { locale, theme, width } of [
   { locale: 'ja', theme: 'dark', width: 1280 },

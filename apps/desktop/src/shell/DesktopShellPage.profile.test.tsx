@@ -216,10 +216,11 @@ test('blocking from the muted list moves the user into the blocked list', async 
   await selectWorkspace(user, 'Profile');
   await user.click(screen.getByRole('button', { name: '1 muted user' }));
   const column = getActiveColumn('Profile');
-  await user.click(within(column).getByRole('button', { name: 'Block' }));
+  await user.click(within(column).getByRole('button', { name: 'Actions for carol' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Block' }));
   await waitFor(() => expect(blockAuthor).toHaveBeenCalledWith(mutedPubkey));
   await waitFor(() => {
-    expect(within(column).getByRole('button', { name: 'Unblock' })).toBeInTheDocument();
+    expect(within(column).getByText('Blocked', { selector: '.relationship-badge' })).toBeInTheDocument();
   });
   await user.click(within(column).getByRole('tab', { name: 'Blocked' }));
   await waitFor(() => {
