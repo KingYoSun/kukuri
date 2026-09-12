@@ -123,7 +123,7 @@
 .shell-phase1 .post-card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: var(--space-sm);
+  padding: var(--space-xs);
   background: var(--surface-panel-soft);
 }
 
@@ -137,7 +137,7 @@
 }
 
 .shell-phase1 .post-body {
-  margin-top: var(--space-sm);
+  margin-top: var(--space-2xs);
   font-size: var(--text-body-reading);
 }
 
@@ -190,8 +190,8 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-md);
-  margin-bottom: var(--space-xs);
+  gap: var(--space-2xs);
+  margin-bottom: var(--space-2xs);
   font-size: var(--text-caption);
   color: var(--muted-foreground);
 }
@@ -563,8 +563,8 @@
 
 .shell-phase1 .shell-column-body > .shell-main-stack {
   grid-template-columns: minmax(0, 1fr);
-  inline-size: calc(100cqi - var(--space-md) - var(--space-md));
-  max-inline-size: calc(100cqi - var(--space-md) - var(--space-md));
+  inline-size: 100%;
+  max-inline-size: 100%;
 }
 
 .shell-phase1 .shell-column-footer {

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MoreHorizontal } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { RelationshipBadge } from '@/components/core/RelationshipBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
+import { IconButton } from '@/components/ui/icon-button';
 import {
   ContextActionMenu,
   contextActionMenuPositionFromKeyboard,
@@ -68,6 +70,24 @@ export function ProfileConnectionsPanel({
   const [identifierMenuPosition, setIdentifierMenuPosition] =
     useState<ContextActionMenuPosition | null>(null);
   const [identifierAuthorPubkey, setIdentifierAuthorPubkey] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<{
+    authorPubkey: string;
+    position: ContextActionMenuPosition;
+  } | null>(null);
+  const primaryAction = activeView === 'blocking' ? 'block' : activeView === 'muted' ? 'mute' : 'follow';
+  const menuAuthor = items.find((author) => author.author_pubkey === actionMenu?.authorPubkey);
+  const actionMenuItems = useMemo(() => {
+    if (!menuAuthor || menuAuthor.author_pubkey === localAuthorPubkey) return [];
+    const author = menuAuthor;
+    return [
+      { id: 'follow', label: t(author.following ? 'common:actions.unfollow' : 'common:actions.follow'),
+        onSelect: () => onToggleRelationship(author.author_pubkey, author.following) },
+      { id: 'mute', label: t(author.muted ? 'common:actions.unmute' : 'common:actions.mute'),
+        onSelect: () => onToggleMute(author.author_pubkey, author.muted) },
+      { id: 'block', label: t(author.blocking ? 'common:actions.unblock' : 'common:actions.block'),
+        onSelect: () => onToggleBlock(author.author_pubkey, author.blocking) },
+    ].filter((action) => action.id !== primaryAction);
+  }, [localAuthorPubkey, menuAuthor, onToggleBlock, onToggleMute, onToggleRelationship, primaryAction, t]);
   const identifierMenuItems = useMemo(
     () =>
       identifierAuthorPubkey
@@ -85,9 +105,8 @@ export function ProfileConnectionsPanel({
   );
 
   return (
-    <Card className='panel-subsection'>
-      <CardHeader>
-        <h3>{t('connections.title')}</h3>
+    <Card className='panel-subsection profile-connections-panel'>
+      <CardHeader className='profile-connections-toolbar'>
         <Button variant='secondary' type='button' onClick={onBack}>
           {t('connections.back')}
         </Button>
@@ -105,7 +124,7 @@ export function ProfileConnectionsPanel({
             role='tab'
             type='button'
             aria-selected={activeView === view}
-            onClick={() => onSelectView(view)}
+            onClick={() => { setActionMenu(null); onSelectView(view); }}
           >
             {t(`connections.tabs.${view}`)}
           </button>
@@ -129,75 +148,82 @@ export function ProfileConnectionsPanel({
             return (
               <li key={author.author_pubkey}>
                 <article
-                  className='post-card'
+                  className='post-card profile-connection-card'
                   tabIndex={0}
                   data-testid='profile-connection-identifier-target'
                   onContextMenu={(event) => {
+                    setActionMenu(null);
                     setIdentifierAuthorPubkey(author.author_pubkey);
                     setIdentifierMenuPosition(contextActionMenuPositionFromPointer(event));
                   }}
                   onKeyDown={(event) => {
                     const position = contextActionMenuPositionFromKeyboard(event);
                     if (position) {
+                      setActionMenu(null);
                       setIdentifierAuthorPubkey(author.author_pubkey);
                       setIdentifierMenuPosition(position);
                     }
                   }}
                 >
-                  <div className='post-meta'>
-                    <span>{label}</span>
-                  </div>
-                  <div className='post-body'>
-                    <div className='author-detail-hero'>
-                      <AuthorAvatar label={label} picture={author.picture_src ?? null} size='sm' />
-                      <div className='author-detail-copy-stack'>
-                        <strong className='post-title'>{label}</strong>
-                        <p className='author-detail-copy author-detail-break'>
-                          {author.about?.trim() || t('common:fallbacks.noBio')}
-                        </p>
-                      </div>
+                  <div className='profile-connection-header'>
+                    <div className='profile-connection-badges'>
+                      {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : null}
+                      {author.muted ? (
+                        <span className='relationship-badge relationship-badge-direct'>
+                          {t('connections.mutedBadge')}
+                        </span>
+                      ) : null}
+                      {author.blocking ? (
+                        <span className='relationship-badge relationship-badge-direct'>
+                          {t('connections.blockedBadge')}
+                        </span>
+                      ) : null}
                     </div>
-                  </div>
-                  <div className='post-actions'>
-                    {relationshipLabel ? <RelationshipBadge label={relationshipLabel} /> : null}
-                    {author.muted ? (
-                      <span className='relationship-badge relationship-badge-direct'>
-                        {t('connections.mutedBadge')}
-                      </span>
+                    {showActions ? (
+                      <IconButton
+                        variant='ghost'
+                        label={t('connections.actionsFor', { name: label })}
+                        aria-haspopup='menu'
+                        aria-expanded={actionMenu?.authorPubkey === author.author_pubkey}
+                        onClick={(event) => {
+                          const trigger = event.currentTarget;
+                          const rect = trigger.getBoundingClientRect();
+                          setIdentifierMenuPosition(null);
+                          setActionMenu({ authorPubkey: author.author_pubkey,
+                            position: { x: rect.right, y: rect.bottom, returnFocusTo: trigger } });
+                        }}
+                      >
+                        <MoreHorizontal aria-hidden='true' className='size-4' />
+                      </IconButton>
                     ) : null}
-                    {author.blocking ? (
-                      <span className='relationship-badge relationship-badge-direct'>
-                        {t('connections.blockedBadge')}
-                      </span>
-                    ) : null}
                   </div>
-                  {showActions ? (
-                    <div className='post-actions'>
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        onClick={() => onToggleRelationship(author.author_pubkey, author.following)}
-                      >
-                        {author.following ? t('common:actions.unfollow') : t('common:actions.follow')}
-                      </Button>
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        onClick={() => onToggleMute(author.author_pubkey, author.muted)}
-                      >
-                        {author.muted
-                          ? t('common:actions.unmute', { defaultValue: 'Unmute' })
-                          : t('common:actions.mute', { defaultValue: 'Mute' })}
-                      </Button>
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        onClick={() => onToggleBlock(author.author_pubkey, author.blocking)}
-                      >
-                        {t(author.blocking ? 'common:actions.unblock' : 'common:actions.block')}
-                      </Button>
+                  <div className='profile-connection-info'>
+                    <AuthorAvatar label={label} picture={author.picture_src ?? null} size='sm' />
+                    <div className='author-detail-copy-stack'>
+                      <strong className='post-title'>{label}</strong>
+                      <p className='author-detail-copy author-detail-break'>
+                        {author.about?.trim() || t('common:fallbacks.noBio')}
+                      </p>
                     </div>
-                  ) : null}
+                    {showActions ? (
+                      <Button
+                        variant='secondary'
+                        type='button'
+                        className='profile-connection-primary-action'
+                        onClick={() => {
+                          if (primaryAction === 'block') onToggleBlock(author.author_pubkey, author.blocking);
+                          else if (primaryAction === 'mute') onToggleMute(author.author_pubkey, author.muted);
+                          else onToggleRelationship(author.author_pubkey, author.following);
+                        }}
+                      >
+                        {primaryAction === 'block'
+                          ? t(author.blocking ? 'common:actions.unblock' : 'common:actions.block')
+                          : primaryAction === 'mute'
+                            ? t(author.muted ? 'common:actions.unmute' : 'common:actions.mute')
+                            : t(author.following ? 'common:actions.unfollow' : 'common:actions.follow')}
+                      </Button>
+                    ) : null}
+                  </div>
                 </article>
               </li>
             );
@@ -212,6 +238,12 @@ export function ProfileConnectionsPanel({
           setIdentifierMenuPosition(null);
           setIdentifierAuthorPubkey(null);
         }}
+      />
+      <ContextActionMenu
+        open={actionMenu !== null && actionMenuItems.length > 0}
+        position={actionMenu?.position ?? null}
+        items={actionMenuItems}
+        onClose={() => setActionMenu(null)}
       />
     </Card>
   );
