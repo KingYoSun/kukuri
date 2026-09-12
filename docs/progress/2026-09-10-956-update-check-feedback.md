@@ -145,4 +145,18 @@ v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」
 
 ### 検証結果
 
-（本節はPR前に最終結果で更新する）
+（実行中。完了後に更新する）
+
+### 独立監査（PR head ace4c6d15e7a67001c488b1d04f3635d91005076）
+
+別コンテキストの監査担当が、固定AC / INVARと対象差分 `fd96677..ace4c6d` から入口・sink・状態遷移を再構築した。
+
+- 対象 commit: `ace4c6d15e7a67001c488b1d04f3635d91005076`
+- Scope revision: `956-2026-09-12-v2`
+- リスク区分: B（Reopen）
+- inventory: 合計6 / 適合6 / 不適合0 / 未分類0。`checkForUpdate` caller（ReleasePanel、DesktopShellPage起動／30分interval、downloadUpdateのpendingなし分岐）、`useAcknowledgedPending` caller（ReleasePanel、ProfileRefreshButton）、`lastCheckedAt` の書き込み4箇所・読み取り1箇所、`updateStateFromError` / `updateFailureFromError` の caller 4箇所を登録点から再生成し、作業記録の記載と差0。
+- AC / INVAR evidence: AC-1〜7、INVAR-1〜4 すべてに実装箇所と test 名を対応付け。TR-2／7（busy guard と `checkPending` による click 抑止、周期確認の rising edge）、TR-9〜12（時刻更新、1秒 timer の clear と unmount 解放、download／install 失敗時の前回時刻保持、raw error の診断限定）を code と test で照合。hook 抽出は state／ref／callback／effect が抽出前と同一で、`ProfileRefreshButton.test.tsx` は無変更。
+- 実行した validation: 対象4 file の Vitest 39件成功、`tsc --noEmit` 成功、変更9 file の eslint 成功、`git diff --check` 指摘なし。browser spec、Storybook、visual gate、`cargo xtask` は監査範囲外（本節の「検証結果」と CI に委ねる）。
+- blocker: 0件
+- non-blocker（Optional-hardening）: (1) `a slow check stays pending beyond one second` の unmount 時 timer 0 は既に発火済み timer を数えており、生きた timer の解放は共有 hook の `ProfileRefreshButton.test.tsx` で担保。(2) download／install 失敗時の `lastCheckedAt` 保持は code reading で確認、test では未 assert。(3) download／install 失敗の alert にも前回の確認時刻が付く（作業記録どおり、INVAR-3 に抵触しない）。(4) browser spec は1秒の下限自体を assert せず、component fake-timer test で担保。記録面: 本節の「検証結果」を最終結果で埋めること。
+- 判定: PASS
