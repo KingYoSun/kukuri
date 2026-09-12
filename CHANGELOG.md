@@ -18,6 +18,38 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.2-preview.1] - 2026-09-12
+
+### Features
+
+- 開発者モードでアプリ内ログを閲覧・コピー・書き出しできるようにする ([#978](https://github.com/KingYoSun/kukuri/pull/978), [#986](https://github.com/KingYoSun/kukuri/pull/986))
+- 見つける検索と申請 dialog が索引状況を確認できるようにする（GET /v1/indexing/status） ([#975](https://github.com/KingYoSun/kukuri/pull/975), [#985](https://github.com/KingYoSun/kukuri/pull/985))
+- 設定に「バックアップと復元」section を追加し、Control Center と鍵移行画面から到達できる入口を明示 ([#967](https://github.com/KingYoSun/kukuri/pull/967), [#984](https://github.com/KingYoSun/kukuri/pull/984))
+- 通常画面からプライベートチャンネルの作成・参加・共有へ到達できる入口と案内を追加 ([#966](https://github.com/KingYoSun/kukuri/pull/966), [#982](https://github.com/KingYoSun/kukuri/pull/982))
+- 通知の受信設定を「通知」セクションへ移し、通知一覧と開発者設定に診断・ログの入口を明示 ([#962](https://github.com/KingYoSun/kukuri/pull/962), [#979](https://github.com/KingYoSun/kukuri/pull/979))
+- ブロック導線を一覧・設定へ追加し、ブロック関係の投稿を双方向で非表示にする ([#961](https://github.com/KingYoSun/kukuri/pull/961), [#977](https://github.com/KingYoSun/kukuri/pull/977))
+
+### Fixes
+
+- 全丸ボタンを高密度化し、avatarを常に全丸にする ([#983](https://github.com/KingYoSun/kukuri/pull/983))
+- 添付の対応形式を案内し、非対応ファイルの理由を表示 ([#965](https://github.com/KingYoSun/kukuri/pull/965), [#981](https://github.com/KingYoSun/kukuri/pull/981))
+- 投稿作成を Esc で閉じ、focus ring を可視化し、キーボード操作の案内を追加 ([#964](https://github.com/KingYoSun/kukuri/pull/964), [#980](https://github.com/KingYoSun/kukuri/pull/980))
+- 見つける検索の空状態に検索先・理由・次の行動を表示 ([#960](https://github.com/KingYoSun/kukuri/pull/960), [#976](https://github.com/KingYoSun/kukuri/pull/976))
+- 接続診断の状態説明と回復導線を整理 ([#959](https://github.com/KingYoSun/kukuri/pull/959), [#974](https://github.com/KingYoSun/kukuri/pull/974))
+- show developer mode status and diagnostic shortcuts ([#973](https://github.com/KingYoSun/kukuri/pull/973))
+- explain feedback availability and settings recovery ([#972](https://github.com/KingYoSun/kukuri/pull/972))
+- 更新確認の進捗と結果を通常モードに表示 ([#971](https://github.com/KingYoSun/kukuri/pull/971))
+- preserve visible column context on viewport resize
+
+### Other
+
+- prepare v0.2.2-preview.1 release ([#987](https://github.com/KingYoSun/kukuri/pull/987))
+- record independent audit for issue 918 reopen fix
+- [codex][fix] 年齢未確認の同意ボタンを操作前に識別できるようにする ([#969](https://github.com/KingYoSun/kukuri/pull/969))
+- [codex][fix] 日本語表示とLinuxファイル選択の英語残存を修正 ([#968](https://github.com/KingYoSun/kukuri/pull/968))
+- record v0.2.1-preview.1 release and VM rollout ([#955](https://github.com/KingYoSun/kukuri/pull/955))
+- update CHANGELOG for v0.2.1-preview.1 ([#954](https://github.com/KingYoSun/kukuri/pull/954))
+
 ## [v0.2.1-preview.1] - 2026-09-09
 
 ### Fixes
