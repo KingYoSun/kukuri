@@ -19,6 +19,7 @@ import {
   type ColumnContextSelectOption,
 } from '@/components/shell/ColumnContextSelect';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
+import { ProfileRefreshButton } from '@/components/shell/ProfileRefreshButton';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import {
@@ -448,18 +449,7 @@ export function DesktopShellColumnWorkspace({
     if (column.kind === 'profile' && !column.entityId) {
       return (
         <div className='shell-column-context-actions' data-column-preserve-activation>
-          <IconButton
-            variant='ghost'
-            type='button'
-            label={t(profileRefreshing ? 'profile:overview.refreshing' : 'profile:overview.refresh')}
-            aria-busy={profileRefreshing}
-            aria-disabled={profileRefreshing || profileSaving}
-            onClick={() => {
-              if (!profileRefreshing && !profileSaving) void onRefreshProfile();
-            }}
-          >
-            <RefreshCw className={`size-4${profileRefreshing ? ' profile-refresh-spinning' : ''}`} aria-hidden='true' />
-          </IconButton>
+          <ProfileRefreshButton refreshing={profileRefreshing} saving={profileSaving} onRefresh={onRefreshProfile} />
         </div>
       );
     }

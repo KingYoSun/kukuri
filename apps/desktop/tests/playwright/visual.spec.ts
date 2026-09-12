@@ -27,6 +27,32 @@ const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
 
+for (const { locale, theme, width } of [
+  { locale: 'ja', theme: 'dark', width: 1280 },
+  { locale: 'en', theme: 'light', width: 390 },
+  { locale: 'zh-CN', theme: 'light', width: 1024 },
+] as const) {
+  test(`profile overview ${locale} ${theme}`, async ({ page }) => {
+    await page.addInitScript(({ locale, theme }) => {
+      localStorage.setItem('kukuri.desktop.locale', locale);
+      localStorage.setItem('kukuri.desktop.theme', theme);
+    }, { locale, theme });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/#/profile?topic=kukuri%3Atopic%3Ageneral');
+    const profile = page.locator('.shell-column-surface').filter({ has: page.locator('.profile-overview-header') });
+    const refresh = profile.locator('.shell-column-context-actions button[aria-busy]');
+    await expect(refresh).toHaveAttribute('aria-busy', 'false');
+    await page.evaluate(() => window.__KUKURI_DESKTOP__!.setMyProfile({
+      display_name: '表示名テスト', name: 'kingyosun', about: 'プロフィールの更新と表示を確認します。',
+    }));
+    await refresh.click();
+    await expect(profile.locator('.profile-overview-names h3')).toHaveText('表示名テスト');
+    await expect(refresh).toHaveAttribute('aria-busy', 'false');
+    await settleForShot(page, theme);
+    await expect(profile).toHaveScreenshot(`profile-overview-${locale}-${theme}.png`);
+  });
+}
+
 for (const { locale, theme, width, height, status, toggle } of [
   { locale: 'ja', theme: 'dark', width: 1280, height: 800,
     status: '開発者モードは有効です。', toggle: '開発者モードを有効にする' },

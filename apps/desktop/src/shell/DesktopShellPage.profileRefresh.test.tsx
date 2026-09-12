@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
@@ -10,6 +10,24 @@ import { createDeferred, selectWorkspace, setViewportWidth } from './DesktopShel
 beforeEach(() => {
   setViewportWidth(1280);
   window.history.replaceState(null, '', '/');
+});
+
+test('a fast refresh shows feedback for at least one second without delaying data', async () => {
+  const api = createDesktopMockApi();
+  render(<App api={api} />);
+  const profile = await screen.findByRole('region', { name: /^Profile Column,/ });
+  const refresh = await within(profile).findByRole('button', { name: 'Refresh profile' }, { timeout: 2000 });
+  await waitFor(() => expect(refresh).toHaveAttribute('aria-busy', 'false'));
+  await api.setMyProfile({ display_name: 'Updated immediately', name: 'updated' });
+  vi.useFakeTimers();
+  await act(async () => { fireEvent.click(refresh); });
+  expect(within(profile).getByRole('heading', { name: 'Updated immediately' })).toBeInTheDocument();
+  expect(refresh).toHaveAttribute('aria-busy', 'true');
+  await act(async () => vi.advanceTimersByTimeAsync(999));
+  expect(refresh).toHaveAttribute('aria-busy', 'true');
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(refresh).toHaveAttribute('aria-busy', 'false');
+  vi.useRealTimers();
 });
 
 test('selecting columns does not reload the open profile', async () => {
@@ -34,7 +52,7 @@ test('manual refresh retains an empty feed and focus while preventing duplicate 
   const active = document.querySelector('[data-column-id][aria-current="true"]');
   const pending = createDeferred<TimelineView>();
   const read = vi.spyOn(api, 'listProfileTimeline').mockReturnValue(pending.promise);
-  const refresh = within(profile).getByRole('button', { name: 'Refresh profile' });
+  const refresh = await within(profile).findByRole('button', { name: 'Refresh profile' }, { timeout: 2000 });
   await user.click(refresh);
   await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
   expect(refresh).toHaveAttribute('aria-busy', 'true');

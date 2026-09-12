@@ -2,10 +2,11 @@
 
 ## 作業範囲
 
-- リスク区分B、Scope revision 2、基準commit `c0d3cefc67c7150bee961d300918748aa8fcc5c5`。
+- リスク区分B、Scope revision 3、基準commit `c0d3cefc67c7150bee961d300918748aa8fcc5c5`。
 - 2026-09-12に承認されたプランの実装。自分のプロフィールカラムの選択時のちらつき、手動更新と回転表示、表示名・ユーザー名の2段表示、概要ヘッダー下の追加4pxを対象とする。
 - ユーザーは実装・コミット・PR・必須CI成功後のマージを承認済み。
 - Scope revision 2: 実装中の追加指示により余白を2pxから4pxへ変更し、狭幅・zoomでもアバターと名前のまとまりと編集ボタンを同じ行に保つ。759px以下で`flex-direction: column`にしていた既存規則を削除する。Windows 200%の行方向testで変更前の`column`を失敗として確認し、変更後の`row`で成功した。
+- Scope revision 3: 更新が速くても最低1秒の回転表示を維持する。`ProfileRefreshButton`が表示時間を所有し、loaderのデータ反映は待たせない。1秒を超える取得は実完了まで表示し、reduced motionでは静止した更新中表示を同じ期間保つ。短い取得の再現testで直後にbusyがfalseになる失敗を確認し、修正後はデータが即時反映され、999msでbusy、1000msで通常表示になる。
 - 他ユーザーの詳細プロフィール、backend / IPC / persist形式、公開投稿数の集計範囲は対象外。
 - 製品契約は[DESIGN.md](../../DESIGN.md)、手順は[ADR 0014](../adr/0014-uiux-dev-flow.md)と[Issue lifecycle](../runbooks/issue-lifecycle.md)。
 
@@ -38,7 +39,7 @@
 | --- | --- |
 | AC-1: 選択のみで取得せず位置を維持（TR-3） | `DesktopShellPage.profileRefresh.test.tsx`の選択往復、`useDesktopShellSectionLoaders.test.tsx`の集約loader、`profile-refresh-layout.spec.ts`のブラウザー操作 |
 | AC-2: 初回 / 再open / 必要な変更 / 再試行（TR-1 / TR-2 / TR-6） | profileRefreshの再open test、既存`DesktopShellPage.profile.test.tsx`・socialGraph・`profile-post-refresh.spec.ts`の非選択への投稿反映 |
-| AC-3: 更新回転・停止・重複抑止（TR-2 / TR-7） | profileRefreshの連打・Enter・focus保持、browserのbusy・animation-name・取得回数、Windows WebView確認 |
+| AC-3: 最低1秒の更新回転・停止・重複抑止（TR-2 / TR-7） | profileRefreshの即時データ反映/999ms/1000ms、`ProfileRefreshButton.test.tsx`の短い手動/自動取得・遅い取得・unmount cleanup・保存中抑止、連打・Enter・focus保持、browserのbusy・animation-name・取得回数、Windows WebView確認 |
 | AC-4: 0件も取得済み表示を維持（TR-2 / TR-5） | loaderの空プロフィール更新・error回復、profileRefreshの空feed保持、browserの応答保留中4frameの概要・投稿・body bounding box比較 |
 | AC-5: 初回error / 更新error / 旧応答 / 保存競合（TR-4 / TR-5 / TR-7） | 既存初回error→Retry、loaderの旧成功・失敗・旧finally、保存revisionを跨ぐ応答、最新値と未保存draft保持 |
 | AC-6: 名前を2段に表示（TR-8） | `ProfileOverviewPanel.test.tsx`、localizedAccessibleNames、Overview stories、browserの名前と長文overflow確認 |

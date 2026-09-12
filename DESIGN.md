@@ -59,7 +59,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 
 自分のプロフィールは、カラムの初回表示・再open、明示的な更新・再試行、公開投稿やプロフィール・関係の変更に応じて取得する。開いたままのカラム間の選択変更だけでは再取得しない。取得成功を投稿件数と分けて保持し、0件も取得済みとして扱う。再取得中は概要・件数・投稿または0件表示を保持し、本文へloading行を追加しない。失敗でも直前の確定値と未保存の編集内容を保持する。
 
-自分のプロフィールカラムのヘッダーに更新アイコンボタンを置く。取得中は同じ寸法のままアイコンを回転させ、更新中のaccessible nameとbusy状態を示す。処理中・保存中の重複操作を抑止し、非選択カラムの更新で選択・route・scrollを変更しない。reduced motionでは連続回転を止め、静止アイコンと更新中の状態名で伝える。
+自分のプロフィールカラムのヘッダーに更新アイコンボタンを置く。取得開始から最低1秒は同じ寸法のままアイコンを回転させ、処理が1秒を超える場合は完了まで続ける。データは取得でき次第反映し、最低表示時間で反映を遅らせない。更新中のaccessible nameとbusy状態を示し、表示中・保存中の重複操作を抑止する。非選択カラムの更新で選択・route・scrollを変更しない。reduced motionでは連続回転を止め、静止アイコンと更新中の状態名を最低1秒表示して伝える。
 
 プロフィール概要のアバター右隣は表示名とユーザー名の2段とし、概要内の固定見出し「プロフィール」は置かない。カラムヘッダーの名称は維持する。表示名は既存の表示名→ユーザー名→不明なユーザーのfallbackを使い、未設定のユーザー名は未設定であることを示す。長い名前は折り返してカラム内に収める。狭幅・200% zoomでもアバターと名前のまとまり・編集ボタンは同じ行に保ち、名前の領域を可変幅にする。アバターを含む概要ヘッダー行の下端には既存余白に加えて4 CSS pxを一度だけ加え、アバターの3rem・全丸形状を維持する。
 
@@ -233,7 +233,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | global | `--radius-xs` | `0.5rem` |
 | global | `--radius-sm` | `0.75rem` |
 | global | `--radius` | `1rem` |
-| global | `--radius-panel` | `24px` |
+| global | `--radius-panel` | `22px` |
 | global | `--radius-input` | `14px` |
 | global | `--radius-pill` | `999px` |
 | global | `--space-2xs` | `0.25rem` |
@@ -301,7 +301,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | dark | `--danger` | `#ffb48a` |
 | dark | `--ring` | `rgba(0, 179, 164, 0.8)` |
 | dark | `--shadow-panel` | `0 18px 60px rgba(2, 7, 15, 0.22)` |
-| dark | `--shadow-dropdown` | `0 14px 34px rgba(2, 7, 15, 0.12)` |
+| dark | `--shadow-dropdown` | `0 12px 32px rgba(2, 7, 15, 0.12)` |
 | dark | `--shadow-button-primary` | `0 10px 28px rgba(245, 157, 98, 0.16)` |
 | dark | `--scrollbar-track` | `#12202c` |
 | dark | `--scrollbar-thumb` | `#2a4d56` |
@@ -352,7 +352,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | light | `--danger` | `#9d4d36` |
 | light | `--ring` | `rgba(12, 117, 108, 0.8)` |
 | light | `--shadow-panel` | `0 18px 48px rgba(33, 48, 59, 0.12)` |
-| light | `--shadow-dropdown` | `0 14px 34px rgba(33, 48, 59, 0.1)` |
+| light | `--shadow-dropdown` | `0 12px 32px rgba(33, 48, 59, 0.1)` |
 | light | `--shadow-button-primary` | `0 10px 24px rgba(215, 125, 69, 0.18)` |
 | light | `--scrollbar-track` | `#edf2f6` |
 | light | `--scrollbar-thumb` | `#b8c6d2` |
