@@ -55,7 +55,11 @@
 - 修正後targeted Vitest: section loader + profileRefresh + profile + socialGraph、30成功。その後追加の旧finally・保存競合・欠落usernameを含むloader / Overview / accessible names / actionsの4ファイル、42成功。
 - Playwright `profile-refresh-layout.spec.ts --project=chromium --workers=2`: 3幅×投稿あり/0件の6成功。応答保留中の位置、busy、回転、reduced motion、失敗と再試行を確認。長文ケース追加後の結果は全体gateで確認する。
 - `cargo xtask oversized-files`: 成功。既存baselineの増加なし。
-- `cargo xtask desktop-ui-check`: 初回実行成功（182ファイル / 1520 tests、Storybook、browser、visual smoke）。Scope revision 2のCSS変更後に全gateを再実行中。最終結果とLinux視覚baseline・CI結果は完了時に追記する。
+- `cargo xtask desktop-ui-check`: 初回実行成功（182ファイル / 1520 tests、Storybook、browser、visual smoke）。要求追加中の再実行では4失敗 / 1517成功。文書のtoken値の置換漏れと最低1秒の追加再現testは修正済みで対象testが成功。残るmessages / socialGraphの2件は5秒のtest timeoutだった。
+- 最終targeted Vitest: `ProfileRefreshButton`、profileRefresh、design-contract、messages、socialGraphの5ファイル、`--testTimeout=15000`で21成功。テスト本文・assertion・既定timeoutは変更していない。messagesの該当testは基準commitを別worktreeで実行しても既定5秒でtimeoutし、今回の変更前からのローカル時間制約であることを確認した。最終PR headの既定設定での全testはCIを合格条件とする。
+- 最終`cargo xtask desktop-lint`（lint / typecheck）、`desktop-storybook`、`desktop-browser-test`（264成功）、`desktop-visual-test`（31成功、Windowsのため画像比較はskip）: 成功。
+- Linux視覚baseline: [Kukuri Visual Baseline 34689467580](https://github.com/KingYoSun/kukuri/actions/runs/34689467580)が31成功。Checkout logの実commitは`f1246fe9b9c2d480d4910df17cf653ec21b4e5e7`。追加したプロフィール3面のPNGを目視確認し、既存PNGは全てhash一致した。追加3枚だけを取り込む。
+- localのRust / Tauri backend全suiteは未実行（変更なし）。必要なCIのRust / Windows / CN / packagingを含む結果はPR #995のchecksで確認する。
 
 ### Windows描画確認の範囲
 
@@ -63,9 +67,10 @@
 
 - 通常: 1280×800 CSS px、DPR 1.5。選択往復のprofile read増分0、手動更新1回、連打/Enterの重複抑止、更新前・保留中・完了後の概要/投稿位置一致、回転、追加4pxを確認。
 - native `set_zoom(2)`による200%: 640×400 CSS px、DPR 3。同じ操作と位置比較が成功。CDPのスクリーンショットは拡大時に一部を切り取るため、画面全体の画像証拠とは扱わない。
+- 最低1秒表示の追加後: データ反映はclick開始から263ms、通常表示へ戻る観測は1557ms。データが見えてもbusyが残ること、reduced motionでは回転せずbusyを維持することを確認（観測には自動操作・pollingの時間を含む。999ms / 1000msの厳密な境界はfake timer testで確認）。
 - 証跡はsession内`.codex/plans/profile-native/`のJSON・画像。元録画のアプリ/WebView versionは不明なため、完全に同一versionの実機比較とは区別する。
 - screen readerによる読み上げは未実施。accessible name / busy / keyboard focusを自動検証し、読み上げ適合を断定しない。
 
-## 完了時の更新
+## PR・マージ条件
 
-必須frontend gate、Linux視覚baseline、PR headのCI結果を記録し、CI成功後にマージする。コミット・PR・マージは承認済みで、追加の確認待ちは設けない。
+[PR #995](https://github.com/KingYoSun/kukuri/pull/995)。追加要求とLinux baselineを含む最終headの必須CI成功後にマージする。コミット・PR・マージは承認済みで、追加の確認待ちは設けない。実際のCI対象SHA・結果・merge SHAはPRのchecks / merge記録を参照し、マージ前に成功済みとは記載しない。
