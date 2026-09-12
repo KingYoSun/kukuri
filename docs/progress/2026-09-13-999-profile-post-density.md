@@ -3,7 +3,7 @@
 - Scope revision: 2026-09-13-profile-post-density-v1
 - 基準commit: bb500b3940fa329cf5af00fbce8b89df6dcac2bd
 - 区分B、既存画面の改善。ユーザーの具体的変更要求に基づく。#991とは別件。
-- 状態: 実装済み、全体検証・Linux視覚baseline・CIは実行中。
+- 実装・最終CI: [PR #1000](https://github.com/KingYoSun/kukuri/pull/1000)。CIの最新判定はPRに集約する。
 
 ## 問題と変更
 
@@ -32,6 +32,11 @@ inventoryの変更は行menu入口追加と常設副操作の移動のみ。sink
 - 対象Vitest: ProfileConnectionsPanel、DesktopShellPage.profile、2ファイル19テスト成功。
 - 対象Playwright: profile-density.spec.ts、1280/1024/390pxの3テスト成功。
 - desktop-ui-check初回: lint成功、testにPlaywright専用`exact`オプションを使った型エラーで停止。Testing Libraryの既定一致へ修正し再実行する。
-- 最終desktop-ui-check、Linux baseline、CI: 結果確定後に追記。
+- 全体Vitestの初回は183ファイル中182成功、1611テスト中1610成功。残り1件はsocialGraph testが常設Muteを前提にしていたため、操作入口をmenuへ移し、Unmuteの確認もmenu内で維持。該当ファイル再実行は4テスト成功。製品側の追加変更は不要だった。
+- Linux視覚baseline: [Kukuri Visual Baseline 34723248004](https://github.com/KingYoSun/kukuri/actions/runs/34723248004)成功。既存4画像と新規関係一覧3画像を取り込み、投稿・thread・author・exploreの差分を目視確認した。
+- Accessibility: 390px、dark/light、通常/長文、panel/menuのaxe検査で違反・要確認0件。[結果](assets/999/a11y.json)。
+- ネイティブ描画: 既存の隔離Tauri review hostに現行frontend + mockを表示。Windows WebView2 1280×840のmenu/escape/focus、Ubuntu24 WebKitGTK 1280×840の描画とAT-SPIでmenuの2操作を確認。[Windows](assets/999/windows-native.png)、[Linux](assets/999/linux-native.png)、[Linux menu](assets/999/linux-native-menu.png)。
+- Windows hostの200% zoom（CSS viewport 640×420）でも行の横overflowなし。短いviewportでは既存の下部page indicatorが一部情報に重なるため、zoom時の全面的な非重複を確認済みとはしない。グローバルdock配置は今回変更していない。
+- `git diff --check`と`cargo xtask oversized-files`成功。修正後の全体desktop-ui-checkとCIの結果はPRの検証記録へ集約する。
 
-Windowsローカルでは視覚snapshot比較がskipされるため、Linux workflowでbaselineを生成・比較する。screen reader、配布版backend、実データの関係mutationは今回のUI確認の対象外。native描画の実施有無は最終結果へ記録する。
+Windowsローカルでは視覚snapshot比較がskipされるため、Linux workflowでbaselineを生成・比較する。Computer Useは前回判明したconfiguration errorのため、WindowsはCDP、LinuxはSSH/AT-SPI/Gdkで確認した。RDPウィンドウへの直接入力とscreen reader、配布版backend、実データの関係mutationは未確認。UIロジック・layoutの変更でありbackendの契約は変更していない。
