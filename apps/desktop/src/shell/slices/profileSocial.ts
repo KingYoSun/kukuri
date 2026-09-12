@@ -26,6 +26,9 @@ export type ProfileSocialSliceState = {
   profileDirty: boolean;
   profileError: string | null;
   profilePanelState: AsyncPanelState;
+  profileHasLoaded: boolean;
+  profileRefreshing: boolean;
+  profileSaveRevision: number;
   profileSaving: boolean;
   selectedAuthorPubkey: string | null;
   selectedAuthor: AuthorSocialView | null;
@@ -58,6 +61,9 @@ export function createInitialProfileSocialSlice(): ProfileSocialSliceState {
     profileDirty: false,
     profileError: null,
     profilePanelState: DEFAULT_ASYNC_PANEL_STATE,
+    profileHasLoaded: false,
+    profileRefreshing: false,
+    profileSaveRevision: 0,
     profileSaving: false,
     selectedAuthorPubkey: null,
     selectedAuthor: null,

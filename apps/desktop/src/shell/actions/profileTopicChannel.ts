@@ -41,6 +41,7 @@ import type {
 } from './shared';
 
 type ProfileTopicChannelParams = ActionsBaseParams & {
+  refreshProfile: () => Promise<void>;
   getState: () => DesktopShellStore;
   activePrivateChannel: JoinedPrivateChannelView | null;
   activeTopic: string;
@@ -104,6 +105,7 @@ export function createProfileTopicChannelActions({
   getState,
   translate,
   loadTopics,
+  refreshProfile,
   syncRoute,
   activePrivateChannel,
   activeTopic,
@@ -276,9 +278,11 @@ export function createProfileTopicChannelActions({
 
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    getState().setField('profileSaveRevision', (revision) => revision + 1);
     setProfileSaving(true);
     try {
       const profile = await api.setMyProfile(profileDraft);
+      getState().setField('profileSaveRevision', (revision) => revision + 1);
       setProfileAvatarPreviewUrl((current) => {
         if (current) {
           URL.revokeObjectURL(current);
@@ -298,7 +302,7 @@ export function createProfileTopicChannelActions({
         ...current,
         profileMode: 'overview',
       }));
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await Promise.all([loadTopics(trackedTopics, activeTopic, selectedThread), refreshProfile()]);
       syncRoute('replace', {
         primarySection: 'profile',
         profileMode: 'overview',

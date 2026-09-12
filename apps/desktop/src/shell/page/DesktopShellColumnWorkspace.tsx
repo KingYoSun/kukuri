@@ -19,6 +19,7 @@ import {
   type ColumnContextSelectOption,
 } from '@/components/shell/ColumnContextSelect';
 import { ColumnSurface } from '@/components/shell/ColumnSurface';
+import { ProfileRefreshButton } from '@/components/shell/ProfileRefreshButton';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import {
@@ -81,6 +82,7 @@ type DesktopShellColumnWorkspaceProps = {
   renderMessagesSurface: (column: ColumnState) => ReactNode;
   renderNotificationsSurface: (column: ColumnState) => ReactNode;
   onRefreshNotifications: () => void;
+  onRefreshProfile: () => Promise<void>;
   onRefreshConversation: (peerPubkey: string) => void;
   onClearConversation: (peerPubkey: string) => void;
   onOpenConversationAuthor: (peerPubkey: string, parentColumnId: string) => void;
@@ -116,6 +118,7 @@ export function DesktopShellColumnWorkspace({
   renderMessagesSurface,
   renderNotificationsSurface,
   onRefreshNotifications,
+  onRefreshProfile,
   onRefreshConversation,
   onClearConversation,
   onOpenConversationAuthor,
@@ -144,6 +147,8 @@ export function DesktopShellColumnWorkspace({
     (state) => state.directMessageTimelineByPeer
   );
   const notifications = useDesktopShellStore((state) => state.notifications);
+  const profileRefreshing = useDesktopShellStore((state) => state.profileRefreshing);
+  const profileSaving = useDesktopShellStore((state) => state.profileSaving);
   const notificationStatus = useDesktopShellStore((state) => state.notificationStatus);
   const knownAuthorsByPubkey = useDesktopShellStore((state) => state.knownAuthorsByPubkey);
   const mediaObjectUrls = useDesktopShellStore((state) => state.mediaObjectUrls);
@@ -441,6 +446,13 @@ export function DesktopShellColumnWorkspace({
     return undefined;
   }
   const renderHeaderActions = (column: ColumnState) => {
+    if (column.kind === 'profile' && !column.entityId) {
+      return (
+        <div className='shell-column-context-actions' data-column-preserve-activation>
+          <ProfileRefreshButton refreshing={profileRefreshing} saving={profileSaving} onRefresh={onRefreshProfile} />
+        </div>
+      );
+    }
     if (column.kind === 'timeline') {
       return (
         <TimelineViewIconTabs

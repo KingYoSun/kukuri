@@ -26,6 +26,7 @@ import type {
 
 type MessageReactionSocialParams = ActionsBaseParams &
   NavigationActions & {
+    refreshProfile: () => Promise<void>;
     activeTopic: string;
     bookmarkedPostIds: ReadonlySet<string>;
     selectedAuthorPubkey: string | null;
@@ -59,6 +60,7 @@ export function createMessageReactionSocialActions({
   api,
   translate,
   loadTopics,
+  refreshProfile,
   syncRoute,
   openDirectMessagePane,
   openAuthorDetail,
@@ -343,7 +345,7 @@ export function createMessageReactionSocialActions({
           ? { kind: 'private_channel', channel_id: post.channel_id }
           : { kind: 'public' }
       );
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await Promise.all([loadTopics(trackedTopics, activeTopic, selectedThread), refreshProfile()]);
       setError(null);
     } catch (withdrawError) {
       setError(messageFromError(withdrawError, translate('common:errors.failedToPublish')));
@@ -360,7 +362,7 @@ export function createMessageReactionSocialActions({
         setSelectedAuthor(nextView);
         setAuthorError(null);
       }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await Promise.all([loadTopics(trackedTopics, activeTopic, selectedThread), refreshProfile()]);
     } catch (relationshipError) {
       setAuthorError(
         relationshipError instanceof Error
@@ -380,7 +382,7 @@ export function createMessageReactionSocialActions({
         setSelectedAuthor(nextView);
         setAuthorError(null);
       }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await Promise.all([loadTopics(trackedTopics, activeTopic, selectedThread), refreshProfile()]);
     } catch (muteError) {
       setAuthorError(
         muteError instanceof Error
@@ -400,7 +402,7 @@ export function createMessageReactionSocialActions({
         setSelectedAuthor(nextView);
         setAuthorError(null);
       }
-      await loadTopics(trackedTopics, activeTopic, selectedThread);
+      await Promise.all([loadTopics(trackedTopics, activeTopic, selectedThread), refreshProfile()]);
     } catch (blockError) {
       setAuthorError(
         blockError instanceof Error

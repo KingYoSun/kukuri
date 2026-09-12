@@ -408,11 +408,43 @@
 }
 
 .profile-overview-header {
-  align-items: flex-start;
+  align-items: center;
+  flex-direction: row;
+  padding-block-end: 4px;
+}
+
+.profile-overview-header > .post-actions {
+  flex: none;
+}
+
+.profile-overview-names {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-overview-names small {
+  display: block;
+}
+
+.profile-refresh-spinning {
+  animation: profile-refresh-rotation calc(var(--motion-duration-standard) * 5) linear infinite;
+}
+
+@keyframes profile-refresh-rotation {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-refresh-spinning { animation: none; }
+}
+
+[data-reduced-motion='reduce'] .profile-refresh-spinning {
+  animation: none;
 }
 
 .profile-overview-summary {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: var(--space-md);
   min-width: 0;

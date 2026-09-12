@@ -6,6 +6,7 @@ import { Notice } from '@/components/ui/notice';
 
 type ProfileOverviewPanelProps = {
   authorLabel: string;
+  username: string | null;
   about: string | null;
   picture: string | null;
   status: 'loading' | 'ready' | 'error';
@@ -24,6 +25,7 @@ type ProfileOverviewPanelProps = {
 
 export function ProfileOverviewPanel({
   authorLabel,
+  username,
   about,
   picture,
   status,
@@ -56,9 +58,9 @@ export function ProfileOverviewPanel({
               <span>{authorLabel.slice(0, 1).toUpperCase()}</span>
             )}
           </div>
-          <div>
-            <h3>{t('overview.title')}</h3>
-            <small>{authorLabel}</small>
+          <div className='profile-overview-names'>
+            <h3>{authorLabel}</h3>
+            <small>{username?.trim() || t('overview.noUsername')}</small>
           </div>
         </div>
         <div className='post-actions'>
