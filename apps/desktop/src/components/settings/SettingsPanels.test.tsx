@@ -2,10 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 import i18n from '@/i18n';
+import type { DesktopLogsView } from '@/lib/desktopLogs';
+import { developerLogFixtureSnapshot } from '@/mocks/api/developerLogs';
 
 import { AppearancePanel } from './AppearancePanel';
 import { CommunityNodePanel } from './CommunityNodePanel';
 import { ConnectivityPanel } from './ConnectivityPanel';
+import { DeveloperLogViewer } from './DeveloperLogViewer';
 import { DeveloperPanel } from './DeveloperPanel';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { ReactionsPanel } from './ReactionsPanel';
@@ -808,22 +811,112 @@ test('safety panel explains mute versus block and opens each list', async () => 
   expect(onOpenBlockedUsers).toHaveBeenCalledTimes(1);
 });
 
-// #962: 開発者モードON時は診断レポートへの導線と、ログの所在(専用ビューアなし)を明示する。
-test('developer panel links to the diagnostic report and explains where logs live only while enabled', async () => {
+// #962/#978: 開発者モードON時は診断レポートへの導線と、ログビューア(slot)を表示する。OFF時は両方消える。
+test('developer panel links to the diagnostic report and shows the log viewer only while enabled', async () => {
   const user = userEvent.setup();
   const onOpenDiagnostics = vi.fn();
-  const props = { onDeveloperModeChange: vi.fn(), onOpenDiagnostics };
+  const onRefresh = vi.fn();
+  const logs = (
+    <DeveloperLogViewer status='ready' view={fixtureLogsView()} errorMessage={null} onRefresh={onRefresh} />
+  );
+  const props = { onDeveloperModeChange: vi.fn(), onOpenDiagnostics, logs };
   const { rerender } = render(<DeveloperPanel {...props} developerModeEnabled />);
   await user.click(screen.getByRole('button', { name: 'Diagnostic report' }));
   expect(onOpenDiagnostics).toHaveBeenLastCalledWith('release');
   expect(screen.getByRole('heading', { name: 'Logs' })).toBeVisible();
-  expect(screen.getByText(/does not include a log viewer/i)).toBeVisible();
-  expect(screen.getByText(/RUST_LOG/)).toBeVisible();
+  const region = screen.getByRole('region', { name: 'Recent logs, 12 lines' });
+  expect(within(region).getByText(/desktop profile lease acquired/)).toBeVisible();
+  expect(within(region).getByText('ERROR')).toBeVisible();
+  expect(screen.getByText(/The newest 2,000 lines \/ 1 MiB are kept/)).toBeVisible();
+  expect(screen.queryByText(/does not include a log viewer/i)).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Troubleshooting guide/ })).toHaveAttribute(
     'href',
     'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md'
   );
+  await user.click(screen.getByRole('button', { name: 'Refresh logs' }));
+  expect(onRefresh).toHaveBeenCalledTimes(1);
   rerender(<DeveloperPanel {...props} developerModeEnabled={false} />);
   expect(screen.queryByRole('heading', { name: 'Logs' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Diagnostic report' })).not.toBeInTheDocument();
 });
+
+// #978: コピー／書き出しは利用者の click でだけ起き、本文は表示中の行と除外規則を含む。
+test('developer log viewer copies and exports the shown lines only on request', async () => {
+  const user = userEvent.setup();
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined);
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:kukuri/logs');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  const downloads: string[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push(this.download);
+  });
+
+  render(<DeveloperLogViewer status='ready' view={fixtureLogsView()} errorMessage={null} onRefresh={vi.fn()} />);
+  expect(writeText).not.toHaveBeenCalled();
+  expect(downloads).toEqual([]);
+
+  await user.click(screen.getByRole('button', { name: 'Copy logs' }));
+  expect(writeText).toHaveBeenCalledTimes(1);
+  const copied = writeText.mock.calls[0]?.[0] ?? '';
+  expect(copied).toContain('# kukuri desktop logs');
+  expect(copied).toContain('secret keys, auth tokens, DM bodies, and passphrases are never logged');
+  expect(copied).toContain('kukuri_desktop_tauri_lib: desktop profile lease acquired');
+  expect(screen.getByText('Logs copied.')).toBeVisible();
+
+  await user.click(screen.getByRole('button', { name: 'Export logs' }));
+  expect(downloads).toEqual(['kukuri-logs.txt']);
+  expect(screen.getByText('Logs exported.')).toBeVisible();
+});
+
+test('developer log viewer distinguishes loading, empty, dropped and error states', () => {
+  const onRefresh = vi.fn();
+  const { rerender } = render(
+    <DeveloperLogViewer status='loading' view={null} errorMessage={null} onRefresh={onRefresh} />
+  );
+  expect(screen.getByText('Loading logs…')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Refresh logs' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Copy logs' })).toBeDisabled();
+
+  rerender(
+    <DeveloperLogViewer
+      status='ready'
+      view={{ ...fixtureLogsView(), entries: [], oldestSeq: null, nextSeq: 1, droppedOlder: false }}
+      errorMessage={null}
+      onRefresh={onRefresh}
+    />
+  );
+  expect(screen.getByText('No logs yet.')).toBeVisible();
+  expect(screen.queryByRole('region', { name: /Recent logs/ })).not.toBeInTheDocument();
+
+  rerender(
+    <DeveloperLogViewer
+      status='ready'
+      view={{ ...fixtureLogsView(), oldestSeq: 2401, nextSeq: 4401, droppedOlder: true, gapSinceLastRefresh: true }}
+      errorMessage={null}
+      onRefresh={onRefresh}
+    />
+  );
+  expect(screen.getByText(/older lines are no longer available/)).toBeVisible();
+  expect(screen.getByText(/lines in between were lost/)).toBeVisible();
+
+  rerender(
+    <DeveloperLogViewer status='error' view={null} errorMessage='requires Ready startup state' onRefresh={onRefresh} />
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('Logs could not be read.');
+  expect(screen.getByRole('alert')).toHaveTextContent('requires Ready startup state');
+  expect(screen.getByRole('button', { name: 'Refresh logs' })).toBeEnabled();
+});
+
+function fixtureLogsView(): DesktopLogsView {
+  const snapshot = developerLogFixtureSnapshot();
+  return {
+    entries: snapshot.entries,
+    oldestSeq: snapshot.oldest_seq,
+    nextSeq: snapshot.next_seq,
+    maxEntries: snapshot.max_entries,
+    maxBytes: snapshot.max_bytes,
+    droppedOlder: false,
+    gapSinceLastRefresh: false,
+  };
+}

@@ -131,6 +131,8 @@ mod tests {
                 "fetch_community_node_policies",
                 "get_pending_device_restore_frontend_state",
                 "acknowledge_pending_device_restore_frontend_state",
+                "set_developer_mode_enabled",
+                "read_desktop_logs",
             ] {
                 assert!(
                     tauri::test::get_ipc_response(&webview, request(command)).is_err(),
@@ -163,6 +165,8 @@ mod tests {
             "check_app_update",
             "download_app_update",
             "install_app_update",
+            "set_developer_mode_enabled",
+            "read_desktop_logs",
         ] {
             assert!(!command_allowed_during_exit(command, true));
             assert!(command_allowed_during_exit(command, false));
@@ -212,6 +216,8 @@ mod tests {
             "check_app_update",
             "download_app_update",
             "install_app_update",
+            "set_developer_mode_enabled",
+            "read_desktop_logs",
         ] {
             assert!(!command_allowed(command, &status), "{command}");
         }

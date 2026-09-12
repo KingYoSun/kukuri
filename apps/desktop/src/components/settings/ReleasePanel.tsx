@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { copyTextToClipboard } from '@/lib/utils';
+import { downloadTextFile } from '@/lib/downloadTextFile';
 import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 import {
   buildSafeDiagnosticReport,
@@ -115,13 +116,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   }, [diagnosticReportText, t]);
 
   const exportDiagnosticReport = useCallback(() => {
-    const blob = new Blob([diagnosticReportText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'kukuri-diagnostics.txt';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile('kukuri-diagnostics.txt', diagnosticReportText);
     setDiagnosticReport(diagnosticReportText);
     setDiagnosticMessage(t('settings:release.diagnostics.exported'));
   }, [diagnosticReportText, t]);

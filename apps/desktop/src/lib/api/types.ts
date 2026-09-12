@@ -219,6 +219,24 @@ export type CommunityNodeConfigInput = {
 // 'error' は fetch 失敗、'loading' は取得中（client 側で付与）。
 // 分散通報ルーティング (#310) の送信リクエスト。通報先は client が provenance + manifest
 // から解決し、その report_endpoint を載せて渡す。snake_case は Rust 由来の JSON 形状。
+/// #978: Tauri backend の in-memory tracing ring buffer の 1 行。`seq` はプロセス内で単調増加する。
+export type DesktopLogEntry = {
+  seq: number;
+  timestamp_ms: number;
+  level: string;
+  target: string;
+  message: string;
+};
+
+/// `read_desktop_logs` の応答。`oldest_seq` は buffer に残る最古の行、`next_seq` は次に採番される値。
+export type DesktopLogSnapshot = {
+  entries: DesktopLogEntry[];
+  oldest_seq: number | null;
+  next_seq: number;
+  max_entries: number;
+  max_bytes: number;
+};
+
 export interface DesktopApi {
   createPost(
     topic: string,
@@ -538,6 +556,8 @@ export interface DesktopApi {
   readCommunityNodeIndexingStatus(
     request: CommunityNodeIndexingStatusRequest
   ): Promise<IndexingStatusResponse>;
+  /// #978: 開発者モードON時だけ backend が応答する。OFF 時は呼ばない(backend も拒否する)。
+  readDesktopLogs(afterSeq?: number | null, limit?: number | null): Promise<DesktopLogSnapshot>;
   submitCommunityNodeReport(
     request: SubmitCommunityNodeReportRequest
   ): Promise<SubmitCommunityNodeReportResult>;

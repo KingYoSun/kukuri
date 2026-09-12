@@ -4,6 +4,8 @@
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
     {"tauri":"commands::system_locale::get_system_locales","excluded":"os","reason":"#917: desktopの同意前UI言語を選ぶOS local read。UIを持たないCLIの業務commandには追加しない。"},
+    {"tauri":"commands::developer_logs::set_developer_mode_enabled","excluded":"gui_diagnostics","reason":"#978: GUIの開発者モード(localStorage)をGUI processへ写すin-memoryミラー。CLI／daemonに開発者モードの表示状態はない。"},
+    {"tauri":"commands::developer_logs::read_desktop_logs","excluded":"gui_diagnostics","reason":"#978: GUI process内のin-memory tracing ring bufferの読み取り。CLI／daemonは標準出力で同じログを得るため業務commandには追加しない。"},
     {"tauri":"desktop_lifecycle::restart_after_update","excluded":"os","reason":"署名付きGUI更新後にruntimeを停止してアプリを再起動するOS連携。CLI／daemonの更新や再起動は行わない。"},
     {"tauri":"app_update::check_app_update","excluded":"os","reason":"GUI配布形式に対応するTauri updater確認。CLIはpackageの自動更新対象外。"},
     {"tauri":"app_update::download_app_update","excluded":"os","reason":"GUI更新packageの取得・署名検証。CLIはpackageの自動更新対象外。"},
