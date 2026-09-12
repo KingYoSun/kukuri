@@ -121,10 +121,10 @@ v0.2.2-preview.1（PR #971を含む）のDebian 13実機で、「最新です」
 
 | ID | 条件 | 実装・検証 |
 | --- | --- | --- |
-| AC-6 | 確認完了時に完了時刻（時:分、秒なし）を結果と共に通常モードで表示し、結果が前回と同じでも確認ごとに更新する。失敗時も同様 | `UpdateState.lastCheckedAt`（`releaseReadiness.ts`）、`useAppUpdateStore.ts`の確認完了3分岐、`ReleasePanel.tsx`の`checkedAt`行、`formatLocalizedClockTime`。`an immediate up-to-date result shows when this check completed`（3locale）、`a failed check also shows when it completed`、store `checkForUpdate records when a %s check completed`（3結果）、browser 18条件 |
+| AC-6 | 確認完了時に完了時刻（時:分:秒）を結果と共に通常モードで表示し、結果が前回と同じでも確認ごとに更新する。失敗時も同様 | `UpdateState.lastCheckedAt`（`releaseReadiness.ts`）、`useAppUpdateStore.ts`の確認完了3分岐、`ReleasePanel.tsx`の`checkedAt`行、既存`formatLocalizedTime`。`an immediate up-to-date result shows when this check completed`（3locale）、`a failed check also shows when it completed`、store `checkForUpdate records when a %s check completed`（3結果）、browser 18条件 |
 | AC-7 | 確認開始から最低1秒は確認中のaccessible name・`aria-busy`・無効を保つ。1秒を超える確認は完了まで続く。結果の反映は遅らせない | `useAcknowledgedPending`を`ProfileRefreshButton`から機械的に抽出して両者で使用。`a fast check keeps the check button pending for one second`、`a slow check stays pending beyond one second`、既存`ProfileRefreshButton.test.tsx` 4件は無変更で成功 |
 
-秒の表示はユーザー判断で採用しない。連続再確認の識別や自動テスターの視認ではなく、利用者の使いやすさを優先する。時刻の表示だけのための自動scroll／focus移動は追加しない（INVAR-4）。download／install失敗では直前の確認時刻を保持し、確認の失敗だけが時刻を更新する。
+時刻の粒度は計画時に時:分としたが、ユーザー判断（2026-09-12）で秒まで表示する既存`formatLocalizedTime`に変更した。時刻の表示だけのための自動scroll／focus移動は追加しない（INVAR-4）。download／install失敗では直前の確認時刻を保持し、確認の失敗だけが時刻を更新する。
 
 ### inventory / transitionの差分
 

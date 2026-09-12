@@ -191,7 +191,7 @@ test.each([
 
 // #956 Reopen: 高速完了でも「この確認が完了した」ことが分かる（AC-6）。
 function expectedClockTime(locale: string, at: number): string {
-  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(at);
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(at);
 }
 
 test.each(['en', 'ja', 'zh-CN'])('an immediate up-to-date result shows when this check completed in %s', async (locale) => {

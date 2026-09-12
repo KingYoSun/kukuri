@@ -9,14 +9,14 @@ const copy = {
     failed: '无法连接到更新服务器。', checkedAt: '已于' },
 };
 
-// #956 Reopen: 結果が前回と同じでも、この確認の完了時刻（時:分）で区別できる（AC-6）。
+// #956 Reopen: 結果が前回と同じでも、この確認の完了時刻（時:分:秒）で区別できる（AC-6）。
 const CLOCK_START = Date.UTC(2026, 8, 12, 3, 4, 0);
 
 async function advanceClock(page: Page, minutes: number): Promise<string> {
   const at = CLOCK_START + minutes * 60_000;
   await page.clock.setFixedTime(at);
   return page.evaluate((at) => new Intl.DateTimeFormat(
-    document.documentElement.lang, { hour: 'numeric', minute: '2-digit' }
+    document.documentElement.lang, { hour: 'numeric', minute: '2-digit', second: '2-digit' }
   ).format(at), at);
 }
 

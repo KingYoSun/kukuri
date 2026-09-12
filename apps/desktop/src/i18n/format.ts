@@ -20,18 +20,6 @@ export function formatLocalizedTime(
   }).format(date);
 }
 
-/** 時:分だけの短い時刻。秒は表示しない（#956 更新確認の完了時刻）。 */
-export function formatLocalizedClockTime(
-  value: Date | number | string,
-  locale?: string | null
-): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return new Intl.DateTimeFormat(getResolvedLocale(locale), {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
 export function formatLocalizedDateTime(
   value: Date | number | string,
   locale?: string | null

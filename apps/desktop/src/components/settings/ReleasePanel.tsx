@@ -9,7 +9,7 @@ import { copyTextToClipboard } from '@/lib/utils';
 import { downloadTextFile } from '@/lib/downloadTextFile';
 import { useAcknowledgedPending } from '@/lib/useAcknowledgedPending';
 import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
-import { formatLocalizedClockTime } from '@/i18n/format';
+import { formatLocalizedTime } from '@/i18n/format';
 import {
   buildSafeDiagnosticReport,
   classifyUpdateError,
@@ -153,9 +153,9 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const { busy: checkPending, acknowledge: acknowledgeCheck } = useAcknowledgedPending(
     updateState.status === 'checking'
   );
-  // #956: 結果が前回と同じでも、この確認がいつ完了したかを時:分で示す。
+  // #956: 結果が前回と同じでも、この確認がいつ完了したかを時:分:秒で示す。
   const checkedAtLabel = updateState.lastCheckedAt != null
-    ? t('settings:release.update.checkedAt', { time: formatLocalizedClockTime(updateState.lastCheckedAt) })
+    ? t('settings:release.update.checkedAt', { time: formatLocalizedTime(updateState.lastCheckedAt) })
     : null;
   const communityNodeDisclosures = useMemo(
     () => buildCommunityNodeDisclosures(communityNodeConfig, communityNodeManifests),
