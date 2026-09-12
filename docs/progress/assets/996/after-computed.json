@@ -1,0 +1,310 @@
+[
+  {
+    "stage": "after",
+    "theme": "dark",
+    "width": 1600,
+    "columns": [
+      {
+        "id": "column:timeline:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 39,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 479,
+          "bottom": 924,
+          "left": 39
+        }
+      },
+      {
+        "id": "column:profile:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 495,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 935,
+          "bottom": 924,
+          "left": 495
+        }
+      },
+      {
+        "id": "column:explore:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 951,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 1391,
+          "bottom": 924,
+          "left": 951
+        }
+      },
+      {
+        "id": "column:notifications:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 1407,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 1847,
+          "bottom": 924,
+          "left": 1407
+        }
+      },
+      {
+        "id": "column:messages:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 1863,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 2303,
+          "bottom": 924,
+          "left": 1863
+        }
+      }
+    ]
+  },
+  {
+    "stage": "after",
+    "theme": "dark",
+    "width": 390,
+    "columns": [
+      {
+        "id": "column:timeline:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": -390,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 0,
+          "bottom": 844,
+          "left": -390
+        }
+      },
+      {
+        "id": "column:profile:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 390,
+          "bottom": 844,
+          "left": 0
+        }
+      },
+      {
+        "id": "column:explore:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 390,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 780,
+          "bottom": 844,
+          "left": 390
+        }
+      },
+      {
+        "id": "column:notifications:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 780,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 1170,
+          "bottom": 844,
+          "left": 780
+        }
+      },
+      {
+        "id": "column:messages:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(33, 33, 33)",
+        "rect": {
+          "x": 1170,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 1560,
+          "bottom": 844,
+          "left": 1170
+        }
+      }
+    ]
+  },
+  {
+    "stage": "after",
+    "theme": "light",
+    "width": 1600,
+    "columns": [
+      {
+        "id": "column:timeline:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 40,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 480,
+          "bottom": 924,
+          "left": 40
+        }
+      },
+      {
+        "id": "column:profile:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 496,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 936,
+          "bottom": 924,
+          "left": 496
+        }
+      },
+      {
+        "id": "column:explore:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 952,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 1392,
+          "bottom": 924,
+          "left": 952
+        }
+      },
+      {
+        "id": "column:notifications:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 1408,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 1848,
+          "bottom": 924,
+          "left": 1408
+        }
+      },
+      {
+        "id": "column:messages:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 1864,
+          "y": 12,
+          "width": 440,
+          "height": 912,
+          "top": 12,
+          "right": 2304,
+          "bottom": 924,
+          "left": 1864
+        }
+      }
+    ]
+  },
+  {
+    "stage": "after",
+    "theme": "light",
+    "width": 390,
+    "columns": [
+      {
+        "id": "column:timeline:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": -390,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 0,
+          "bottom": 844,
+          "left": -390
+        }
+      },
+      {
+        "id": "column:profile:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 390,
+          "bottom": 844,
+          "left": 0
+        }
+      },
+      {
+        "id": "column:explore:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 390,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 780,
+          "bottom": 844,
+          "left": 390
+        }
+      },
+      {
+        "id": "column:notifications:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 780,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 1170,
+          "bottom": 844,
+          "left": 780
+        }
+      },
+      {
+        "id": "column:messages:kukuri%3Atopic%3Ageneral:-:-",
+        "background": "rgb(255, 255, 255)",
+        "rect": {
+          "x": 1170,
+          "y": 0,
+          "width": 390,
+          "height": 844,
+          "top": 0,
+          "right": 1560,
+          "bottom": 844,
+          "left": 1170
+        }
+      }
+    ]
+  }
+]

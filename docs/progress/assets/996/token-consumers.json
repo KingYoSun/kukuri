@@ -1,0 +1,592 @@
+[
+  {
+    "path": "apps/desktop/src/components/ConsentGateView.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--muted-foreground"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/core/CommunityIndexWorkspace.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--muted-foreground"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/core/CommunityNodeAdvisoryPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/LegalDocumentView.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--muted-foreground",
+      "--muted-foreground-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/AccountKeyPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent-foreground",
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-accent-soft",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/AppearancePanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent-foreground",
+      "--border-accent",
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-active",
+      "--surface-badge-neutral",
+      "--surface-button-ghost-hover",
+      "--surface-panel-muted",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/CommunityNodeConsentDialog.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/CommunityNodeOnboardingDialog.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--muted-foreground"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/CommunityNodePanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--shadow-dropdown",
+      "--surface-panel",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/ConnectivityPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--shadow-dropdown",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/DeveloperLogViewer.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--destructive",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/DeveloperPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/DeviceBackupPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/KeyboardPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-input",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/NotificationsPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground-soft",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/ReleasePanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground-soft",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/SafetyPanel.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/SettingsDiagnosticList.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--destructive",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--shadow-dropdown",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/SettingsMetricGrid.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-accent",
+      "--border-destructive",
+      "--border-subtle",
+      "--border-warning",
+      "--destructive",
+      "--muted-foreground",
+      "--shadow-dropdown",
+      "--surface-active",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/settings/SettingsStoryFrame.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/shell/ColumnContextSelect.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--surface-panel-accent"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/shell/SavedWorkspaceLayouts.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--background",
+      "--surface-panel-solid"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/shell/SavedWorkspaceLayouts.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/StatusBadge.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/badge.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent-foreground",
+      "--border-accent",
+      "--border-destructive",
+      "--border-subtle",
+      "--border-warning",
+      "--destructive",
+      "--foreground",
+      "--muted-foreground",
+      "--surface-accent-soft",
+      "--surface-badge-neutral"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/button.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/button.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--shadow-button-primary",
+      "--surface-button-ghost-hover"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/card.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--muted-foreground",
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/context-action-menu.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/field.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--shell-background"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/field.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--destructive",
+      "--muted-foreground",
+      "--muted-foreground-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/input.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle-strong",
+      "--muted-foreground-soft",
+      "--ring",
+      "--surface-input"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/notice.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent-foreground",
+      "--border-accent",
+      "--border-destructive",
+      "--border-subtle",
+      "--border-warning",
+      "--destructive",
+      "--shadow-dropdown",
+      "--surface-accent-soft",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/select.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle-strong",
+      "--ring",
+      "--surface-input"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/components/ui/textarea.tsx",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-subtle-strong",
+      "--muted-foreground-soft",
+      "--ring",
+      "--surface-input"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/stories/foundations/Elevation.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--shell-background",
+      "--surface-panel"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/stories/foundations/Spacing.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--shell-background",
+      "--surface-panel",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/stories/foundations/Tokens.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--background",
+      "--border-subtle",
+      "--destructive",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--primary-foreground",
+      "--shell-background",
+      "--surface-accent-soft",
+      "--surface-input",
+      "--surface-panel",
+      "--surface-panel-accent",
+      "--surface-panel-muted",
+      "--surface-panel-soft"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/stories/foundations/Typography.stories.tsx",
+    "inventory": "INV-4",
+    "tokens": [
+      "--border-subtle",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--shell-background",
+      "--surface-panel",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/stories/reviews/variable-span-column-workspace.css",
+    "inventory": "INV-4",
+    "tokens": [
+      "--accent",
+      "--border-accent",
+      "--border-subtle",
+      "--border-subtle-strong",
+      "--foreground",
+      "--foreground-strong",
+      "--muted-foreground",
+      "--primary-foreground",
+      "--ring",
+      "--scrollbar-thumb",
+      "--scrollbar-track",
+      "--shadow-button-primary",
+      "--shadow-dropdown",
+      "--shadow-panel",
+      "--shell-background",
+      "--surface-accent-soft",
+      "--surface-panel-accent",
+      "--surface-panel-muted",
+      "--surface-panel-solid",
+      "--surface-raised"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/base.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--border-subtle",
+      "--border-subtle-strong",
+      "--foreground",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--ring",
+      "--scrollbar-thumb",
+      "--scrollbar-thumb-hover",
+      "--scrollbar-track",
+      "--shadow-panel",
+      "--shell-background",
+      "--surface-input",
+      "--surface-panel",
+      "--surface-panel-muted",
+      "--surface-selection"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/column-span-workspace.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--border-subtle",
+      "--foreground",
+      "--shadow-panel",
+      "--surface-accent-soft",
+      "--surface-panel-solid"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/mobile-column-workspace.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--border-subtle",
+      "--muted-foreground",
+      "--shadow-panel",
+      "--surface-panel-solid"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/shell-phase1-part1.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--border-accent",
+      "--border-subtle",
+      "--border-subtle-strong",
+      "--danger",
+      "--destructive",
+      "--foreground",
+      "--foreground-strong",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--primary-foreground",
+      "--shadow-panel",
+      "--surface-accent-soft",
+      "--surface-avatar",
+      "--surface-button-ghost",
+      "--surface-button-secondary",
+      "--surface-input",
+      "--surface-panel",
+      "--surface-panel-accent",
+      "--surface-panel-muted",
+      "--surface-panel-soft",
+      "--surface-panel-solid",
+      "--surface-raised"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/shell-phase1-part2.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--border-accent",
+      "--border-subtle",
+      "--foreground",
+      "--foreground-strong",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--primary-foreground",
+      "--surface-accent-soft",
+      "--surface-badge-neutral",
+      "--surface-media-loading",
+      "--surface-media-ready",
+      "--surface-panel",
+      "--surface-panel-muted",
+      "--surface-panel-soft",
+      "--surface-skeleton"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/shell-phase1-part3.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--border-accent",
+      "--border-subtle",
+      "--border-warning",
+      "--foreground",
+      "--foreground-strong",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--ring",
+      "--surface-accent-soft",
+      "--surface-active",
+      "--surface-avatar",
+      "--surface-button-ghost-hover",
+      "--surface-input",
+      "--surface-overlay",
+      "--surface-panel",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/shell-phase1-part4.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--border-accent",
+      "--border-subtle",
+      "--foreground",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--shadow-dropdown",
+      "--surface-active",
+      "--surface-button-ghost-hover",
+      "--surface-input",
+      "--surface-overlay",
+      "--surface-panel",
+      "--surface-panel-muted"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/shell-scoped-overrides.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--background",
+      "--border-accent",
+      "--border-subtle",
+      "--foreground",
+      "--muted-foreground",
+      "--muted-foreground-soft",
+      "--scrollbar-thumb",
+      "--scrollbar-track",
+      "--shadow-panel",
+      "--surface-accent-soft",
+      "--surface-active",
+      "--surface-button-ghost",
+      "--surface-button-ghost-hover",
+      "--surface-panel",
+      "--surface-panel-accent",
+      "--surface-panel-muted",
+      "--surface-panel-soft",
+      "--surface-panel-solid"
+    ]
+  },
+  {
+    "path": "apps/desktop/src/styles/tokens.css",
+    "inventory": "INV-2/INV-3",
+    "tokens": [
+      "--accent",
+      "--accent-foreground",
+      "--background",
+      "--border-subtle",
+      "--destructive",
+      "--foreground",
+      "--muted-foreground",
+      "--primary-foreground",
+      "--surface-input",
+      "--surface-panel"
+    ]
+  }
+]

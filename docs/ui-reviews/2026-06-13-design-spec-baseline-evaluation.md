@@ -1,5 +1,8 @@
 # 2026-06-13 design spec baseline evaluation
 
+- Status: superseded
+- Superseded by: [Graphite / Orange（配色のみ）](2026-09-12-issue-996-graphite-orange-theme.md)
+
 - PR: issue [#308](https://github.com/KingYoSun/kukuri/issues/308) のための turn（DESIGN.md をビジュアル仕様へ整備）。
 - Figma: N/A。本 turn で Figma レビューフローは破棄した（#308・[ADR 0014](../adr/0014-uiux-dev-flow.md) 参照）。
 - Summary: 新しい root [`DESIGN.md`](../../DESIGN.md)（ビジュアル仕様の正本）を整備する前提として、現行 desktop UI のビジュアルシステムをベースライン評価した。**本記録は評価のみ**で、コードの是正は行わない。是正は別 Issue で扱い、各ギャップは `DESIGN.md` の該当セクションに「理想（target）」として定義済み。

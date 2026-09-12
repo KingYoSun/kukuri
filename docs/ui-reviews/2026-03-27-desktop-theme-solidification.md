@@ -1,5 +1,8 @@
 # 2026-03-27 desktop theme solidification
 
+- Status: superseded
+- Superseded by: [Graphite / Orange（配色のみ）](2026-09-12-issue-996-graphite-orange-theme.md)
+
 - Figma: なし。既存 shell surface の theme token と settings drawer を更新する visual refinement として扱い、standalone Figma proposal は作成していない。例外として記録する。
 - Storybook review surface: `Foundations/Tokens/DesktopWidth`, `UI/Button/Default`, `UI/Card/Default`, `Settings/AppearancePanel/Default`, `Shell/SettingsDrawer/AppearanceOpen`
 - Summary: `apps/desktop` の shell token を `dark` / `light` の 2 系統へ再編し、panel・button・badge・notice・settings card・post/media chrome の背景を solid surface に統一した。settings drawer に `Appearance` section を追加し、theme 切り替えを local storage に保存するようにした。`DesktopApi` / Tauri invoke / Rust contract は変更していない。
