@@ -436,6 +436,7 @@
       "install": "Install",
       "available": "Update {{version}} is available.",
       "previouslyAvailable": "Previously found update: {{version}}. Checking its current availability.",
+      "checkedAt": "Checked at {{time}}",
       "ready": "Update ready to install",
       "readyDescription": "The update has been downloaded and verified. Restart to finish installing.",
       "restartNow": "Restart and install now",

@@ -40,6 +40,9 @@ function updateStatus(status: 'idle' | 'checking' | 'up_to_date' | 'available' |
       ...INITIAL_UPDATE_STATE, status,
       availableVersion: status === 'available' ? '0.2.2-preview.1' : null,
       lastError: status === 'failed' ? 'network unavailable' : null,
+      lastCheckedAt: ['up_to_date', 'available', 'failed'].includes(status)
+        ? Date.UTC(2026, 8, 12, 3, 4, 0)
+        : null,
     },
     pendingUpdate: status === 'available'
       ? { version: '0.2.2-preview.1', download: async () => {}, install: async () => {} }

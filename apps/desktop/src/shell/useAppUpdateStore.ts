@@ -20,6 +20,7 @@ export const INITIAL_UPDATE_STATE: UpdateState = {
   downloadedBytes: 0,
   contentLength: null,
   lastError: null,
+  lastCheckedAt: null,
 };
 
 function updateStateFromError(currentVersion: string, error: unknown): UpdateState {
@@ -28,6 +29,13 @@ function updateStateFromError(currentVersion: string, error: unknown): UpdateSta
     currentVersion,
     availableVersion: null,
     lastError: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function updateFailureFromError(state: UpdateState, error: unknown): UpdateState {
+  return {
+    ...updateStateFromError(state.currentVersion, error),
+    lastCheckedAt: state.lastCheckedAt ?? null,
   };
 }
 
@@ -66,6 +74,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
             currentVersion,
             availableVersion: null,
             lastError: null,
+            lastCheckedAt: Date.now(),
           },
         });
         return;
@@ -77,11 +86,15 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
           currentVersion,
           availableVersion: update.version,
           lastError: null,
+          lastCheckedAt: Date.now(),
         },
       });
     } catch (error) {
       set((state) => ({
-        updateState: updateStateFromError(state.updateState.currentVersion, error),
+        updateState: {
+          ...updateStateFromError(state.updateState.currentVersion, error),
+          lastCheckedAt: Date.now(),
+        },
       }));
     }
   },
@@ -134,7 +147,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
       }));
     } catch (error) {
       set((state) => ({
-        updateState: updateStateFromError(state.updateState.currentVersion, error),
+        updateState: updateFailureFromError(state.updateState, error),
       }));
     }
   },
@@ -150,7 +163,7 @@ export const appUpdateStore = createStore<AppUpdateStore>((set, get) => ({
       await invoke('restart_after_update');
     } catch (error) {
       set((state) => ({
-        updateState: updateStateFromError(state.updateState.currentVersion, error),
+        updateState: updateFailureFromError(state.updateState, error),
       }));
     }
   },

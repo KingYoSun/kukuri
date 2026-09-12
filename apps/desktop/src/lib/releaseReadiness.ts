@@ -31,6 +31,8 @@ export type UpdateState = {
   downloadedBytes?: number;
   contentLength?: number | null;
   lastError?: string | null;
+  /** 直近の更新確認が完了した時刻(ms)。結果が前回と同じでも確認ごとに更新する。 */
+  lastCheckedAt?: number | null;
 };
 
 export type OsNotificationSettings = {
