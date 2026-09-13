@@ -243,4 +243,15 @@ T1で共有helperの全callerとsink逆引きを補完し、未分類を残さ�
 
 - Windows: 専用backendデータ `.codex/test-data/account-1005-windows` と専用WebView user dataでCN skip→初回profile→名前/ユーザー名保存→本人プロフィール反映、アカウントmenuの並びを確認。
 - Ubuntu24: `ssh local2` の `/tmp/kukuri-ui-1005` と専用app dataで起動。Remote DesktopをComputer Useで操作し、CN skip→初回profile→名前/ユーザー名保存→本人プロフィール反映を確認。
-- 新規作成・切替・logoutの実機通し、最終CI、独立監査は確認中。未確認をPASSとは扱わない。
+- 新規作成・切替・logout・restart・同じ暗号化鍵の再importはWindows/Ubuntu24双方で成功。最終CIと監査の結果はPR #1006の固定headへ対応付ける。
+
+### 最終実機結果・境界証跡
+
+- Windows: A（Account QA Windows）→明示作成B→B logoutでAへ復帰→Aのlast logoutでC生成→アプリ再起動後もC維持→事前にGUIでexportしたA鍵を追加Dialogでpreview/import→A切替で元の名前/ユーザー名復帰。A/B directory保持、登録は除外、同じIDへ再登録を確認。
+- Ubuntu24: Remote Desktopの実pointer/keyboardで同じsequenceを実行。A（Account QA Ubuntu24）の名前/ユーザー名が再import後に復帰。新規B/最後のCは初回CN skip後に初回profile Dialogを表示し、再起動でもCのIDが維持された。
+- 画像と条件: [UI review record](../ui-reviews/2026-09-13-account-menu.md)。テスト専用データを使用し、端末の通常アカウントデータは対象にしない。
+- INVAR-5: `node_without_local_consent_is_never_contacted` PASS。実runtime+HTTP fixtureでscheduler/status読取後の policies/challenge/verify/consent-status/consent-accept/heartbeat/bootstrap hit全0。
+- INVAR-6: `queued_initial_profile_save_is_rejected_after_account_switch` PASS。guard待ちA保存要求をB切替後に解放して拒否し、A/B profile更新とregistry完了mutationが0。`InitialProfileSetup.test.tsx`でも遅延A応答後にB profileを維持。
+- 新scenarioは `desktop_account_lifecycle` としてharness test／fast+release+nightly inventoryへ登録済み。直接scenario実行とharness testはともにPASS。
+- CLI登録は既存136から139に増えるため、daemonのページ列挙期待値を139へ同期。全名前とschemaの整合はcommand_parity testが別途検証する。
+- コード監査: 8fe37337までの製品コードと境界testの独立監査でblocker0・未分類0。後続はscenarioのCI登録、テスト件数期待値、証跡文書のみ。最終head CI完了と合わせて監査担当が最終判定する。
