@@ -5,6 +5,7 @@ import {
   type ComponentProps,
   type RefObject,
 } from 'react';
+import { AccountMenu } from './AccountMenu';
 import { useTranslation } from 'react-i18next';
 import {
   Bell,
@@ -74,6 +75,7 @@ type DesktopShellControlCenterProps = TopicListProps & {
   onOpenChannelManagerForTopic: (topic: string) => void;
   onActivateColumn: (column: ColumnState) => void | Promise<void>;
   onOpenSettings: (section: SettingsSection) => void;
+  onOpenProfile: () => void;
   onOpenTesterFeedback: () => void;
 };
 
@@ -99,6 +101,7 @@ export function DesktopShellControlCenter({
   onOpenChannelManagerForTopic,
   onActivateColumn,
   onOpenSettings,
+  onOpenProfile,
   onOpenTesterFeedback,
   onSelectTopic,
   onSelectChannel,
@@ -241,6 +244,7 @@ export function DesktopShellControlCenter({
   return (
     <>
       <div className='shell-control-cluster'>
+        <AccountMenu onOpen={() => setOpen(false)} onManage={() => openSettings('account')} onProfile={onOpenProfile} />
         <Button
           ref={triggerRef}
           className='shell-control-center-trigger'

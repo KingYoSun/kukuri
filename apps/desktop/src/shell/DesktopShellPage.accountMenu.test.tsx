@@ -1,0 +1,62 @@
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { expect, test, vi } from 'vitest';
+import * as identity from '@/lib/api/identity';
+import * as session from '@/lib/accountSession';
+import { createDesktopMockApi } from '@/mocks/desktopApiMock';
+import { renderAtHash, setViewportWidth } from './DesktopShellPage.testHelpers';
+
+async function setup() {
+  setViewportWidth(1280);
+  const api = createDesktopMockApi();
+  const profile = await api.getMyProfile();
+  const a = { id: 'aaaaaaaaaaaaaaaa', pubkey: profile.pubkey, label: null, created_at: 1, last_used_at: 2 };
+  const b = { id: 'bbbbbbbbbbbbbbbb', pubkey: 'b'.repeat(64), label: null, created_at: 1, last_used_at: 1 };
+  vi.spyOn(identity, 'listAccounts').mockResolvedValue({ active_account_id: a.id, accounts: [a, b] });
+  vi.spyOn(identity, 'getProfileSetupRequired').mockResolvedValue(false);
+  vi.spyOn(identity, 'getAccountDisplay').mockResolvedValue([
+    { id: a.id, name: profile.name ?? null, display_name: profile.display_name ?? null, picture: null, unavailable: false },
+    { id: b.id, name: 'second-user', display_name: 'Second Account', picture: null, unavailable: false },
+  ]);
+  const change = vi.spyOn(session, 'changeAccountSession').mockResolvedValue(undefined);
+  renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral', api);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Account menu' }));
+  const menu = await screen.findByRole('menu', { name: 'Account menu' });
+  await within(menu).findByText('Second Account');
+  return { user, menu, change, a, b };
+}
+
+test('account menu orders profile first and switches a row without extra confirmation', async () => {
+  const { user, menu, change, b } = await setup();
+  const buttons = within(menu).getAllByRole('menuitem');
+  expect(buttons.map((button) => button.textContent)).toEqual(['View profile', 'Add account', 'Manage accounts', 'Log out']);
+  await user.click(within(menu).getByRole('menuitemradio', { name: /Second Account.*@second-user/ }));
+  expect(change).toHaveBeenCalledExactlyOnceWith(b.id, false);
+});
+
+test('logout requires yes and cancel leaves accounts unchanged', async () => {
+  const { user, menu, change, a } = await setup();
+  await user.click(within(menu).getByRole('menuitem', { name: 'Log out' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Log out of this account?' });
+  expect(within(dialog).getByText(/Local data stays here/)).toBeVisible();
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus());
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(change).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Account menu' }));
+  await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Log out' }));
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Yes' }));
+  expect(change).toHaveBeenCalledExactlyOnceWith(a.id, true);
+});
+
+test('view profile focuses an existing own column and does not duplicate it', async () => {
+  const { user, menu } = await setup();
+  await user.click(within(menu).getByRole('menuitem', { name: 'View profile' }));
+  await waitFor(() => expect(document.activeElement).toHaveAttribute('data-column-id'));
+  const first = document.activeElement;
+  const count = document.querySelectorAll('[data-column-id]').length;
+  await user.click(screen.getByRole('button', { name: 'Account menu' }));
+  await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'View profile' }));
+  await waitFor(() => expect(document.activeElement).toBe(first));
+  expect(document.querySelectorAll('[data-column-id]')).toHaveLength(count);
+});

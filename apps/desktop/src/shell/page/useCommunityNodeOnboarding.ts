@@ -44,6 +44,7 @@ export function useCommunityNodeOnboarding() {
   return {
     baseUrl: open ? candidate : null,
     dismiss: () => setOpen(false),
+    resume: () => setOpen(true),
     handOff: () => {
       handingOff.current = true;
       setOpen(false);

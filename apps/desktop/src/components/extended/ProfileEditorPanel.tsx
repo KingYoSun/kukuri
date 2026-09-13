@@ -26,6 +26,7 @@ type ProfileEditorPanelProps = {
   onBack?: () => void;
   onSave: FormEventHandler<HTMLFormElement>;
   onReset: () => void;
+  hideActions?: boolean;
 };
 
 export function ProfileEditorPanel({
@@ -44,6 +45,7 @@ export function ProfileEditorPanel({
   onBack,
   onSave,
   onReset,
+  hideActions = false,
 }: ProfileEditorPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
   const disabled = status === 'loading' || saving;
@@ -126,7 +128,7 @@ export function ProfileEditorPanel({
 
         {status !== 'error' && error ? <p className='error error-inline'>{error}</p> : null}
 
-        <div className='discovery-actions'>
+        {!hideActions ? <div className='discovery-actions'>
           <Button variant='secondary' type='submit' disabled={!dirty || disabled}>
             {t('editor.save')}
           </Button>
@@ -138,7 +140,7 @@ export function ProfileEditorPanel({
           >
             {t('editor.reset')}
           </Button>
-        </div>
+        </div> : null}
       </form>
     </Card>
   );

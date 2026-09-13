@@ -39,21 +39,116 @@ pub async fn preview_account_key_import(
 
 #[tauri::command]
 pub async fn import_account_key(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
     request: ImportAccountKeyRequest,
 ) -> Result<AccountRecord, CommandError> {
-    let app_data_dir = state.app_data_dir.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        kukuri_desktop_runtime::import_account_key_from_env(
-            &app_data_dir,
-            &request.export,
-            &request.passphrase,
-            request.label,
-        )
-    })
-    .await
-    .map_err(|error| CommandError::from(format!("import task failed: {error}")))?
-    .map_err(map_error)
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    require_runtime_operation_ready(&app_handle.state::<DesktopStartupState>().status())
+        .map_err(CommandError::from)?;
+    state
+        .host()
+        .import_account_key(request.export, request.passphrase, request.label)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn logout_account(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
+    request: SwitchAccountRequest,
+) -> Result<AccountRecord, CommandError> {
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    let startup = app_handle.state::<DesktopStartupState>();
+    require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
+    startup.set_status(DesktopStartupStatus::Initializing);
+    let result = state
+        .host()
+        .logout_account(&request.account_id)
+        .await
+        .map_err(map_error);
+    if result.is_ok() {
+        app_handle
+            .state::<OsNotificationBackground>()
+            .reset_for_account_switch();
+    }
+    if state.host().is_stopped() {
+        startup.set_status(kukuri_desktop_runtime::failed_startup_status(
+            kukuri_desktop_runtime::ClientStartupError::unknown(
+                "Account transition requires restart".to_string(),
+            ),
+            None,
+        ));
+    } else {
+        startup.set_status(DesktopStartupStatus::Ready);
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn get_profile_setup_required(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
+    request: SwitchAccountRequest,
+) -> Result<bool, CommandError> {
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    require_runtime_operation_ready(&app_handle.state::<DesktopStartupState>().status())
+        .map_err(CommandError::from)?;
+    state
+        .host()
+        .profile_setup_required(&request.account_id)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn get_account_display(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<kukuri_desktop_runtime::AccountDisplay>, CommandError> {
+    state.host().account_display().await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn save_initial_profile(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
+    request: kukuri_desktop_runtime::InitialProfileRequest,
+) -> Result<kukuri_core::Profile, CommandError> {
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    require_runtime_operation_ready(&app_handle.state::<DesktopStartupState>().status())
+        .map_err(CommandError::from)?;
+    state
+        .host()
+        .save_initial_profile(request)
+        .await
+        .map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn complete_profile_setup(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
+    request: SwitchAccountRequest,
+) -> Result<(), CommandError> {
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    require_runtime_operation_ready(&app_handle.state::<DesktopStartupState>().status())
+        .map_err(CommandError::from)?;
+    state
+        .host()
+        .complete_profile_setup(&request.account_id)
+        .await
+        .map_err(map_error)
 }
 
 #[tauri::command]
@@ -94,8 +189,16 @@ pub async fn switch_account(
     let record = match host.switch_account(request.account_id.as_str()).await {
         Ok(record) => record,
         Err(error) => {
-            // 旧 runtime は無傷のまま残っている。
-            startup.set_status(DesktopStartupStatus::Ready);
+            if host.is_stopped() {
+                startup.set_status(kukuri_desktop_runtime::failed_startup_status(
+                    kukuri_desktop_runtime::ClientStartupError::unknown(
+                        "Account transition requires restart".to_string(),
+                    ),
+                    None,
+                ));
+            } else {
+                startup.set_status(DesktopStartupStatus::Ready);
+            }
             return Err(map_error(error));
         }
     };

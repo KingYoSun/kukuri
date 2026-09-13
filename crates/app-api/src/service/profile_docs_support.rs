@@ -7,32 +7,42 @@ pub(crate) async fn persist_profile_doc(
 ) -> Result<()> {
     let replica = author_replica_id(profile.pubkey.as_str());
     docs_sync.open_replica(&replica).await?;
-    docs_sync
-        .apply_doc_op(
-            &replica,
-            DocOp::SetJson {
-                key: stable_key("profile", "latest"),
-                value: serde_json::to_value(AuthorProfileDocV1 {
-                    author_pubkey: profile.pubkey.clone(),
-                    name: profile.name.clone(),
-                    display_name: profile.display_name.clone(),
-                    about: profile.about.clone(),
-                    picture_asset: profile.picture_asset.clone(),
-                    updated_at: profile.updated_at,
-                    envelope_id: envelope.id.clone(),
-                })?,
-            },
-        )
-        .await?;
-    docs_sync
-        .apply_doc_op(
-            &replica,
-            DocOp::SetJson {
-                key: stable_key("envelopes", envelope.id.as_str()),
-                value: serde_json::to_value(envelope)?,
-            },
-        )
-        .await
+    let latest = serde_json::to_value(AuthorProfileDocV1 {
+        author_pubkey: profile.pubkey.clone(),
+        name: profile.name.clone(),
+        display_name: profile.display_name.clone(),
+        about: profile.about.clone(),
+        picture_asset: profile.picture_asset.clone(),
+        updated_at: profile.updated_at,
+        envelope_id: envelope.id.clone(),
+    })?;
+    for (key, value) in [
+        (stable_key("profile", "latest"), latest),
+        (
+            stable_key("envelopes", envelope.id.as_str()),
+            serde_json::to_value(envelope)?,
+        ),
+    ] {
+        let records = docs_sync
+            .query_replica_with_policy(
+                &replica,
+                DocQuery::Exact(key.clone()),
+                DocFetchPolicy::LocalOnly,
+            )
+            .await?;
+        let already_saved = records.iter().any(|record| {
+            serde_json::from_slice::<serde_json::Value>(&record.value)
+                .ok()
+                .as_ref()
+                == Some(&value)
+        });
+        if !already_saved {
+            docs_sync
+                .apply_doc_op(&replica, DocOp::SetJson { key, value })
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) async fn persist_profile_post_doc(

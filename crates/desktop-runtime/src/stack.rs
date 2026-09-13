@@ -350,11 +350,13 @@ impl SharedIrohStack {
             .await
     }
 
-    pub(crate) async fn shutdown(&self) {
+    pub(crate) async fn shutdown_checked(&self) -> Result<()> {
         if let Some(current) = self.current.lock().await.take() {
-            let _ =
-                tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+            current.transport.shutdown().await;
+            current.docs_sync.shutdown().await;
+            current.node.clone().shutdown().await?;
         }
+        Ok(())
     }
 
     #[cfg(test)]

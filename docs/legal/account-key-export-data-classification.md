@@ -7,13 +7,26 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - Durable / Transient: Durable
 - Canonical Source: ローカル registry ファイル(`<app_data>/accounts.json`、ユーザー端末のみ)
 - Replicated?: No(複製しない。ネットワークへ送らない)
-- Rebuildable From: 部分的に再構築可(`accounts/<id>/` ディレクトリ走査で id と鍵は回復できるが、label / timestamps は失われる)
+- Rebuildable From: 表示情報は各accountのlocal profileから再取得できる。登録・logout意思・履歴・初回完了はregistryを正とし、残存directoryから自動再登録しない。
 - Public Replica / Private Replica / Local Only: Local Only
 - Gossip Hint 必要有無: 不要
 - Blob 必要有無: 不要
 - SQLite projection 必要有無: 不要(runtime 構築前に読む起動時状態のため、DB とは独立した JSON ファイル)
 - 必須 contract: registry に秘密情報(秘密鍵・パスフレーズ)を含まないこと。`list_accounts` / `switch_account` の payload 形状。
 - 必須 scenario: flat レイアウトからの一括移行(中断・再開含む)で鍵が失われないこと(`crates/desktop-runtime/src/tests/accounts_migration.rs`)。
+
+### Feature Data Classification: ログアウト・初回プロフィール（#1005）
+- Feature 名: 履歴へ戻るlogout、他の登録がない場合の鍵生成、初回プロフィール案内
+- Durable / Transient: registryの履歴・生成予約・初回対象、生成鍵、署名済み初回保存journal、退避下書きはDurable。menu・Dialog・未送信入力はTransient。
+- Canonical Source: `accounts.json`、既存identity storage、account配下の `kukuri.initial-profile.json`、既存プロフィールprojection/blob。生成準備は `account-transitions/<sequence>-<account_id>/` に置く。
+- Replicated?: 管理・回復情報と下書きは複製しない。保存済みプロフィールとavatarは既存の公開・複製契約に従う。
+- Rebuildable From: journalは秘密鍵を含まない署名済みprofile envelopeとrequest hashを保持する。再試行は同じenvelopeで回復し、変更した明示入力は別保存として扱う。logout履歴・完了状態は空欄やdirectoryから推測しない。
+- Public Replica / Private Replica / Local Only: 管理状態はLocal Only。プロフィール保存内容は既存Public Replica。
+- Gossip Hint 必要有無: 新規不要。
+- Blob 必要有無: 既存avatarのローカル読み取り／明示プロフィール保存時の既存upload。
+- SQLite projection 必要有無: 管理用新規projectionなし。プロフィールは既存projection。
+- 必須 contract: データ非削除、直前登録への復帰、条件付き鍵生成と再試行時の再利用、commit読み戻し、旧runtime停止完了、秘密値非露出、CN同意/skip後のDialog、accountを跨がない保存と下書き回復。
+- 必須 scenario: `tests/account_logout.rs` の永続往復と初回保存回復、Tauri実機のlogout→restart→再import。バックアップは従来の1account内容の範囲を維持し、端末のlogout履歴や生成準備directoryを新たに移行しない。
 
 ### Feature Data Classification: アカウント鍵エクスポート
 - Feature 名: アカウント鍵の暗号化エクスポート・インポート(account key export)

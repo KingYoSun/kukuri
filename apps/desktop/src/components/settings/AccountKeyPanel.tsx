@@ -1,10 +1,9 @@
+import { AccountKeyImportForm } from './AccountKeyImportForm';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
   AccountKeyExport,
-  AccountKeyImportPreview,
-  AccountRecord,
   AccountsSnapshot,
 } from '@/lib/api/types.generated';
 
@@ -16,13 +15,10 @@ import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
 import {
   exportAccountKey,
-  importAccountKey,
   listAccounts,
-  previewAccountKeyImport,
-  switchAccount,
 } from '@/lib/api/identity';
 import { copyTextToClipboard } from '@/lib/utils';
-import { COLUMN_DRAFT_STORAGE_KEY } from '@/shell/columnDraftPersistence';
+import { changeAccountSession } from '@/lib/accountSession';
 
 const MIN_PASSPHRASE_CHARS = 8;
 
@@ -51,14 +47,6 @@ export function AccountKeyPanel({ onOpenDeviceBackup }: AccountKeyPanelProps = {
   const [exportResult, setExportResult] = useState<AccountKeyExport | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportCopied, setExportCopied] = useState(false);
-
-  const [importText, setImportText] = useState('');
-  const [importPreview, setImportPreview] = useState<AccountKeyImportPreview | null>(null);
-  const [importPassphrase, setImportPassphrase] = useState('');
-  const [importLabel, setImportLabel] = useState('');
-  const [importPending, setImportPending] = useState(false);
-  const [importResult, setImportResult] = useState<AccountRecord | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
 
   const [switchPendingId, setSwitchPendingId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -106,50 +94,11 @@ export function AccountKeyPanel({ onOpenDeviceBackup }: AccountKeyPanelProps = {
     setExportCopied(copied);
   };
 
-  const handlePreviewImport = async () => {
-    setImportError(null);
-    setImportResult(null);
-    try {
-      setImportPreview(await previewAccountKeyImport(importText.trim()));
-    } catch (error) {
-      setImportPreview(null);
-      setImportError(errorMessage(error));
-    }
-  };
-
-  const handleImport = async () => {
-    setImportPending(true);
-    setImportError(null);
-    try {
-      const record = await importAccountKey(
-        importText.trim(),
-        importPassphrase,
-        importLabel.trim() || undefined
-      );
-      setImportResult(record);
-      setImportPassphrase('');
-      await refreshAccounts();
-    } catch (error) {
-      setImportError(errorMessage(error));
-    } finally {
-      setImportPending(false);
-    }
-  };
-
   const handleSwitch = async (accountId: string) => {
     setSwitchPendingId(accountId);
     setSwitchError(null);
     try {
-      await switchAccount(accountId);
-      // 下書きは本人性に紐づく内容のため、他アカウントへ持ち越さない。
-      try {
-        window.localStorage.removeItem(COLUMN_DRAFT_STORAGE_KEY);
-      } catch {
-        // localStorage が使えない環境では持ち越し防止をあきらめる。
-      }
-      // runtime は切替済み。UI 状態を新アカウントで作り直すために再読み込みする
-      // (アプリ・プロセスの再起動は不要)。
-      window.location.reload();
+      await changeAccountSession(accountId);
     } catch (error) {
       setSwitchError(errorMessage(error));
       setSwitchPendingId(null);
@@ -288,88 +237,7 @@ export function AccountKeyPanel({ onOpenDeviceBackup }: AccountKeyPanelProps = {
         ) : null}
       </section>
 
-      <section className='space-y-3'>
-        <h4 className='text-sm font-semibold text-foreground'>
-          {t('settings:accountKey.import.title')}
-        </h4>
-        <Field label={t('settings:accountKey.import.inputLabel')}>
-          <Textarea
-            rows={4}
-            value={importText}
-            onChange={(event) => {
-              setImportText(event.currentTarget.value);
-              setImportPreview(null);
-              setImportResult(null);
-            }}
-            data-testid='import-input'
-          />
-        </Field>
-        <Button
-          variant='secondary'
-          disabled={importText.trim().length === 0}
-          onClick={() => void handlePreviewImport()}
-          data-testid='import-preview-button'
-        >
-          {t('settings:accountKey.import.previewButton')}
-        </Button>
-        {importPreview ? (
-          <div className='space-y-3' data-testid='import-preview'>
-            <Field label={t('settings:accountKey.import.fingerprintLabel')}>
-              <p className='break-all font-mono text-xs text-[var(--muted-foreground)]'>
-                {importPreview.public_key}
-              </p>
-            </Field>
-            {importPreview.already_registered ? (
-              <Notice tone='destructive'>
-                {t('settings:accountKey.import.alreadyRegistered')}
-              </Notice>
-            ) : null}
-            <Field label={t('settings:accountKey.import.passphraseLabel')}>
-              <Input
-                type='password'
-                value={importPassphrase}
-                onChange={(event) => setImportPassphrase(event.currentTarget.value)}
-                data-testid='import-passphrase'
-              />
-            </Field>
-            <Field label={t('settings:accountKey.import.labelLabel')}>
-              <Input
-                value={importLabel}
-                onChange={(event) => setImportLabel(event.currentTarget.value)}
-                data-testid='import-label'
-              />
-            </Field>
-            <Button
-              disabled={
-                importPending ||
-                importPassphrase.length === 0 ||
-                importPreview.already_registered
-              }
-              onClick={() => void handleImport()}
-              data-testid='import-submit'
-            >
-              {importPending
-                ? t('settings:accountKey.import.pending')
-                : t('settings:accountKey.import.submit')}
-            </Button>
-          </div>
-        ) : null}
-        {importError ? <Notice tone='destructive'>{importError}</Notice> : null}
-        {importResult ? (
-          <Notice tone='accent' data-testid='import-success'>
-            {t('settings:accountKey.import.success')}
-            <Button
-              className='ml-3'
-              variant='secondary'
-              disabled={switchPendingId !== null}
-              onClick={() => void handleSwitch(importResult.id)}
-              data-testid='import-switch-now'
-            >
-              {t('settings:accountKey.import.switchNow')}
-            </Button>
-          </Notice>
-        ) : null}
-      </section>
+      <AccountKeyImportForm onImported={refreshAccounts} onSwitch={handleSwitch} switching={switchPendingId !== null} />
     </Card>
   );
 }

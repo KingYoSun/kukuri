@@ -11,6 +11,8 @@
 //! 場所から読めるようにする。registry 書き込み後の残骸は次回起動時に再開する。
 
 use std::fs;
+pub(crate) mod display;
+pub(crate) mod lifecycle;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -76,6 +78,14 @@ struct AccountsRegistryFile {
     version: u32,
     active_account_id: String,
     accounts: Vec<AccountRecord>,
+    #[serde(default)]
+    history: Vec<String>,
+    #[serde(default)]
+    profile_setup: Vec<String>,
+    #[serde(default)]
+    logout_sequence: u64,
+    #[serde(default)]
+    pending_logout: Option<lifecycle::PreparedLogout>,
 }
 
 /// アカウント一覧とアクティブ選択のスナップショット。
@@ -288,7 +298,17 @@ pub(crate) fn add_account(
 
     let db_path = account_db_path(app_data_dir, id.as_str());
     create_account_dir(&db_path)?;
-    persist_keys(&db_path, mode, keys)?;
+    if let Some(existing) = load_existing_keys(&db_path, mode)? {
+        if existing.public_key_hex() != pubkey {
+            bail!("retained account identity does not match imported key");
+        }
+    } else {
+        // An existing DB without a readable identity is not a new account.
+        if db_path.exists() {
+            bail!("retained account identity is missing");
+        }
+        persist_keys(&db_path, mode, keys)?;
+    }
     verify_persisted_identity(&db_path, mode, pubkey.as_str())?;
 
     let now = now_millis();
@@ -311,6 +331,7 @@ pub(crate) fn add_account(
 pub fn set_active_account(app_data_dir: &Path, account_id: &str) -> Result<AccountRecord> {
     let mut registry = load_registry(app_data_dir)?
         .ok_or_else(|| anyhow!("accounts registry is not initialized"))?;
+    let previous = registry.active_account_id.clone();
     let record = registry
         .accounts
         .iter_mut()
@@ -319,6 +340,12 @@ pub fn set_active_account(app_data_dir: &Path, account_id: &str) -> Result<Accou
     record.last_used_at = now_millis();
     let snapshot = record.clone();
     registry.active_account_id = snapshot.id.clone();
+    if previous != account_id {
+        registry
+            .history
+            .retain(|id| id != &previous && id != account_id);
+        registry.history.insert(0, previous);
+    }
     save_registry(app_data_dir, &registry)?;
     Ok(snapshot)
 }
@@ -395,6 +422,10 @@ fn migrate_flat_layout(app_data_dir: &Path, mode: IdentityStorageMode) -> Result
     let now = now_millis();
     let registry = AccountsRegistryFile {
         version: ACCOUNTS_REGISTRY_VERSION,
+        history: Vec::new(),
+        profile_setup: Vec::new(),
+        logout_sequence: 0,
+        pending_logout: None,
         active_account_id: id.clone(),
         accounts: vec![AccountRecord {
             id,
@@ -423,6 +454,10 @@ fn create_first_account(app_data_dir: &Path, mode: IdentityStorageMode) -> Resul
     let now = now_millis();
     let registry = AccountsRegistryFile {
         version: ACCOUNTS_REGISTRY_VERSION,
+        history: Vec::new(),
+        profile_setup: vec![id.clone()],
+        logout_sequence: 0,
+        pending_logout: None,
         active_account_id: id.clone(),
         accounts: vec![AccountRecord {
             id,

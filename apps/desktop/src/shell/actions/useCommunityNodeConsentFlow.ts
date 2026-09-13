@@ -11,12 +11,14 @@ export type AcceptCommunityNodeConsents = (
 
 // UIの表示内容を受諾まで固定する。API副作用は既存shell actionへ委譲できる。
 export function useCommunityNodeConsentFlow({
-  api, configuredBaseUrls, statuses = [], acceptConsents,
+  api, configuredBaseUrls, statuses = [], acceptConsents, onAccepted, onDismiss,
 }: {
   api: DesktopApi;
   configuredBaseUrls: readonly string[];
   statuses?: readonly CommunityNodeNodeStatus[];
   acceptConsents?: AcceptCommunityNodeConsents;
+  onAccepted?: () => void;
+  onDismiss?: () => void;
 }) {
   const { i18n, t } = useTranslation(['settings', 'common']);
   const language = i18n.resolvedLanguage ?? i18n.language;
@@ -102,6 +104,7 @@ export function useCommunityNodeConsentFlow({
       if (id === generation.current) {
         setBaseUrl(null);
         setCatalog(null);
+        onAccepted?.();
       }
     } catch {
       if (id === generation.current) setError(t('settings:communityNode.consent.acceptFailed'));
@@ -119,7 +122,7 @@ export function useCommunityNodeConsentFlow({
       consent: communityNodeConsentView(statuses.find((status) => status.base_url === baseUrl), entry),
       busy,
       error,
-      onOpenChange: (nextOpen: boolean) => { if (!nextOpen) close(); },
+      onOpenChange: (nextOpen: boolean) => { if (!nextOpen && !accepting.current) { close(); onDismiss?.(); } },
       onAccept: () => { void accept(); },
       onRetry: () => { if (!accepting.current) setAttempt((value) => value + 1); },
       onCloseAutoFocus: (event: Event) => {

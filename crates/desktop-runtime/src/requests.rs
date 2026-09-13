@@ -325,6 +325,13 @@ pub struct SetMyProfileRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct InitialProfileRequest {
+    pub account_id: String,
+    pub profile: SetMyProfileRequest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct ListLiveSessionsRequest {
     pub topic: String,

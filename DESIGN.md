@@ -68,6 +68,14 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 
 ### 4.1 Component状態
 
+#### 自分のアカウント操作（#1005）
+
+Control Center左隣の丸いアバターボタンからアカウントメニューを開く。最上部は「プロフィール表示」、中段は管理対象accountのアバター・表示名・ユーザー名、最下部は「アカウント追加」「アカウント管理」「ログアウト」。本人のプロフィールカラムがあれば画面とkeyboard focusを合わせ、なければ追加する。account行の選択は確認を挟まず切り替え、処理中と失敗を明示する。
+
+logout確認はローカルデータ保持と同じ鍵のimportによる再ログインを説明し、「はい」「キャンセル」を置く。初期focusはキャンセル。成功後は直前の登録accountへ戻り、他の登録がない場合だけ新規鍵を生成する。新規accountの初回プロフィールDialogはCN同意完了または明示skipの後に開き、他Dialogと重ねない。保存操作は本文のscrollから分離する。「あとで」はsession内の自動再表示を抑止し、未完了なら次回起動で再案内する。完了状態はaccount単位で保持する。
+
+menu表示のために非active accountの通信を起動しない。local profile/imageの欠落は既存fallbackと取得不能表示で扱い、取得失敗を空一覧としない。
+
 interactive componentは、該当する`default`、`hover`、`focus-visible`、`pressed`、`selected`、`disabled`、`pending`、`error`を定義する。
 
 - 状態を色だけで区別しない。文字、icon、境界、形、accessible stateのいずれかを併用する。

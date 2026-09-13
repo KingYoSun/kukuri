@@ -1,3 +1,4 @@
+mod accounts;
 mod consent;
 mod consent_acceptance;
 mod profile;
@@ -335,30 +336,13 @@ impl ClientHost {
         let next = Self::build_detached_runtime(db_path)
             .await
             .map_err(|error| anyhow::anyhow!("failed to start the account runtime: {error}"))?;
-        let previous_account_id = snapshot.active_account_id.clone();
-        let record = match set_active_account(&self.app_data_dir, account_id) {
-            Ok(record) => record,
-            Err(error) => {
-                next.shutdown().await;
-                return Err(error);
-            }
-        };
-        let previous = match self.replace_runtime_locked(next).await {
-            Ok(previous) => previous,
-            Err(error) => {
-                let rollback = set_active_account(&self.app_data_dir, &previous_account_id);
-                return match rollback {
-                    Ok(_) => Err(anyhow::anyhow!(
-                        "failed to activate account runtime: {error}"
-                    )),
-                    Err(rollback_error) => Err(anyhow::anyhow!(
-                        "failed to activate account runtime: {error}; failed to restore active account: {rollback_error:#}"
-                    )),
-                };
-            }
-        };
-        previous.shutdown().await;
-        Ok(record)
+        let previous = self
+            .replace_runtime_locked(next)
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let commit = set_active_account(&self.app_data_dir, account_id).map(|_| ());
+        self.finish_account_change(previous, &snapshot.active_account_id, record, false, commit)
+            .await
     }
 
     pub fn desired_subscriptions(

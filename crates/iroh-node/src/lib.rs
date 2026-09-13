@@ -13,3 +13,38 @@ pub mod remote_fetch;
 mod tests;
 
 pub use node::IrohDocsNode;
+
+impl IrohDocsNode {
+    pub async fn read_local_blob(&self, hash: &str) -> anyhow::Result<Option<Vec<u8>>> {
+        let hash = hash.parse::<iroh_blobs::Hash>()?;
+        Ok(self
+            .blobs()
+            .blobs()
+            .get_bytes(hash)
+            .await
+            .ok()
+            .map(|b| b.to_vec()))
+    }
+}
+
+/// Read an inactive account's existing blob store without creating an endpoint.
+/// The caller must hold the account lifecycle guard; never use for an active store.
+pub async fn read_offline_blob(
+    root: &std::path::Path,
+    hash: &str,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    use iroh_blobs::store::fs::{FsStore, options::Options};
+    if !root.join("blobs.db").exists() {
+        return Ok(None);
+    }
+    let hash = hash.parse::<iroh_blobs::Hash>()?;
+    let store = FsStore::load_with_opts(root.join("blobs.db"), Options::new(root)).await?;
+    let result = store
+        .blobs()
+        .get_bytes(hash)
+        .await
+        .ok()
+        .map(|bytes| bytes.to_vec());
+    store.shutdown().await?;
+    Ok(result)
+}

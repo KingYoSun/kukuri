@@ -1,0 +1,111 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import { Check } from 'lucide-react';
+import { AuthorAvatar } from '@/components/core/AuthorAvatar';
+import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
+import { Notice } from '@/components/ui/notice';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { AccountKeyImportForm } from '@/components/settings/AccountKeyImportForm';
+import { getAccountDisplay, listAccounts } from '@/lib/api/identity';
+import type { AccountDisplay, AccountsSnapshot } from '@/lib/api/types.generated';
+import { changeAccountSession } from '@/lib/accountSession';
+import { useDesktopShellStore } from '@/shell/store';
+import { resolveProfilePictureSrc } from '@/shell/presentation';
+
+export function AccountMenu({ onProfile, onManage, onOpen }: {
+  onProfile: () => void;
+  onManage: () => void;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation('shell');
+  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<'import' | 'logout' | null>(null);
+  const [snapshot, setSnapshot] = useState<AccountsSnapshot | null>(null);
+  const [display, setDisplay] = useState<AccountDisplay[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const moveFocus = useRef(false);
+  const { localProfile, mediaObjectUrls, pubkey } = useDesktopShellStore(useShallow((s) => ({ localProfile: s.localProfile, mediaObjectUrls: s.mediaObjectUrls, pubkey: s.syncStatus.local_author_pubkey })));
+  const label = localProfile?.display_name || localProfile?.name || t('accountMenu.unknown');
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [accounts, profiles] = await Promise.all([listAccounts(), getAccountDisplay()]);
+      setSnapshot(accounts); setDisplay(profiles); setError(null);
+    } catch { setError(t('accountMenu.loadFailed')); }
+    finally { setLoading(false); }
+  }, [t]);
+  useEffect(() => { if (open) void refresh(); }, [open, refresh]);
+  const switchTo = async (id: string, logout = false) => {
+    if (pending) return;
+    setPending(true); setError(null);
+    try { await changeAccountSession(id, logout); }
+    catch { setError(t('accountMenu.actionFailed')); setPending(false); }
+  };
+  const active = snapshot?.accounts.find((a) => a.id === snapshot.active_account_id && a.pubkey === pubkey);
+  const openDialog = (next: 'import' | 'logout') => { moveFocus.current = true; setOpen(false); setError(null); setDialog(next); };
+  const closeDialog = () => { if (!pending) { setDialog(null); moveFocus.current = false; } };
+  return <>
+    <Popover open={open} onOpenChange={(next) => { if (next) onOpen(); moveFocus.current = false; setOpen(next); }}>
+      <PopoverTrigger asChild>
+        <IconButton ref={trigger} type='button' variant='secondary' label={t('accountMenu.open')} aria-haspopup='menu' aria-expanded={open} data-testid='account-menu-trigger'>
+          <AuthorAvatar label={label} picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)} />
+        </IconButton>
+      </PopoverTrigger>
+      <PopoverContent ref={menu} role='menu' aria-label={t('accountMenu.open')} align='start' className='w-[min(22rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto space-y-1'
+        onOpenAutoFocus={(event) => { event.preventDefault(); menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(); }}
+        onCloseAutoFocus={(event) => { if (moveFocus.current) event.preventDefault(); }}
+        onKeyDown={(event) => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]:not(:disabled)') ?? [])];
+          const index = items.indexOf(document.activeElement as HTMLButtonElement);
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+          items[next]?.focus();
+        }}>
+        <Button role='menuitem' variant='ghost' className='w-full justify-start' onClick={() => { moveFocus.current = true; setOpen(false); onProfile(); }}>{t('accountMenu.profile')}</Button>
+        <div role='separator' className='border-t border-[var(--border-subtle)]' />
+        {loading ? <p role='status'>{t('accountMenu.loading')}</p> : null}
+        {snapshot?.accounts.map((account) => {
+          const profile = display.find((entry) => entry.id === account.id);
+          const current = account.id === snapshot.active_account_id;
+          const name = (current ? localProfile?.display_name || localProfile?.name : null) || profile?.display_name || profile?.name || t('accountMenu.unknown');
+          return <button key={account.id} type='button' role='menuitemradio' aria-checked={current} disabled={pending} className='flex w-full min-w-0 items-center gap-3 rounded-[var(--radius-input)] p-2 text-left hover:bg-[var(--surface-button-ghost-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]'
+            onClick={() => { if (!current) void switchTo(account.id); }}>
+            <AuthorAvatar label={name} picture={current ? resolveProfilePictureSrc(localProfile, mediaObjectUrls) : profile?.picture} />
+            <span className='min-w-0 flex-1'><span className='block truncate'>{name}</span><span className='block truncate text-xs text-muted-foreground'>{profile?.unavailable ? t('accountMenu.unavailable') : (current ? localProfile?.name : profile?.name) ? `@${current ? localProfile?.name : profile?.name}` : t('accountMenu.noUsername')}</span></span>
+            {current ? <Check className='size-4' aria-label={t('accountMenu.current')} /> : null}
+          </button>;
+        })}
+        {error ? <Notice tone='destructive'>{error}<Button variant='ghost' onClick={() => void refresh()}>{t('accountMenu.retry')}</Button></Notice> : null}
+        <div role='separator' className='border-t border-[var(--border-subtle)]' />
+        <Button role='menuitem' variant='ghost' className='w-full justify-start' disabled={pending} onClick={() => openDialog('import')}>{t('accountMenu.add')}</Button>
+        <Button role='menuitem' variant='ghost' className='w-full justify-start' onClick={() => { moveFocus.current = true; setOpen(false); onManage(); }}>{t('accountMenu.manage')}</Button>
+        <Button role='menuitem' variant='ghost' className='w-full justify-start text-destructive' disabled={pending || !active} onClick={() => openDialog('logout')}>{t('accountMenu.logout')}</Button>
+      </PopoverContent>
+    </Popover>
+    <Dialog open={dialog !== null} onOpenChange={(next) => { if (!next) closeDialog(); }}>
+      <DialogContent className='w-[min(34rem,94vw)] max-h-[90vh] overflow-y-auto' onCloseAutoFocus={(event) => { event.preventDefault(); trigger.current?.focus(); }}
+        onOpenAutoFocus={(event) => { if (dialog === 'logout') { event.preventDefault(); document.querySelector<HTMLButtonElement>('[data-testid="logout-cancel"]')?.focus(); } }}>
+        <DialogHeader><DialogTitle>{t(dialog === 'import' ? 'accountMenu.add' : 'accountMenu.logoutTitle')}</DialogTitle><DialogDescription>{t(dialog === 'import' ? 'accountMenu.importDescription' : 'accountMenu.logoutDescription')}</DialogDescription></DialogHeader>
+        <DialogBody>
+          {dialog === 'import' ? <AccountKeyImportForm onImported={refresh} onSwitch={(id) => switchTo(id)} switching={pending} /> : <>
+            <p className='font-semibold'>{label}</p><p>{localProfile?.name ? `@${localProfile.name}` : t('accountMenu.noUsername')}</p>
+            <p>{t(snapshot?.accounts.length === 1 ? 'accountMenu.logoutCreates' : 'accountMenu.logoutReturns')}</p>
+          </>}
+          {error ? <Notice tone='destructive'>{error}</Notice> : null}
+        </DialogBody>
+        {dialog === 'logout' ? <DialogFooter>
+          <Button variant='secondary' disabled={pending} data-testid='logout-cancel' onClick={closeDialog}>{t('accountMenu.cancel')}</Button>
+          <Button disabled={pending || !active} onClick={() => { if (active) void switchTo(active.id, true); }}>{t(pending ? 'accountMenu.pending' : 'accountMenu.yes')}</Button>
+        </DialogFooter> : null}
+      </DialogContent>
+    </Dialog>
+  </>;
+}

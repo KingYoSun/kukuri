@@ -15,6 +15,8 @@ mod stack;
 #[cfg(test)]
 mod tests;
 
+pub use accounts::display::AccountDisplay;
+pub use accounts::lifecycle::profile_setup_required;
 pub use accounts::{
     AccountKeyExport, AccountKeyImportPreview, AccountRecord, AccountsSnapshot, account_db_path,
     add_account_from_env, ensure_accounts_initialized_from_env, import_account_key_from_env,
@@ -94,7 +96,7 @@ pub use requests::{
     GetBlobMediaRequest, GetBlobPreviewRequest, GetDomeHostingRequest, ImportAccountKeyRequest,
     ImportChannelAccessTokenRequest, ImportFriendOnlyGrantRequest, ImportFriendPlusShareRequest,
     ImportMetaverseRoomAssetRequest, ImportPeerTicketRequest, ImportPrivateChannelInviteRequest,
-    LeavePrivateChannelRequest, ListDirectMessageMessagesRequest,
+    InitialProfileRequest, LeavePrivateChannelRequest, ListDirectMessageMessagesRequest,
     ListDomeConnectionTopologyRequest, ListGameRoomsRequest, ListJoinedPrivateChannelsRequest,
     ListLiveSessionsRequest, ListMetaverseRoomEventsRequest, ListProfileTimelineRequest,
     ListRecentReactionsRequest, ListSocialConnectionsRequest, ListThreadRequest,

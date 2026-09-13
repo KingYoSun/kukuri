@@ -230,6 +230,7 @@ export function DesktopShellPage({
     openThread,
     openAuthorDetail,
     openProfileOverview,
+    openOwnProfileColumn,
     openProfileEditor,
     openProfileConnections,
   } = useDesktopShellRouting({
@@ -915,6 +916,7 @@ export function DesktopShellPage({
           onOpenChannelManagerForTopic={channelEntries.openChannelManagerForTopic}
           onActivateColumn={activateWorkspaceColumn}
           onOpenSettings={handleOpenSettingsSection}
+          onOpenProfile={openOwnProfileColumn}
           onOpenTesterFeedback={() => setTesterFeedbackOpen(true)}
           onSelectTopic={(topic) => void shellActions.handleSelectTopic(topic)}
           onSelectChannel={(topic, channelId) => {

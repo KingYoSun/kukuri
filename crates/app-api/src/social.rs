@@ -62,6 +62,13 @@ impl AppService {
     }
 
     pub async fn set_my_profile(&self, input: ProfileInput) -> Result<Profile> {
+        let envelope = self.prepare_my_profile(input).await?;
+        self.commit_my_profile(envelope).await
+    }
+
+    /// Prepare once so an account setup transaction can durably retain the
+    /// signed operation before publishing it. Retrying commits the same ID.
+    pub async fn prepare_my_profile(&self, input: ProfileInput) -> Result<KukuriEnvelope> {
         let author_pubkey = Pubkey::from(self.current_author_pubkey());
         // Normalize and length-check the text fields before any blob upload so invalid
         // input fails fast without persisting a side effect.
@@ -97,7 +104,7 @@ impl AppService {
         } else {
             current_profile.picture_asset.clone()
         };
-        let envelope = build_profile_envelope(
+        build_profile_envelope(
             self.services.keys.as_ref(),
             &KukuriProfileEnvelopeContentV1 {
                 author_pubkey: author_pubkey.clone(),
@@ -106,9 +113,20 @@ impl AppService {
                 about,
                 picture_asset,
             },
-        )?;
+        )
+    }
+
+    pub async fn commit_my_profile(&self, envelope: KukuriEnvelope) -> Result<Profile> {
+        envelope.verify()?;
+        if envelope.pubkey.as_str() != self.current_author_pubkey() {
+            anyhow::bail!("profile operation belongs to another account");
+        }
         let profile = parse_profile(&envelope)?
             .ok_or_else(|| anyhow::anyhow!("failed to parse profile envelope"))?;
+        let current = self.get_my_profile().await?;
+        if current.updated_at > profile.updated_at {
+            return Ok(current);
+        }
         self.services.store.put_envelope(envelope.clone()).await?;
         self.services
             .projection_store

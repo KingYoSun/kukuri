@@ -126,19 +126,13 @@ impl CommandHandler for Handler {
                             "Secret入力にはexportとpassphraseのJSONを指定してください",
                         )
                     })?;
-                let dir = session.app_data_dir.clone();
                 encode(
-                    tokio::task::spawn_blocking(move || {
-                        kukuri_desktop_runtime::import_account_key_from_env(
-                            &dir,
-                            &secret.export,
-                            &secret.passphrase,
-                            request.label,
-                        )
-                    })
-                    .await
-                    .map_err(|_| crate::session::failed())?
-                    .map_err(command_error)?,
+                    context
+                        .host
+                        .ok_or_else(crate::session::failed)?
+                        .import_account_key(secret.export, secret.passphrase, request.label)
+                        .await
+                        .map_err(command_error)?,
                 )
             }
             "cancel_device_backup" => {

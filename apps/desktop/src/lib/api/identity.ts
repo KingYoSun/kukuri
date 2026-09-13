@@ -1,4 +1,7 @@
 import type {
+  AccountDisplay,
+  InitialProfileRequest,
+  Profile,
   AccountKeyExport,
   AccountKeyImportPreview,
   AccountRecord,
@@ -39,6 +42,40 @@ export async function listAccounts(): Promise<AccountsSnapshot> {
     };
   }
   return invokeDesktop<AccountsSnapshot>('list_accounts');
+}
+
+export async function getAccountDisplay(): Promise<AccountDisplay[]> {
+  if (isDesktopMockActive()) return mockAccounts.accounts.map((a) => ({ id: a.id, name: null, display_name: a.label, picture: null, unavailable: false }));
+  return invokeDesktop<AccountDisplay[]>('get_account_display');
+}
+
+export async function logoutAccount(accountId: string): Promise<AccountRecord> {
+  if (isDesktopMockActive()) {
+    if (accountId !== mockAccounts.active_account_id) throw new Error('account is no longer active');
+    mockAccounts.accounts = mockAccounts.accounts.filter((a) => a.id !== accountId);
+    if (!mockAccounts.accounts.length) {
+      const id = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
+      mockAccounts.accounts.push({ id, pubkey: id.repeat(4), label: null, created_at: Date.now(), last_used_at: Date.now() });
+    }
+    const next = mockAccounts.accounts[0];
+    mockAccounts.active_account_id = next.id;
+    return next;
+  }
+  return invokeDesktop<AccountRecord>('logout_account', { request: { account_id: accountId } satisfies SwitchAccountRequest });
+}
+
+export async function getProfileSetupRequired(accountId: string): Promise<boolean> {
+  if (isDesktopMockActive()) return false;
+  return invokeDesktop<boolean>('get_profile_setup_required', { request: { account_id: accountId } satisfies SwitchAccountRequest });
+}
+
+export async function completeProfileSetup(accountId: string): Promise<void> {
+  if (isDesktopMockActive()) return;
+  return invokeDesktop<void>('complete_profile_setup', { request: { account_id: accountId } satisfies SwitchAccountRequest });
+}
+
+export async function saveInitialProfile(request: InitialProfileRequest): Promise<Profile> {
+  return invokeDesktop<Profile>('save_initial_profile', { request });
 }
 
 export async function exportAccountKey(passphrase: string): Promise<AccountKeyExport> {
