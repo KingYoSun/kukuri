@@ -17,9 +17,10 @@ type Pair = {
 
 // Real usage pairs: bg/fg token names as rendered together in the app.
 const SEMANTIC_PAIRS: Pair[] = [
-  { background: '--surface-button-primary', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary / .shell-skip-link' },
+  { background: '--primary-start', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.shell-skip-link' },
+  { background: '--surface-button-primary', foreground: '--button-primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary' },
   { background: '--surface-button-ghost-hover', foreground: '--muted-foreground', minimum: NORMAL_TEXT, usage: 'supporting text on hovered controls' },
-  { background: '--surface-button-primary-hover', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary hover' },
+  { background: '--surface-button-primary-hover', foreground: '--button-primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary hover' },
   { background: '--surface-destructive-soft', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'notice/badge destructive, SettingsMetricGrid' },
   { background: '--surface-panel', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'field danger hint, .error on panels' },
   { background: '--background', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'error text on shell background' },

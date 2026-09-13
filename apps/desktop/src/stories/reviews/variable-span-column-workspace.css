@@ -31,7 +31,7 @@
   translate: 0 -150%;
   border-radius: var(--radius-pill);
   padding: var(--space-xs) var(--space-md);
-  background: var(--surface-button-primary);
+  background: var(--primary-start);
   color: var(--primary-foreground);
   transition: translate var(--motion-duration-fast) var(--motion-easing-standard);
 }
@@ -255,7 +255,7 @@
   width: fit-content;
   border-radius: var(--radius-pill);
   padding: var(--space-2xs) var(--space-xs);
-  background: var(--surface-button-primary);
+  background: var(--primary-start);
   color: var(--primary-foreground);
   font-size: var(--text-caption);
   font-weight: 700;

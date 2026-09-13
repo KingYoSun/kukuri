@@ -42,7 +42,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - 技術識別子は通常画面では人が判別できる名前と短い補助情報に置き換える。完全値はcontext menu等の明示操作でコピー可能にし、Developer modeと診断画面では表示してよい。
 - product UIとdiagnostics UIを視覚的・構造的に分け、diagnosticsはControl Center、Settings、inline Noticeの補助階層へ置く。
 - 開発者設定ではモードの有効／無効を文字で示し、有効時は接続・ディスカバリー・コミュニティノードの診断へ同じ設定drawer内で移動できるようにする。有効化だけで自動遷移せず、移動後は対象sectionへfocusを引き継ぐ。設定drawerとbackdropはworkspaceのdock／page indicatorより前面に置き、診断操作を妨げたり背景の操作を受け付けたりしない。
-- darkはNeutral / Teal（Issue #1001）とし、背景`#121212`、Column本文・パネル`#292929`、本文`#ffffff`を基盤とする。primary actionとfocus・selected・activeの局所的アクセントに`#03dac5`を使い、明るいprimary上の文字は`#00332e`とする。補助文字は`#b3b3b3`、装飾境界と操作識別境界は別tokenにする。lightはGraphite / Orange（Issue #996）の白・中立グレー・warm-orangeを維持する。大面積の有彩色や色付き光彩を追加せず、Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
+- darkはNeutral / Teal（Issue #1001）とし、背景`#121212`、Column本文・パネル`#292929`、本文`#ffffff`を基盤とする。focus・selected・activeと通知の局所的アクセントに`#03dac5`を使い、その塗り上の文字は`#00332e`とする。primary塗りボタンは`#d77d45`と文字`#20160e`を使う（Issue #1003）。補助文字は`#b3b3b3`、装飾境界と操作識別境界は別tokenにする。lightはGraphite / Orange（Issue #996）の白・中立グレー・warm-orangeを維持する。大面積の有彩色や色付き光彩を追加せず、Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
 - 装飾用の弱い境界と操作識別用の強い境界を分ける。成功・警告・エラー・接続状態は意味色とlabel／iconを維持し、ブランド色に一括置換しない。
 - 半透明gradient、過剰なcard nesting、装飾目的の巨大見出しで階層を作らず、solid surface、境界、余白、弱い拡散影で表す。
 - 外部trendや一般的な禁止リストより、既存brief、token、component、受け入れ済みADRを優先する。
@@ -213,7 +213,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 
 - dark-first。`<html data-theme='dark|light'>`で切り替え、OSの`prefers-color-scheme`へ自動追従しない。
 - fontは`--font-sans`、技術識別子は`--font-mono`とtabular numeralsを使う。
-- surfaceはbase、accent、muted、softの段階で構成し、darkのprimary／accent／focusはteal、lightはwarm-orange、dangerは独立したdestructive familyを使う。
+- surfaceはbase、accent、muted、softの段階で構成し、darkの汎用primary／accent／focusはteal、lightはwarm-orange、dangerは独立したdestructive familyを使う。primary塗りボタンは両themeでwarm-orangeと専用文字色を使う。Columnの上辺グローは選択・固定状態にかかわらず表示しない。選択状態は既存の外周枠・ラベルで識別する。Control Centerボタンの未読数と通知Columnの未読item枠は既存themeのaccent（darkはシアン、lightはwarm-orange）を使う。
 - panelは`--radius-panel`、input／Noticeは`--radius-input`、pill controlは`--radius-pill`を使う。avatarは大きさに関わらず常に`--radius-pill`（全丸）とし、角丸へ戻さない。
 - textボタンは全丸のまま高さ2rem（`sm`は1.75rem）、横paddingは0.625rem（`sm`は0.5rem）を基準とし、既に小さい文字を縮めずに周辺の余白で密度を確保する。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remを基準にする。
 - elevationは`--shadow-panel`、`--shadow-dropdown`、`--shadow-button-primary`に限定する。
@@ -274,8 +274,9 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | dark | `--surface-panel-soft` | `#292929` |
 | dark | `--surface-input` | `#202020` |
 | dark | `--surface-raised` | `#363636` |
-| dark | `--surface-button-primary` | `#03dac5` |
-| dark | `--surface-button-primary-hover` | `#31e2d0` |
+| dark | `--surface-button-primary` | `#d77d45` |
+| dark | `--surface-button-primary-hover` | `#c86f38` |
+| dark | `--button-primary-foreground` | `#20160e` |
 | dark | `--surface-button-secondary` | `#363636` |
 | dark | `--surface-button-ghost` | `#292929` |
 | dark | `--surface-button-ghost-hover` | `#3d3d3d` |
@@ -327,6 +328,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | light | `--surface-raised` | `#e5e5e2` |
 | light | `--surface-button-primary` | `#d77d45` |
 | light | `--surface-button-primary-hover` | `#c86f38` |
+| light | `--button-primary-foreground` | `#20160e` |
 | light | `--surface-button-secondary` | `#ececea` |
 | light | `--surface-button-ghost` | `#f7f7f5` |
 | light | `--surface-button-ghost-hover` | `#e5e5e2` |

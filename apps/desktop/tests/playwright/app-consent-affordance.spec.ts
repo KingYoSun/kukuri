@@ -28,6 +28,7 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
         const result = {
           blocked: color('--surface-panel-muted'),
           primary: color('--surface-button-primary'),
+          primaryHover: color('--surface-button-primary-hover'),
           boundary: color('--muted-foreground-soft'),
         };
         probe.remove();
@@ -59,6 +60,9 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
         await page.keyboard.press('Space');
         await expect(accept).toBeEnabled();
         await expect(accept).toHaveAccessibleName(labels[locale].ready);
+        // Keyboard enabling leaves the pointer over the button from the blocked click.
+        await expect(accept).toHaveCSS('background-color', palette.primaryHover);
+        await page.mouse.move(0, 0);
         await expect(accept).toHaveCSS('background-color', palette.primary);
         await expect(accept).not.toHaveCSS('box-shadow', 'none');
         await expect(accept).not.toHaveCSS('border-top-style', 'dashed');

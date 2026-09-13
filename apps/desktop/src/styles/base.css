@@ -42,6 +42,10 @@ samp {
   font-variant-numeric: tabular-nums;
 }
 
+.button:where(:not(.button-secondary, .button-ghost)):hover:not(:disabled) {
+  background: var(--surface-button-primary-hover);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.56;

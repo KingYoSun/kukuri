@@ -406,11 +406,7 @@
 
 .shell-phase1 .shell-column-surface[data-active] {
   border-color: var(--border-accent);
-  box-shadow: var(--shadow-panel), inset 0 3px 0 var(--accent);
-}
-
-.shell-phase1 .shell-column-surface[data-pinned] .shell-column-header {
-  border-top: 3px solid var(--primary-start);
+  box-shadow: var(--shadow-panel);
 }
 
 .shell-phase1 .shell-column-surface[data-transient] {

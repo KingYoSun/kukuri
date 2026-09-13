@@ -41,12 +41,12 @@ const semanticPairs = [
   {
     name: 'Primary action',
     background: 'var(--surface-button-primary)',
-    foreground: 'var(--primary-foreground)',
+    foreground: 'var(--button-primary-foreground)',
   },
   {
     name: 'Primary action hover',
     background: 'var(--surface-button-primary-hover)',
-    foreground: 'var(--primary-foreground)',
+    foreground: 'var(--button-primary-foreground)',
   },
   {
     name: 'Input placeholder',
