@@ -28,6 +28,28 @@ const NARROW = { width: 700, height: 980 } as const;
 
 const LOCALE_EN = 'en';
 
+for (const { locale, theme, width, menuLabel, addLabel, createLabel } of [
+  { locale: 'ja', theme: 'dark', width: 1280, menuLabel: 'アカウントメニュー', addLabel: 'アカウント追加', createLabel: '新しいアカウントを作成' },
+  { locale: 'en', theme: 'light', width: 390, menuLabel: 'Account menu', addLabel: 'Add account', createLabel: 'Create a new account' },
+] as const) {
+  test(`account menu and creation ${locale} ${theme}`, async ({ page }) => {
+    await page.addInitScript(({ locale, theme }) => {
+      localStorage.setItem('kukuri.desktop.locale', locale);
+      localStorage.setItem('kukuri.desktop.theme', theme);
+    }, { locale, theme });
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/');
+    await page.getByTestId('account-menu-trigger').click();
+    const menu = page.getByRole('menu', { name: menuLabel });
+    await expect(menu.getByRole('menuitemradio')).toBeVisible();
+    await expect(menu).toHaveScreenshot(`account-menu-${locale}-${theme}.png`);
+    await menu.getByRole('menuitem', { name: addLabel }).click();
+    const dialog = page.getByRole('dialog', { name: addLabel });
+    await expect(dialog.getByRole('button', { name: createLabel })).toBeEnabled();
+    await expect(dialog).toHaveScreenshot(`account-add-${locale}-${theme}.png`);
+  });
+}
+
 for (const { width, locale, theme } of [
   { width: 1280, locale: 'ja', theme: 'dark' },
   { width: 390, locale: 'en', theme: 'light' },
