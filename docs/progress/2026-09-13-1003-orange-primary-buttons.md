@@ -2,7 +2,7 @@
 
 ## 現在判定・承認範囲
 
-- 状態: In progress。ユーザーは実装、Issue作業、コミット、PR作成、CI成功後のマージを承認済み。
+- 状態: 実装・ローカル検証済み。最終CIとマージ判定はPR #1004を参照。ユーザーは実装、Issue作業、コミット、PR作成、CI成功後のマージを承認済み。
 - リスク区分: B（frontendの表示）。Scope revision: 2026-09-13-v2。基準commit: `143333d82dd7998e34c790ed75fc339c0981ed87`。
 - [Issue #1003](https://github.com/KingYoSun/kukuri/issues/1003)、[PR #1004](https://github.com/KingYoSun/kukuri/pull/1004)。計画の現在の詳細と証跡は本書に集約する。
 - v1のオレンジ上辺・未読数・未読枠はユーザーの追加指示で撤回。v2はprimary塗りボタンだけオレンジを維持し、カラム上辺グローは選択・固定を問わず削除、通知は元のtheme accentへ戻す。
@@ -50,7 +50,7 @@ consumer分類: 共通`.button`はprimary塗り、secondary／ghostは既存上�
 - v1のWindows／Ubuntu24実機画像は撤回済み配色の証拠であり、v2の検証済み証拠として流用しない。Computer Useは前ターンにユーザーのEscapeで停止した。
 - Linux baselineはGitHub ActionsのKukuri Visual Baselineで最終製品差分から生成する。Windowsのvisualはsmokeで、pixel比較成功の代替としない。
 - 最終製品差分のstyles contract: 3 files / 125 tests PASS。theme-palette + orange-emphasis: 7 tests PASS（1600／390px、theme切替・draft・focus復元・保存値fallback）。
-- v2の`cargo xtask desktop-ui-check`: lint/typecheck、Vitest 183 files / 1615 tests、Storybook buildがPASS。browserは268件PASS／6件FAIL。失敗は同意ボタンをkeyboardで有効化した際、pointerがボタン上に残るため新しいhover色になり、旧通常色期待と不一致だった。通常色とhover色の両方を検証するようtestを同期し、対象10件PASS。無効時の抑止・同意I/Oのassertionは維持。browser全体とvisualを再実行中。
+- v2の`cargo xtask desktop-ui-check`と後続の対象再実行: lint/typecheck、Vitest 183 files / 1615 tests、Storybook buildがPASS。browserは268件PASS／6件FAIL。失敗は同意ボタンをkeyboardで有効化した際、pointerがボタン上に残るため新しいhover色になり、旧通常色期待と不一致だった。通常色とhover色の両方を検証するようtestを同期し、対象10件PASS。無効時の抑止・同意I/Oのassertionは維持。後続の全体再実行はbrowser 274件PASS、visual smoke 34件PASS。
 - 初回CIのoversized-filesは新規hover規則によりpart1が1003行になりFAIL。共通button状態を扱うbase.cssへその規則を配置し、再検査PASS。baseline許容量は変更していない。
 - Linux／Chromium baselineは[run 34740503183](https://github.com/KingYoSun/kukuri/actions/runs/34740503183)で生成。Windows生成物で更新していない。配置移動後の最終CIで比較する。
 
@@ -61,6 +61,15 @@ WindowsローカルのWebView2と、Remote Desktopで接続中のUbuntu24のWebK
 - Windows: アプリ表示約1280×840、日本語、dark／light。選択・固定解除後に上辺がなく、結果を表示ボタンがオレンジ、未読枠・数字がtheme accentであることを確認。表示設定でlightへ切替え、閉じた後のColumn文脈を保持。[dark](../ui-reviews/assets/1003/windows-v2-dark.jpg) / [light](../ui-reviews/assets/1003/windows-v2-light.jpg)。
 - Ubuntu24: Remote Desktop内のTauri約1280×800、日本語、dark／light。Control Centerから見つけるを選択し、横スクロールで未読通知を並べ、上辺なし・オレンジ主ボタン・シアン通知を確認。設定からlightへ切替え、同じColumn表示へ戻る。[dark](../ui-reviews/assets/1003/ubuntu-v2-dark.jpg) / [light](../ui-reviews/assets/1003/ubuntu-v2-light.jpg)。
 - 200% effective viewport、狭幅、keyboard／pointer／swipe、theme保存復元は既存browser suiteで確認する。実タッチデバイスや全screen reader読み上げ、Windows OSのHigh Contrast設定切替、本番P2Pは追加しない。native画像のtheme切替直後にtransition中の色が撮られるため、状態が落ち着いた後の画像を証跡にした。
+
+## 最終ローカル結果
+
+- frontend lint／typecheck: PASS。Vitest 183 files／1615 tests: PASS。Storybook build: PASS。
+- `npx pnpm@10.16.1 --dir apps/desktop test:e2e:browser`: 274 PASS。
+- `npx pnpm@10.16.1 --dir apps/desktop test:e2e:visual`: 34 PASS（Windowsでは画像比較をskipするため到達smoke）。Linux画像比較は最終PR headのCIで確認する。
+- `cargo xtask oversized-files`: PASS。`git diff --check`: PASS。
+- `desktop-ui-check`一括実行は旧hover期待の6件で一度FAIL。期待同期後に後段のbrowser／visualを個別完走し、成功済みのunit suiteを不要に反復しない。CSS配置移動後の表示はtargeted browserで再確認。最終headのCIがこれらを一括検証する。
+- 検証に伴うdisabled・hover状態の期待同期はテストの弱体化ではなく、両状態を追加確認する変更。製品の同意条件・APIは不変。
 
 ## 終了条件・未確認
 

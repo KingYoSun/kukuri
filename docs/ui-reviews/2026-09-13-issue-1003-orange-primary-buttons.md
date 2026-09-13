@@ -10,5 +10,5 @@
 - Conditions: browser dark／light、1600／390px、native Windows WebView2とUbuntu24 WebKitGTK、日本語。状態・操作と追加画像は作業記録へ集約する。
 - Accessibility / interaction: ボタン文字contrastは通常5.84:1、hover4.89:1。既存focus・aria-current・固定ラベルを保持。theme切替・draft・focus復元のbrowser test成功。
 - Performance: CSS値のみ。新たなDOM、handler、animation、購読、I/Oなし。
-- Validation / Not verified / Review result: ユーザーがv2の変更を指定済み。対象browser 7件、styles contract 125件が成功。Vitest全1615件・Storybook buildが成功。browser全体再実行と最終CIを継続中。現在結果は[作業記録](../progress/2026-09-13-1003-orange-primary-buttons.md)を参照。
+- Validation / Not verified / Review result: ユーザーがv2の変更を指定済み。対象browser 7件、styles contract 125件が成功。Vitest全1615件・Storybook buildが成功。browser全体274件とWindows visual smoke 34件も成功。最終headのCI／merge結果はPRを参照。現在結果は[作業記録](../progress/2026-09-13-1003-orange-primary-buttons.md)を参照。
 - Exceptions: v1画像はv2実装後の証拠へ流用しない。本番アカウント・通信E2Eとmockによるnative描画確認を区別する。
