@@ -1,0 +1,46 @@
+{
+  "columnDimensionsUnchanged": true,
+  "lightTokenBlockAndAliasesUnchanged": true,
+  "lightImageFiles": [
+    {
+      "image": "before-appearance-light-1600.png",
+      "fileIdentical": false
+    },
+    {
+      "image": "before-appearance-light-390.png",
+      "fileIdentical": false
+    },
+    {
+      "image": "before-columns-light-1600.png",
+      "fileIdentical": false
+    },
+    {
+      "image": "before-columns-light-390.png",
+      "fileIdentical": true
+    },
+    {
+      "image": "before-composer-light-1600.png",
+      "fileIdentical": false
+    },
+    {
+      "image": "before-composer-light-390.png",
+      "fileIdentical": true
+    },
+    {
+      "image": "before-explore-light-390.png",
+      "fileIdentical": true
+    },
+    {
+      "image": "before-feedback-dialog-light-1600.png",
+      "fileIdentical": false
+    },
+    {
+      "image": "before-feedback-dialog-light-390.png",
+      "fileIdentical": true
+    },
+    {
+      "image": "before-profile-light-390.png",
+      "fileIdentical": true
+    }
+  ]
+}

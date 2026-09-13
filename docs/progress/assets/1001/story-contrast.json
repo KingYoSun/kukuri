@@ -1,0 +1,80 @@
+[
+  {
+    "id": "foundations-tokens--desktop-width",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": [
+          {
+            "target": [
+              ".rounded-\\[var\\(--radius-input\\)\\].p-4.border:nth-child(3) > .text-xs:nth-child(4)"
+            ],
+            "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+          },
+          {
+            "target": [
+              ".rounded-\\[var\\(--radius-input\\)\\].p-4.border:nth-child(6) > .text-xs:nth-child(4)"
+            ],
+            "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ui-button--default",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "ui-iconbutton--pressed",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "ui-iconbutton--disabled",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "ui-statusbadge--default",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-releasepanel--update-checking",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-releasepanel--up-to-date",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "settings-releasepanel--update-check-failed",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "core-communityindexavailabilitynotice--read-error",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "core-communityindexavailabilitynotice--connecting",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "core-communityindexavailabilitynotice--retrying",
+    "violations": [],
+    "incomplete": []
+  },
+  {
+    "id": "core-testerfeedbackdialog--cached-status-unavailable",
+    "violations": [],
+    "incomplete": []
+  }
+]
