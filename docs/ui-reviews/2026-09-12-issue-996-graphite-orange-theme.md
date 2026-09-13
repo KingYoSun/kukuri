@@ -1,8 +1,8 @@
 # Issue #996 Graphite / Orange
 
-- Status: current
+- Status: superseded
 - Supersedes: [旧配色の評価](2026-06-13-design-spec-baseline-evaluation.md)、[旧theme palette](2026-03-27-desktop-theme-solidification.md)、[旧light具体色](2026-08-31-issue-828-light-theme-contrast.md)。置換は配色の採用部分のみ。solid surface、明示的な選択と保存、contrast品質は維持する。
-- Superseded by: None
+- Superseded by: [Neutral / Teal dark](2026-09-13-issue-1001-neutral-teal-dark-theme.md)（dark配色のみ置換。lightと構造・保存の判断は後継でも継承）
 - PR: [#997](https://github.com/KingYoSun/kukuri/pull/997)
 - Preview: [dark変更前](../progress/assets/996/before-columns-dark-1600.png) / [dark変更後](../progress/assets/996/after-columns-dark-1600.png)、[light変更前](../progress/assets/996/before-columns-light-1600.png) / [light変更後](../progress/assets/996/after-columns-light-1600.png)
 - Surface / user / purpose: 全desktopの配色／閲覧・投稿・会話・設定を継続する利用者／中立色の面とオレンジの主要操作で読みやすい階層を示す。

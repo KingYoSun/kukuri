@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Real semantic pairs from #828, extended to both Graphite / Orange themes (#996).
+// Real semantic pairs from #828, covering dark Neutral / Teal (#1001) and light Graphite / Orange (#996).
 const TOKENS_PATH = resolve(process.cwd(), 'src/styles/tokens.css');
 
 const NORMAL_TEXT = 4.5;
@@ -18,6 +18,7 @@ type Pair = {
 // Real usage pairs: bg/fg token names as rendered together in the app.
 const SEMANTIC_PAIRS: Pair[] = [
   { background: '--surface-button-primary', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary / .shell-skip-link' },
+  { background: '--surface-button-ghost-hover', foreground: '--muted-foreground', minimum: NORMAL_TEXT, usage: 'supporting text on hovered controls' },
   { background: '--surface-button-primary-hover', foreground: '--primary-foreground', minimum: NORMAL_TEXT, usage: '.button primary hover' },
   { background: '--surface-destructive-soft', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'notice/badge destructive, SettingsMetricGrid' },
   { background: '--surface-panel', foreground: '--destructive', minimum: NORMAL_TEXT, usage: 'field danger hint, .error on panels' },
@@ -131,7 +132,7 @@ function contrastRatio(a: Rgb, b: Rgb) {
 
 describe.each([
   ['light', lightTokens], ['dark', darkTokens],
-] as const)('%s theme semantic contrast (Issue #996)', (theme, extract) => {
+] as const)('%s theme semantic contrast', (theme, extract) => {
   const tokens = extract(readFileSync(TOKENS_PATH, 'utf8'));
 
   function tokenValue(name: string) {

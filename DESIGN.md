@@ -42,7 +42,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - 技術識別子は通常画面では人が判別できる名前と短い補助情報に置き換える。完全値はcontext menu等の明示操作でコピー可能にし、Developer modeと診断画面では表示してよい。
 - product UIとdiagnostics UIを視覚的・構造的に分け、diagnosticsはControl Center、Settings、inline Noticeの補助階層へ置く。
 - 開発者設定ではモードの有効／無効を文字で示し、有効時は接続・ディスカバリー・コミュニティノードの診断へ同じ設定drawer内で移動できるようにする。有効化だけで自動遷移せず、移動後は対象sectionへfocusを引き継ぐ。設定drawerとbackdropはworkspaceのdock／page indicatorより前面に置き、診断操作を妨げたり背景の操作を受け付けたりしない。
-- Graphite / Orange（Issue #996の採用済みA案）を両themeに適用する。lightは白と中立グレー、darkは無彩色チャコールを基盤とし、カラム本文は`#212121`とする。warm-orangeをprimary actionに使い、focus・selected・activeは局所的な橙系で識別する。青みのあるcharcoal案は採用しない。大面積の青／茶、第二のブランド色としてのteal／mint、色付き光彩を使わない。Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
+- darkはNeutral / Teal（Issue #1001）とし、背景`#121212`、Column本文・パネル`#292929`、本文`#ffffff`を基盤とする。primary actionとfocus・selected・activeの局所的アクセントに`#03dac5`を使い、明るいprimary上の文字は`#00332e`とする。補助文字は`#b3b3b3`、装飾境界と操作識別境界は別tokenにする。lightはGraphite / Orange（Issue #996）の白・中立グレー・warm-orangeを維持する。大面積の有彩色や色付き光彩を追加せず、Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
 - 装飾用の弱い境界と操作識別用の強い境界を分ける。成功・警告・エラー・接続状態は意味色とlabel／iconを維持し、ブランド色に一括置換しない。
 - 半透明gradient、過剰なcard nesting、装飾目的の巨大見出しで階層を作らず、solid surface、境界、余白、弱い拡散影で表す。
 - 外部trendや一般的な禁止リストより、既存brief、token、component、受け入れ済みADRを優先する。
@@ -213,7 +213,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 
 - dark-first。`<html data-theme='dark|light'>`で切り替え、OSの`prefers-color-scheme`へ自動追従しない。
 - fontは`--font-sans`、技術識別子は`--font-mono`とtabular numeralsを使う。
-- surfaceはbase、accent、muted、softの段階で構成し、primaryはwarm-orange、accent／focusはcool-teal、dangerはdestructive familyを使う。
+- surfaceはbase、accent、muted、softの段階で構成し、darkのprimary／accent／focusはteal、lightはwarm-orange、dangerは独立したdestructive familyを使う。
 - panelは`--radius-panel`、input／Noticeは`--radius-input`、pill controlは`--radius-pill`を使う。avatarは大きさに関わらず常に`--radius-pill`（全丸）とし、角丸へ戻さない。
 - textボタンは全丸のまま高さ2rem（`sm`は1.75rem）、横paddingは0.625rem（`sm`は0.5rem）を基準とし、既に小さい文字を縮めずに周辺の余白で密度を確保する。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remを基準にする。
 - elevationは`--shadow-panel`、`--shadow-dropdown`、`--shadow-button-primary`に限定する。
@@ -261,57 +261,57 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | global | `--motion-distance-control-center` | `2rem` |
 | global | `--blur-hud` | `14px` |
 | global | `--surface-metaverse` | `#101318` |
-| dark | `--background` | `#171717` |
-| dark | `--shell-background` | `#171717` |
-| dark | `--foreground` | `#e9e9e7` |
-| dark | `--foreground-strong` | `#fafafa` |
-| dark | `--muted-foreground` | `#a7a7a3` |
-| dark | `--muted-foreground-soft` | `#a7a7a3` |
-| dark | `--surface-panel` | `#212121` |
-| dark | `--surface-panel-solid` | `#212121` |
-| dark | `--surface-panel-accent` | `#262626` |
-| dark | `--surface-panel-muted` | `#292929` |
+| dark | `--background` | `#121212` |
+| dark | `--shell-background` | `#121212` |
+| dark | `--foreground` | `#ffffff` |
+| dark | `--foreground-strong` | `#ffffff` |
+| dark | `--muted-foreground` | `#b3b3b3` |
+| dark | `--muted-foreground-soft` | `#b3b3b3` |
+| dark | `--surface-panel` | `#292929` |
+| dark | `--surface-panel-solid` | `#292929` |
+| dark | `--surface-panel-accent` | `#303030` |
+| dark | `--surface-panel-muted` | `#242424` |
 | dark | `--surface-panel-soft` | `#292929` |
-| dark | `--surface-input` | `#262626` |
-| dark | `--surface-raised` | `#333333` |
-| dark | `--surface-button-primary` | `#f59d62` |
-| dark | `--surface-button-primary-hover` | `#ee8f4e` |
-| dark | `--surface-button-secondary` | `#333333` |
+| dark | `--surface-input` | `#202020` |
+| dark | `--surface-raised` | `#363636` |
+| dark | `--surface-button-primary` | `#03dac5` |
+| dark | `--surface-button-primary-hover` | `#31e2d0` |
+| dark | `--surface-button-secondary` | `#363636` |
 | dark | `--surface-button-ghost` | `#292929` |
-| dark | `--surface-button-ghost-hover` | `#383838` |
-| dark | `--surface-active` | `#34302b` |
+| dark | `--surface-button-ghost-hover` | `#3d3d3d` |
+| dark | `--surface-active` | `#203a37` |
 | dark | `--surface-overlay` | `#141414` |
-| dark | `--surface-avatar` | `#333333` |
+| dark | `--surface-avatar` | `#363636` |
 | dark | `--surface-media-loading` | `#292929` |
 | dark | `--surface-media-ready` | `#26382e` |
-| dark | `--surface-skeleton` | `#333333` |
-| dark | `--surface-selection` | `#60412b` |
-| dark | `--surface-accent-soft` | `#34302b` |
+| dark | `--surface-skeleton` | `#363636` |
+| dark | `--surface-selection` | `#24524d` |
+| dark | `--surface-accent-soft` | `#203a37` |
 | dark | `--surface-warning-soft` | `#463423` |
 | dark | `--surface-destructive-soft` | `#4a2b22` |
 | dark | `--surface-info-soft` | `#203449` |
 | dark | `--surface-badge-neutral` | `#292929` |
-| dark | `--surface-contrast` | `#333333` |
-| dark | `--border-subtle` | `#3c3c3a` |
-| dark | `--border-subtle-strong` | `#83837e` |
-| dark | `--border-accent` | `#bc855f` |
+| dark | `--surface-contrast` | `#363636` |
+| dark | `--border-subtle` | `#3d3d3d` |
+| dark | `--border-subtle-strong` | `#858585` |
+| dark | `--border-accent` | `#03dac5` |
 | dark | `--border-warning` | `#bf9358` |
 | dark | `--border-destructive` | `#cc8979` |
-| dark | `--primary-start` | `#f59d62` |
-| dark | `--primary-end` | `#f59d62` |
-| dark | `--primary-foreground` | `#211810` |
-| dark | `--accent` | `#f59d62` |
-| dark | `--accent-foreground` | `#f5bd99` |
+| dark | `--primary-start` | `#03dac5` |
+| dark | `--primary-end` | `#03dac5` |
+| dark | `--primary-foreground` | `#00332e` |
+| dark | `--accent` | `#03dac5` |
+| dark | `--accent-foreground` | `#03dac5` |
 | dark | `--destructive` | `#ffb4ab` |
 | dark | `--warning` | `#e6b066` |
 | dark | `--danger` | `#ffb4ab` |
-| dark | `--ring` | `rgba(245, 157, 98, 0.9)` |
+| dark | `--ring` | `rgba(3, 218, 197, 1)` |
 | dark | `--shadow-panel` | `0 18px 60px rgba(0, 0, 0, 0.18)` |
 | dark | `--shadow-dropdown` | `0 12px 32px rgba(0, 0, 0, 0.18)` |
 | dark | `--shadow-button-primary` | `0 10px 28px rgba(0, 0, 0, 0.12)` |
-| dark | `--scrollbar-track` | `#212121` |
-| dark | `--scrollbar-thumb` | `#777773` |
-| dark | `--scrollbar-thumb-hover` | `#93938f` |
+| dark | `--scrollbar-track` | `#292929` |
+| dark | `--scrollbar-thumb` | `#858585` |
+| dark | `--scrollbar-thumb-hover` | `#a0a0a0` |
 | light | `--background` | `#f4f4f3` |
 | light | `--shell-background` | `#f4f4f3` |
 | light | `--foreground` | `#242424` |
