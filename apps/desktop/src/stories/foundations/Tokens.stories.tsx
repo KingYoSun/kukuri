@@ -20,6 +20,7 @@ const swatches = [
   { name: 'Panel Soft', value: 'var(--surface-panel-soft)' },
   { name: 'Input', value: 'var(--surface-input)' },
   { name: 'Primary Surface', value: 'var(--surface-button-primary)' },
+  { name: 'Primary Hover', value: 'var(--surface-button-primary-hover)' },
   { name: 'Accent', value: 'var(--accent)' },
   { name: 'Selected surface', value: 'var(--surface-active)' },
   { name: 'Control boundary', value: 'var(--border-subtle-strong)' },
@@ -41,6 +42,16 @@ const semanticPairs = [
     name: 'Primary action',
     background: 'var(--surface-button-primary)',
     foreground: 'var(--primary-foreground)',
+  },
+  {
+    name: 'Primary action hover',
+    background: 'var(--surface-button-primary-hover)',
+    foreground: 'var(--primary-foreground)',
+  },
+  {
+    name: 'Input placeholder',
+    background: 'var(--surface-input)',
+    foreground: 'var(--muted-foreground-soft)',
   },
   {
     name: 'Accent state',

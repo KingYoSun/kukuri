@@ -33,9 +33,10 @@ for (const width of [1600, 390]) {
       await settings.getByRole('radio', { name: theme === 'light' ? /Light/i : /Dark/i }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), THEME_KEY)).toBe(theme);
-      const panel = theme === 'dark' ? 'rgb(33, 33, 33)' : 'rgb(255, 255, 255)';
+      const panel = theme === 'dark' ? 'rgb(41, 41, 41)' : 'rgb(255, 255, 255)';
       await expect(timeline).toHaveCSS('background-color', panel);
       await expect(settings).toHaveCSS('background-color', panel);
+      await expect(settings).toHaveCSS('color', theme === 'dark' ? 'rgb(255, 255, 255)' : 'rgb(36, 36, 36)');
       expect(await settings.evaluate((e) => e.closest('.shell-phase1'))).toBeNull();
       await page.keyboard.press('Escape');
       await expect(settings).not.toBeVisible();
@@ -44,18 +45,23 @@ for (const width of [1600, 390]) {
       await timeline.locator('.shell-column-primary-action').click();
       const draft = page.getByPlaceholder('Write a post');
       await expect(draft).toHaveValue('A draft that survives a theme change');
-      await expect(draft).toHaveCSS('border-top-color', theme === 'dark' ? 'rgb(131, 131, 126)' : 'rgb(133, 133, 127)');
+      await expect(draft).toHaveCSS('border-top-color', theme === 'dark' ? 'rgb(133, 133, 133)' : 'rgb(133, 133, 127)');
       await draft.focus();
       await expect(draft).toBeFocused();
       await page.keyboard.press('Escape');
       await expect(timeline.locator('.shell-column-primary-action')).toBeFocused();
+      const primary = timeline.locator('.shell-column-primary-action');
+      await expect(primary).toHaveCSS('color', theme === 'dark' ? 'rgb(0, 51, 46)' : 'rgb(32, 22, 14)');
+      await expect(primary).toHaveCSS('background-color', theme === 'dark' ? 'rgb(3, 218, 197)' : 'rgb(215, 125, 69)');
+      await expect(primary).toHaveCSS('outline-style', 'solid');
+      await expect(primary).toHaveCSS('outline-offset', '2px');
       await testInfo.attach(`column-${theme}`, { body: await timeline.screenshot(), contentType: 'image/png' });
     }
     // Reload may restore the draft as an inline composer; do not replace that existing behavior.
     // No init script re-injects the theme. The existing shell smoke also checks light restoration.
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(timeline).toHaveCSS('background-color', 'rgb(33, 33, 33)');
+    await expect(timeline).toHaveCSS('background-color', 'rgb(41, 41, 41)');
   });
 }
 
@@ -63,5 +69,5 @@ test('invalid saved theme retains the existing dark fallback', async ({ page }) 
   await page.addInitScript((key) => localStorage.setItem(key, 'invalid'), THEME_KEY);
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.locator('.shell-column-surface').first()).toHaveCSS('background-color', 'rgb(33, 33, 33)');
+  await expect(page.locator('.shell-column-surface').first()).toHaveCSS('background-color', 'rgb(41, 41, 41)');
 });
