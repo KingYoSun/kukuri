@@ -47,13 +47,6 @@ pub(crate) fn topic_to_gossip_id(topic: &TopicId) -> GossipTopicId {
     GossipTopicId::from_bytes(*hash.as_bytes())
 }
 
-async fn endpoint_has_active_remote_addr(endpoint: &Endpoint, endpoint_id: EndpointId) -> bool {
-    endpoint.remote_info(endpoint_id).await.is_some_and(|info| {
-        info.addrs()
-            .any(|addr| matches!(addr.usage(), TransportAddrUsage::Active))
-    })
-}
-
 impl TopicWarmupCoordinator {
     async fn warmup_peers_once(
         &self,
@@ -84,10 +77,9 @@ impl TopicWarmupCoordinator {
         let Ok(_permit) = self.permits.acquire().await else {
             return;
         };
-        if endpoint_has_active_remote_addr(&endpoint, peer.id).await {
-            return;
-        }
-
+        // Active endpoint paths can belong to docs/blob connections. They do not
+        // prove that gossip has a connection, especially after a peer restart.
+        // Keep gossip dialing behind the shared concurrency and retry limits.
         let warmup_addr = direct_warmup_addr(&peer);
         if let Ok(connection) = endpoint.connect(warmup_addr, GOSSIP_ALPN).await {
             let _ = gossip.handle_connection(connection).await;
@@ -523,6 +515,59 @@ impl IrohGossipTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn active_other_protocol_does_not_suppress_gossip_warmup() {
+        const OTHER_ALPN: &[u8] = b"kukuri-test-other-protocol";
+        let local = Endpoint::bind(presets::Minimal)
+            .await
+            .expect("local endpoint");
+        let remote = Endpoint::builder(presets::Minimal)
+            .alpns(vec![OTHER_ALPN.to_vec(), GOSSIP_ALPN.to_vec()])
+            .bind()
+            .await
+            .expect("remote endpoint");
+        let (outbound, inbound) = timeout(Duration::from_secs(5), async {
+            tokio::join!(local.connect(remote.addr(), OTHER_ALPN), async {
+                remote.accept().await.expect("other incoming").await
+            })
+        })
+        .await
+        .expect("other protocol connection deadline");
+        let outbound = outbound.expect("other outbound");
+        let inbound = inbound.expect("other inbound");
+        assert!(local.remote_info(remote.id()).await.is_some_and(|info| {
+            info.addrs()
+                .any(|addr| matches!(addr.usage(), TransportAddrUsage::Active))
+        }));
+        assert_eq!(outbound.alpn(), OTHER_ALPN);
+        assert_eq!(inbound.alpn(), OTHER_ALPN);
+
+        let gossip = Gossip::builder().spawn(local.clone());
+        let warmup = tokio::spawn({
+            let local = local.clone();
+            let gossip = gossip.clone();
+            let peer = remote.addr();
+            async move {
+                TopicWarmupCoordinator::default()
+                    .warmup_peer(local, gossip, peer)
+                    .await;
+            }
+        });
+        let incoming = timeout(Duration::from_secs(3), async {
+            remote.accept().await.expect("gossip incoming").await
+        })
+        .await;
+        warmup.abort();
+        let _ = warmup.await;
+        gossip.shutdown().await.expect("gossip shutdown");
+        local.close().await;
+        remote.close().await;
+        let connection = incoming
+            .expect("an active other protocol must not suppress gossip dialing")
+            .expect("gossip connection");
+        assert_eq!(connection.alpn(), GOSSIP_ALPN);
+    }
 
     // gossip topic id 派生の golden(WP-S3 T4)。blake3(topic 文字列)が
     // on-wire の gossip 識別子そのもの。変更はネットワーク分断になる。
