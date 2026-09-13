@@ -18,6 +18,9 @@ import type { ProfileConnectionsView } from '@/components/shell/types';
 import type { ExtendedPanelStatus } from '@/components/extended/types';
 import type { AuthorSocialView } from '@/lib/api';
 import { copyTextToClipboard } from '@/lib/utils';
+import { useMinimumLoading } from '@/lib/useMinimumLoading';
+
+import { ProfileConnectionsEmptyState } from './ProfileConnectionsEmptyState';
 
 type ProfileConnectionsPanelProps = {
   activeView: ProfileConnectionsView;
@@ -30,6 +33,9 @@ type ProfileConnectionsPanelProps = {
   onToggleMute: (authorPubkey: string, muted: boolean) => void;
   onToggleBlock: (authorPubkey: string, blocking: boolean) => void;
   onBack: () => void;
+  /** #994: 空状態の CTA。既存のタイムライン / 見つける section への遷移だけを行う。 */
+  onOpenTimeline?: () => void;
+  onOpenExplore?: () => void;
 };
 
 const CONNECTION_VIEWS: ProfileConnectionsView[] = ['following', 'followed', 'muted', 'blocking'];
@@ -65,8 +71,12 @@ export function ProfileConnectionsPanel({
   onToggleMute,
   onToggleBlock,
   onBack,
+  onOpenTimeline,
+  onOpenExplore,
 }: ProfileConnectionsPanelProps) {
   const { t } = useTranslation(['profile', 'common']);
+  // #994: 初回取得は最低時間 loading を示す。1 件以上ある場合は下の一覧を保持したまま通知だけを重ねる。
+  const displayedStatus = useMinimumLoading(status);
   const [identifierMenuPosition, setIdentifierMenuPosition] =
     useState<ContextActionMenuPosition | null>(null);
   const [identifierAuthorPubkey, setIdentifierAuthorPubkey] = useState<string | null>(null);
@@ -131,11 +141,16 @@ export function ProfileConnectionsPanel({
         ))}
       </div>
 
-      {status === 'loading' ? <Notice>{t('connections.loading')}</Notice> : null}
-      {status === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
+      {displayedStatus === 'loading' ? <Notice>{t('connections.loading')}</Notice> : null}
+      {displayedStatus === 'error' && error ? <Notice tone='destructive'>{error}</Notice> : null}
 
-      {status === 'ready' && items.length === 0 ? (
-        <p className='empty-state'>{t(`connections.empty.${activeView}`)}</p>
+      {displayedStatus === 'ready' && items.length === 0 ? (
+        <ProfileConnectionsEmptyState
+          view={activeView}
+          localAuthorPubkey={localAuthorPubkey}
+          onOpenTimeline={onOpenTimeline}
+          onOpenExplore={onOpenExplore}
+        />
       ) : null}
 
       {items.length > 0 ? (

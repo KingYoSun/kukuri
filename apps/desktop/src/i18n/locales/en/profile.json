@@ -136,6 +136,18 @@
       "muted": "No muted users yet.",
       "blocking": "No blocked users yet."
     },
+    "emptyActions": {
+      "openExplore": "Search in Explore",
+      "openTimeline": "Show timeline"
+    },
+    "emptyGuidance": {
+      "openProfile": "Press a user's name or avatar on a post to open their profile.",
+      "followStep": "Press <action/> on their profile to add them to this list.",
+      "muteStep": "Press <action/> on their profile to add them to this list. You can also choose it from a post's <report/> dialog.",
+      "blockStep": "Press <action/> on their profile to add them to this list.",
+      "followedInfo": "People appear here once they follow you and that information reaches this device.",
+      "shareOwnId": "Sharing your user ID makes it easier for others to find and follow you."
+    },
     "loading": "Loading follows, mutes, and blocks…",
     "mutedBadge": "Muted",
     "tabs": {

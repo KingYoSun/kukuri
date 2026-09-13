@@ -333,13 +333,15 @@
 }
 
 .shell-community-index-form > *,
-.shell-community-index-notice {
+.shell-community-index-notice,
+.shell-empty-guidance {
   min-inline-size: 0;
   max-inline-size: 100%;
   overflow-wrap: anywhere;
 }
 
 .shell-community-index-notice .button,
+.shell-empty-guidance .button,
 .shell-community-index-form > .button,
 .shell-community-index-tabs .shell-tab {
   min-inline-size: 0;

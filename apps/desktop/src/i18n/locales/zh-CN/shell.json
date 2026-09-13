@@ -255,6 +255,12 @@
     "composeTarget": "发布目标",
     "feed": "动态",
     "noBookmarks": "还没有收藏的帖子。",
+    "bookmarksLoading": "正在加载收藏…",
+    "bookmarksEmpty": {
+      "step": "在时间线或“发现”的帖子卡片上按 <action/>，该帖子就会保存到这里。",
+      "note": "收藏只保存在此设备上，不会发送到其他设备或任何人。",
+      "showTimeline": "查看时间线"
+    },
     "noPosts": "该主题下还没有帖子。",
     "noPublicPosts": "你在该主题下还没有公开帖子。",
     "refresh": "刷新",

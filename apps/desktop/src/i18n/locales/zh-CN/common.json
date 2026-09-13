@@ -92,6 +92,7 @@
     "failedToGenerateVideoPoster": "生成视频预览失败",
     "failedToImportPeer": "添加连接对象失败",
     "failedToLoadAuthor": "加载用户信息失败",
+    "failedToLoadBookmarks": "加载收藏失败",
     "failedToLoadDirectMessages": "加载私信失败",
     "failedToLoadGameRooms": "加载游戏房间失败",
     "failedToLoadLiveSessions": "加载直播会话失败",

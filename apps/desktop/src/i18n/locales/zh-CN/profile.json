@@ -136,6 +136,18 @@
       "muted": "还没有静音任何用户。",
       "blocking": "还没有屏蔽任何用户。"
     },
+    "emptyActions": {
+      "openExplore": "在“发现”中搜索",
+      "openTimeline": "查看时间线"
+    },
+    "emptyGuidance": {
+      "openProfile": "在帖子上按用户名称或头像，打开对方的资料页。",
+      "followStep": "在资料页按 <action/>，对方就会加入此列表。",
+      "muteStep": "在资料页按 <action/>，对方就会加入此列表。也可以在帖子的 <report/> 对话框中选择。",
+      "blockStep": "在资料页按 <action/>，对方就会加入此列表。",
+      "followedInfo": "对方关注你并且该信息到达此设备后，会显示在这里。",
+      "shareOwnId": "分享你的用户 ID，可以让别人更容易找到并关注你。"
+    },
     "loading": "正在加载关注、静音与屏蔽…",
     "mutedBadge": "已静音",
     "tabs": {

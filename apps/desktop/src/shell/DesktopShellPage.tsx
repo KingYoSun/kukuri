@@ -196,6 +196,7 @@ export function DesktopShellPage({
     refreshTimelineFeed,
     refreshConnectivityStatus,
     loadProfileSection,
+    loadBookmarksSection,
     loadReactionCatalogData,
     loadNotificationsSection,
     loadMoreTimeline,
@@ -471,18 +472,10 @@ export function DesktopShellPage({
       settingsSection: section,
     });
   }, [setSettingsOpen, setShellChromeState, syncRoute]);
-  const handleOpenCommunityNodeSettings = useCallback(
-    () => handleOpenSettingsSection('community-node'),
-    [handleOpenSettingsSection]
-  );
-  const handleOpenConnectivitySettings = useCallback(
-    () => handleOpenSettingsSection('connectivity'),
-    [handleOpenSettingsSection]
-  );
-  const handleOpenTimelineSection = useCallback(
-    () => focusPrimarySection('timeline'),
-    [focusPrimarySection]
-  );
+  const handleOpenCommunityNodeSettings = useCallback(() => handleOpenSettingsSection('community-node'), [handleOpenSettingsSection]);
+  const handleOpenConnectivitySettings = useCallback(() => handleOpenSettingsSection('connectivity'), [handleOpenSettingsSection]);
+  const handleOpenTimelineSection = useCallback(() => focusPrimarySection('timeline'), [focusPrimarySection]);
+  const handleOpenExploreSection = useCallback(() => focusPrimarySection('explore'), [focusPrimarySection]);
   const liveFocusKey =
     shellChromeState.activePrimarySection === 'live' ? selectedLiveSessionId : null;
   useFocusScroll({
@@ -620,6 +613,9 @@ export function DesktopShellPage({
       openCommunityNodeSettings={handleOpenCommunityNodeSettings}
       openConnectivitySettings={handleOpenConnectivitySettings}
       openTimelineSection={handleOpenTimelineSection}
+      openExploreSection={handleOpenExploreSection}
+      selectTimelineView={selectColumnTimelineView}
+      retryBookmarks={() => void loadBookmarksSection()}
       requestIndexing={setIndexingTarget}
       communityNodePanelView={viewModels.communityNodePanelView}
       onFetchCommunityNodeConsents={shellActions.handleFetchCommunityNodeConsents}

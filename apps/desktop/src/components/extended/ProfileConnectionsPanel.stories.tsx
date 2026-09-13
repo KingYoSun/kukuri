@@ -25,6 +25,19 @@ export const Following: Story = { args: { activeView: 'following' } };
 export const Followers: Story = { args: { activeView: 'followed' } };
 export const Muted: Story = { args: { activeView: 'muted' } };
 export const Empty: Story = { args: { items: [] } };
+// #994: 各 view の空状態。実ボタンを chip で示し、既存導線(タイムライン / 見つける / ID コピー)だけを CTA にする。
+export const FollowingEmpty: Story = {
+  args: { activeView: 'following', items: [], onOpenTimeline: () => undefined, onOpenExplore: () => undefined },
+};
+export const FollowersEmpty: Story = {
+  args: { activeView: 'followed', items: [], onOpenTimeline: () => undefined },
+};
+export const MutedEmpty: Story = {
+  args: { activeView: 'muted', items: [], onOpenTimeline: () => undefined },
+};
+export const BlockedEmpty: Story = {
+  args: { activeView: 'blocking', items: [], onOpenTimeline: () => undefined },
+};
 export const Loading: Story = { args: { items: [], status: 'loading' } };
 export const Error: Story = { args: { status: 'error', error: '一覧を更新できませんでした。' } };
 export const Self: Story = { args: { localAuthorPubkey: author.author_pubkey } };

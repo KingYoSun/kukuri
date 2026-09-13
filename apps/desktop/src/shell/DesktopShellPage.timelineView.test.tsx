@@ -105,7 +105,7 @@ test('非 active な Timeline Column の Bookmarks 切替は他の Column と UR
 
   // 切り替えた Column の body は bookmarks 一覧(空)になり、feed の投稿は出ない。
   const switchedColumn = findTimelineColumnByScope('core · general');
-  expect(within(switchedColumn).getByText('No bookmarked posts yet.')).toBeInTheDocument();
+  expect(await within(switchedColumn).findByText('No bookmarked posts yet.')).toBeInTheDocument();
   expect(within(switchedColumn).queryByText('channel post')).not.toBeInTheDocument();
 
   // route(focus 中 Column)には波及しない。
@@ -139,7 +139,7 @@ test('timelineView=bookmarks の deep link は対象 Timeline Column の view �
       within(columnViewTabs(timelineColumn)).getByRole('tab', { name: 'Bookmarks' })
     ).toHaveAttribute('aria-selected', 'true');
   });
-  expect(within(timelineColumn).getByText('No bookmarked posts yet.')).toBeInTheDocument();
+  expect(await within(timelineColumn).findByText('No bookmarked posts yet.')).toBeInTheDocument();
 });
 
 test('reload 後に各 Column の view が復元され、非 active の Bookmarks Column に bookmark 済み投稿が表示される', async () => {

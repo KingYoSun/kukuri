@@ -49,6 +49,7 @@ export function useDesktopShellSectionLoaders({
     'authorTimelineNextCursorByPubkey'
   );
   const setBookmarkedPosts = useDesktopShellFieldSetter('bookmarkedPosts');
+  const setBookmarksPanelState = useDesktopShellFieldSetter('bookmarksPanelState');
   const setCommunityNodeConfig = useDesktopShellFieldSetter('communityNodeConfig');
   const setCommunityNodeError = useDesktopShellFieldSetter('communityNodeError');
   const setCommunityNodeInput = useDesktopShellFieldSetter('communityNodeInput');
@@ -332,12 +333,24 @@ export function useDesktopShellSectionLoaders({
   ]);
 
   const loadBookmarksSection = useCallback(async () => {
+    // #994: 一覧をまだ出せない(初回 / 初回失敗後)ときだけ loading / error を示す。
+    // 値がある再取得は一覧を保持し、成功時に差し替える(失敗は best effort のまま)。
+    const showsProgress = storeApi.getState().bookmarksPanelState.status !== 'ready';
+    if (showsProgress) setBookmarksPanelState({ status: 'loading', error: null });
     try {
-      setBookmarkedPosts(await api.listBookmarkedPosts());
-    } catch {
-      // best effort refresh
+      const bookmarkedPosts = await api.listBookmarkedPosts();
+      startTransition(() => {
+        setBookmarkedPosts(bookmarkedPosts);
+        setBookmarksPanelState({ status: 'ready', error: null });
+      });
+    } catch (error) {
+      if (!showsProgress) return;
+      setBookmarksPanelState({
+        status: 'error',
+        error: messageFromError(error, translate('common:errors.failedToLoadBookmarks')),
+      });
     }
-  }, [api, setBookmarkedPosts]);
+  }, [api, setBookmarkedPosts, setBookmarksPanelState, storeApi, translate]);
 
   const loadCommunityIndexCapability = useCallback(async () => {
     const requestId = ++communityNodeRequestId.current;
@@ -451,7 +464,10 @@ export function useDesktopShellSectionLoaders({
           api.listBookmarkedPosts(),
           loadReactionCatalogData(),
         ]);
-        startTransition(() => setBookmarkedPosts(bookmarkedPosts));
+        startTransition(() => {
+          setBookmarkedPosts(bookmarkedPosts);
+          setBookmarksPanelState({ status: 'ready', error: null });
+        });
       } catch (error) {
         setReactionPanelState({
           status: 'error',
@@ -463,6 +479,7 @@ export function useDesktopShellSectionLoaders({
     api,
     loadReactionCatalogData,
     setBookmarkedPosts,
+    setBookmarksPanelState,
     loadCommunityIndexCapability,
     setDiscoveryConfig,
     setDiscoveryError,
@@ -538,6 +555,7 @@ export function useDesktopShellSectionLoaders({
     loadShellSections,
     loadProfileSection,
     loadAuthorSection,
+    loadBookmarksSection,
     loadMessagesSection,
     loadNotificationsSection,
     loadCommunityIndexCapability,

@@ -611,6 +611,7 @@ export function useDesktopShellData({
     loadShellSections,
     loadProfileSection,
     loadAuthorSection,
+    loadBookmarksSection,
     loadMessagesSection,
     loadCommunityIndexCapability,
   } = useDesktopShellSectionLoaders({
@@ -744,6 +745,7 @@ export function useDesktopShellData({
     refreshVisibleTimelineAfterPublish,
     refreshTimelineFeed,
     loadProfileSection,
+    loadBookmarksSection,
     applyPendingTimeline,
     loadReactionCatalogData,
     loadNotificationsSection,
