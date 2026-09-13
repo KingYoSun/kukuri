@@ -2,7 +2,7 @@
 
 ## 目的・対象外
 
-v0.2.3-preview.1の公開前検証で発見した、相手の停止中に送信したDMが再起動後に再接続しない問題を修正する（#1011）。relayを通常経路へ強制する変更、終了時のblob保存削除、testのtimeout延長・skip・条件弱体化は対象外。
+完了。v0.2.3-preview.1の公開前検証で発見した、相手の停止中に送信したDMが再起動後に再接続しない問題を修正した（#1011、PR #1012）。relayを通常経路へ強制する変更、終了時のblob保存削除、testのtimeout延長・skip・条件弱体化は対象外。
 
 ## 固定条件
 
@@ -51,3 +51,12 @@ sinkの逆引きは上記2 warmup caller。変更pathはcrates/transport/src/iro
 - AC-3 / INVAR-1: Linux `cargo test -p kukuri-transport --lib -- --nocapture` は53件PASS。既存のdirect、seeded DHT、relay、stale addr、3 clients multiple topics、coalescing、RAII、backoff testsを含む。終了時に上流gossipのcancelled task panicが観測されたため、比較起点での発生有無も確認する。
 - fmtの初回checkで新testの1式の整形差分が出たため、整形して再checkする。Rust全suiteと実community-node scenarioはPR CIで補う。
 - CIと独立監査は未完了。未分類inventoryは0、入口・sinkの追加削除は0。
+
+## 完了記録
+
+- 監査head `ff1d4fdb29876accedae873db4d92673fdd7a869`。fmt／fmt-check／diff-check成功。最終版の既存DM testが25.49秒で成功。
+- 上流cancelled task panicは前回公開版のtransport 52件PASS（6.53秒）でも発生し、今回のRegressionではないと確認。
+- [独立監査PASS](https://github.com/KingYoSun/kukuri/pull/1012#issuecomment-5655163842): inventory 4件すべて適合、不適合・未分類・blocker 0。source、caller/sink、実endpoint旧FAIL→新PASS、最終DM成功、53件成功の生ログを別コンテキストで再構築した。
+- PR #1012の全13 checks成功: [Fast 34774138884](https://github.com/KingYoSun/kukuri/actions/runs/34774138884)、[CLI 34774139023](https://github.com/KingYoSun/kukuri/actions/runs/34774139023)、[Linux Package 34774139101](https://github.com/KingYoSun/kukuri/actions/runs/34774139101)。Rust全suite、community-node connectivity、Windows package、Linux AppImage／Debとupdater回復を含む。
+- merge `0aa3fe183006874eb004f18dceade9ca6125f992` と監査headのtreeは `4f6035e1410374176c98c8f086825c0e063820a7` で一致。#1011をCompleteとしてCloseした。
+- この完了は修正の実装・検証・マージに対するもの。リリースの版番号・公開・VM反映は[リリース記録](./2026-09-14-v0.2.3-preview.1-release-rollout.md)で別に追跡する。上の途中経過の未完了記述は本節で解消した。
