@@ -949,21 +949,7 @@
 }
 
 @media (max-width: 759px) {
-  /* 幅狭では cluster を左下に置き、Column footer の投稿ボタン(右寄せ)と下辺を揃える。 */
-  .shell-phase1 .shell-control-cluster {
-    bottom: max(var(--space-sm), env(safe-area-inset-bottom));
-  }
-
-  /* アバターボタンの高さを投稿ボタン・Control Center・フィードバックと同じ 44px にする。 */
-  .shell-phase1 .shell-account-menu-trigger {
-    inline-size: 2.75rem;
-    min-inline-size: 2.75rem;
-    block-size: 2.75rem;
-    min-block-size: 2.75rem;
-    border-radius: var(--radius-pill);
-    box-shadow: var(--shadow-panel);
-  }
-
+  /* 幅狭の control cluster 位置とアバターボタン寸法は mobile-column-workspace.css が持つ。 */
   .shell-phase1 .shell-control-center-trigger > span:not(.shell-control-center-status-dot),
   .shell-phase1 .shell-tester-feedback-trigger > span {
     display: none;

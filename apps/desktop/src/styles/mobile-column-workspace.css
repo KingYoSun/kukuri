@@ -78,6 +78,21 @@
     padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
   }
 
+  /* control cluster は左下(desktop と同じ left)に置き、投稿ボタンと下辺を揃える。 */
+  .shell-phase1 .shell-control-cluster {
+    bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  }
+
+  /* アバターボタンの高さを投稿ボタン・Control Center・フィードバックと同じ 44px にする。 */
+  .shell-phase1 .shell-account-menu-trigger {
+    inline-size: 2.75rem;
+    min-inline-size: 2.75rem;
+    block-size: 2.75rem;
+    min-block-size: 2.75rem;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-panel);
+  }
+
   .shell-phase1 .shell-column-body {
     overscroll-behavior-y: contain;
   }
