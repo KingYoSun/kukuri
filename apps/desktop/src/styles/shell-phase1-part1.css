@@ -847,10 +847,6 @@
   cursor: pointer;
 }
 
-.button:where(:not(.button-secondary, .button-ghost)):hover:not(:disabled) {
-  background: var(--surface-button-primary-hover);
-}
-
 .button-sm {
   padding: 0.125rem var(--space-xs);
 }

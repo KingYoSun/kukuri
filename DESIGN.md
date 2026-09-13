@@ -42,7 +42,7 @@ kukuriの通常画面は、コンテンツを継続して閲覧・作成・操�
 - 技術識別子は通常画面では人が判別できる名前と短い補助情報に置き換える。完全値はcontext menu等の明示操作でコピー可能にし、Developer modeと診断画面では表示してよい。
 - product UIとdiagnostics UIを視覚的・構造的に分け、diagnosticsはControl Center、Settings、inline Noticeの補助階層へ置く。
 - 開発者設定ではモードの有効／無効を文字で示し、有効時は接続・ディスカバリー・コミュニティノードの診断へ同じ設定drawer内で移動できるようにする。有効化だけで自動遷移せず、移動後は対象sectionへfocusを引き継ぐ。設定drawerとbackdropはworkspaceのdock／page indicatorより前面に置き、診断操作を妨げたり背景の操作を受け付けたりしない。
-- darkはNeutral / Teal（Issue #1001）とし、背景`#121212`、Column本文・パネル`#292929`、本文`#ffffff`を基盤とする。primary actionとfocus・selected・activeの局所的アクセントに`#03dac5`を使い、明るいprimary上の文字は`#00332e`とする。補助文字は`#b3b3b3`、装飾境界と操作識別境界は別tokenにする。lightはGraphite / Orange（Issue #996）の白・中立グレー・warm-orangeを維持する。大面積の有彩色や色付き光彩を追加せず、Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
+- darkはNeutral / Teal（Issue #1001）とし、背景`#121212`、Column本文・パネル`#292929`、本文`#ffffff`を基盤とする。focus・selected・activeと通知の局所的アクセントに`#03dac5`を使い、その塗り上の文字は`#00332e`とする。primary塗りボタンは`#d77d45`と文字`#20160e`を使う（Issue #1003）。補助文字は`#b3b3b3`、装飾境界と操作識別境界は別tokenにする。lightはGraphite / Orange（Issue #996）の白・中立グレー・warm-orangeを維持する。大面積の有彩色や色付き光彩を追加せず、Column Canvasとtopic-firstの情報構造、dark既定と明示的なtheme選択を維持する。
 - 装飾用の弱い境界と操作識別用の強い境界を分ける。成功・警告・エラー・接続状態は意味色とlabel／iconを維持し、ブランド色に一括置換しない。
 - 半透明gradient、過剰なcard nesting、装飾目的の巨大見出しで階層を作らず、solid surface、境界、余白、弱い拡散影で表す。
 - 外部trendや一般的な禁止リストより、既存brief、token、component、受け入れ済みADRを優先する。
