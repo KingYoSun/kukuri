@@ -89,6 +89,8 @@ struct AccountsRegistryFile {
     pending_logout: Option<lifecycle::PreparedLogout>,
     #[serde(default)]
     pending_creation: Option<create::PreparedAccountCreation>,
+    #[serde(default)]
+    completed_creations: std::collections::BTreeMap<String, create::PreparedAccountCreation>,
 }
 
 /// アカウント一覧とアクティブ選択のスナップショット。
@@ -430,6 +432,7 @@ fn migrate_flat_layout(app_data_dir: &Path, mode: IdentityStorageMode) -> Result
         logout_sequence: 0,
         pending_logout: None,
         pending_creation: None,
+        completed_creations: Default::default(),
         active_account_id: id.clone(),
         accounts: vec![AccountRecord {
             id,
@@ -463,6 +466,7 @@ fn create_first_account(app_data_dir: &Path, mode: IdentityStorageMode) -> Resul
         logout_sequence: 0,
         pending_logout: None,
         pending_creation: None,
+        completed_creations: Default::default(),
         active_account_id: id.clone(),
         accounts: vec![AccountRecord {
             id,

@@ -34,9 +34,18 @@ const mockAccounts: AccountsSnapshot = {
 };
 
 const MOCK_EXPORT_PREFIX = 'kukuri-account-key.v1.';
+let mockAccountInitialized = false;
 
 export async function listAccounts(): Promise<AccountsSnapshot> {
   if (isDesktopMockActive()) {
+    if (!mockAccountInitialized && window.__KUKURI_DESKTOP__) {
+      const profile = await window.__KUKURI_DESKTOP__.getMyProfile();
+      MOCK_ACTIVE_ACCOUNT.id = profile.pubkey.slice(0, 16);
+      MOCK_ACTIVE_ACCOUNT.pubkey = profile.pubkey;
+      MOCK_ACTIVE_ACCOUNT.label = profile.display_name ?? null;
+      mockAccounts.active_account_id = MOCK_ACTIVE_ACCOUNT.id;
+      mockAccountInitialized = true;
+    }
     return {
       active_account_id: mockAccounts.active_account_id,
       accounts: mockAccounts.accounts.map((account) => ({ ...account })),
@@ -52,6 +61,7 @@ export async function getAccountDisplay(): Promise<AccountDisplay[]> {
 
 export async function createAccount(accountId: string, operationId: string): Promise<AccountRecord> {
   if (isDesktopMockActive()) {
+
     const id = operationId.replaceAll('-', '').slice(0, 16);
     const existing = mockAccounts.accounts.find((a) => a.id === id);
     if (existing && mockAccounts.active_account_id === id) return existing;

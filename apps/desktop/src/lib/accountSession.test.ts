@@ -1,7 +1,22 @@
 import { expect, test, vi } from 'vitest';
 import * as identity from '@/lib/api/identity';
-import { reconcileAccountDrafts, changeAccountSession } from './accountSession';
+import { reconcileAccountDrafts, changeAccountSession, accountCreationOperationId } from './accountSession';
 import { COLUMN_DRAFT_STORAGE_KEY } from '@/shell/columnDraftPersistence';
+
+test('creation operation survives a module restart and clears only after activation', async () => {
+  const operation = accountCreationOperationId('a');
+  vi.resetModules();
+  const reloaded = await import('./accountSession');
+  expect(reloaded.accountCreationOperationId('a')).toBe(operation);
+  localStorage.setItem('kukuri:account-transition-drafts', JSON.stringify({ sourceId: 'a', draft: null, createOperationId: operation }));
+  vi.spyOn(identity, 'listAccounts').mockResolvedValue({ active_account_id: 'a', accounts: [] });
+  await reconcileAccountDrafts();
+  expect(accountCreationOperationId('a')).toBe(operation);
+  localStorage.setItem('kukuri:account-transition-drafts', JSON.stringify({ sourceId: 'a', draft: null, createOperationId: operation }));
+  vi.spyOn(identity, 'listAccounts').mockResolvedValue({ active_account_id: 'b', accounts: [] });
+  await reconcileAccountDrafts();
+  expect(accountCreationOperationId('a')).not.toBe(operation);
+});
 
 test('restart after committed account change restores only the active account draft', async () => {
   localStorage.setItem('kukuri:account-transition-drafts', JSON.stringify({ sourceId: 'a', draft: 'private-a' }));

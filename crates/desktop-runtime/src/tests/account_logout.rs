@@ -34,6 +34,32 @@ fn explicit_creation_preserves_accounts_and_reuses_operation_on_retry() {
 }
 
 #[test]
+fn completed_creation_cannot_reactivate_a_logged_out_account_after_other_creations() {
+    let dir = tempdir().unwrap();
+    ensure_accounts_initialized(dir.path(), MODE).unwrap();
+    let a = list_accounts(dir.path()).unwrap().active_account_id;
+    let x = CreateAccountRequest {
+        account_id: a.clone(),
+        operation_id: uuid::Uuid::new_v4().to_string(),
+    };
+    let b = prepare_account_creation(dir.path(), MODE, &x).unwrap();
+    commit_account_creation(dir.path(), &b).unwrap();
+    let y = CreateAccountRequest {
+        account_id: b.next.id.clone(),
+        operation_id: uuid::Uuid::new_v4().to_string(),
+    };
+    let c = prepare_account_creation(dir.path(), MODE, &y).unwrap();
+    commit_account_creation(dir.path(), &c).unwrap();
+    set_active_account(dir.path(), &b.next.id).unwrap();
+    let logout = prepare_logout(dir.path(), MODE, &b.next.id).unwrap();
+    commit_logout(dir.path(), &logout).unwrap();
+    set_active_account(dir.path(), &a).unwrap();
+    let before = fs::read(dir.path().join("accounts.json")).unwrap();
+    assert!(prepare_account_creation(dir.path(), MODE, &x).is_err());
+    assert_eq!(fs::read(dir.path().join("accounts.json")).unwrap(), before);
+}
+
+#[test]
 fn logout_returns_to_previous_account_and_retains_local_data() {
     let dir = tempdir().unwrap();
     let first_db = ensure_accounts_initialized(dir.path(), MODE).unwrap();

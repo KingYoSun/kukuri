@@ -16,23 +16,41 @@ pub(crate) fn prepare_account_creation(
 ) -> Result<PreparedAccountCreation> {
     let operation = uuid::Uuid::parse_str(&request.operation_id)?.to_string();
     let mut registry = load_registry(dir)?.ok_or_else(|| anyhow!("accounts not initialized"))?;
-    if let Some(pending) = &registry.pending_creation {
-        if pending.operation_id == operation && pending.previous == request.account_id {
-            if pending.committed && registry.active_account_id != pending.next.id {
-                bail!("account creation was already completed");
-            }
-            if registry.active_account_id != pending.previous
-                && registry.active_account_id != pending.next.id
-            {
-                bail!("account creation request is stale");
-            }
-            verify_persisted_identity(
-                &account_db_path(dir, &pending.next.id),
-                mode,
-                &pending.next.pubkey,
-            )?;
-            return Ok(pending.clone());
+    if let Some(completed) = registry.completed_creations.get(&operation) {
+        if completed.previous != request.account_id
+            || registry.active_account_id != completed.next.id
+            || !registry
+                .accounts
+                .iter()
+                .any(|a| a.id == completed.next.id && a.pubkey == completed.next.pubkey)
+        {
+            bail!("account creation operation was already completed");
         }
+        verify_persisted_identity(
+            &account_db_path(dir, &completed.next.id),
+            mode,
+            &completed.next.pubkey,
+        )?;
+        return Ok(completed.clone());
+    }
+    if let Some(pending) = &registry.pending_creation
+        && pending.operation_id == operation
+        && pending.previous == request.account_id
+    {
+        if pending.committed && registry.active_account_id != pending.next.id {
+            bail!("account creation was already completed");
+        }
+        if registry.active_account_id != pending.previous
+            && registry.active_account_id != pending.next.id
+        {
+            bail!("account creation request is stale");
+        }
+        verify_persisted_identity(
+            &account_db_path(dir, &pending.next.id),
+            mode,
+            &pending.next.pubkey,
+        )?;
+        return Ok(pending.clone());
     }
     if registry.active_account_id != request.account_id {
         bail!("account creation target is no longer active");
@@ -77,9 +95,13 @@ pub(crate) fn commit_account_creation(dir: &Path, pending: &PreparedAccountCreat
         .retain(|id| id != &pending.previous && id != &pending.next.id);
     registry.history.insert(0, pending.previous.clone());
     registry.active_account_id = pending.next.id.clone();
-    registry.pending_creation = Some(PreparedAccountCreation {
-        committed: true,
-        ..pending.clone()
-    });
+    registry.completed_creations.insert(
+        pending.operation_id.clone(),
+        PreparedAccountCreation {
+            committed: true,
+            ..pending.clone()
+        },
+    );
+    registry.pending_creation = None;
     save_registry(dir, &registry)
 }

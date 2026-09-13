@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AccountKeyImportForm } from '@/components/settings/AccountKeyImportForm';
 import { getAccountDisplay, listAccounts } from '@/lib/api/identity';
 import type { AccountDisplay, AccountsSnapshot } from '@/lib/api/types.generated';
-import { changeAccountSession } from '@/lib/accountSession';
+import { accountCreationOperationId, changeAccountSession } from '@/lib/accountSession';
 import { useDesktopShellStore } from '@/shell/store';
 import { resolveProfilePictureSrc } from '@/shell/presentation';
 
@@ -27,7 +27,6 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
   const [display, setDisplay] = useState<AccountDisplay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [creationId] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -100,7 +99,7 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
             <Button disabled={pending || !active} className='mb-4 w-full' data-testid='create-new-account' onClick={() => {
               if (!active || pending) return;
               setPending(true); setError(null);
-              void changeAccountSession(active.id, false, creationId).catch(() => { setError(t('accountMenu.actionFailed')); setPending(false); });
+              void Promise.resolve().then(() => changeAccountSession(active.id, false, accountCreationOperationId(active.id))).catch(() => { setError(t('accountMenu.actionFailed')); setPending(false); });
             }}>{t(pending ? 'accountMenu.pending' : 'accountMenu.create')}</Button>
             <fieldset disabled={pending}><AccountKeyImportForm onImported={refresh} onSwitch={(id) => switchTo(id)} switching={pending} /></fieldset>
           </> : <>
