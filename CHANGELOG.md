@@ -18,6 +18,12 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.3-preview.2] - 2026-09-13
+
+### Fixes
+
+- warm up gossip when another protocol owns the active path ([#1012](https://github.com/KingYoSun/kukuri/pull/1012))
+
 ## [v0.2.2-preview.1] - 2026-09-12
 
 ### Features
