@@ -1,8 +1,8 @@
 # Issue #1001 Neutral / Teal dark theme
 
-- Status: current
+- Status: superseded
 - Supersedes: [Graphite / Orange](2026-09-12-issue-996-graphite-orange-theme.md)のdark配色のみ。light、Column構造、明示選択・保存、solid surface、contrast品質の判断は継承する。
-- Superseded by: None
+- Superseded by: [primary塗りボタンとカラム上辺（該当する判断のみ）](2026-09-13-issue-1003-orange-primary-buttons.md)。その他のdark配色・focus等は継承する。
 - PR: [#1002](https://github.com/KingYoSun/kukuri/pull/1002)
 - Preview: [dark変更前](../progress/assets/1001/before-columns-dark-1600.png) / [dark変更後](../progress/assets/1001/after-columns-dark-1600.png)、[light変更前](../progress/assets/1001/before-columns-light-1600.png) / [light変更後](../progress/assets/1001/after-columns-light-1600.png)
 - Surface / user / purpose: desktopのdark配色／閲覧・投稿・設定を継続する利用者／無彩色の面と青緑の主要操作で読みやすい階層を示す。
