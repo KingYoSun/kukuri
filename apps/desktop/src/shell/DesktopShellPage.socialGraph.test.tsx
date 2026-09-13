@@ -406,3 +406,86 @@ test('author detail mute toggle updates the selected author state', async () => 
   expect(within(authorPane).getByText('author detail stays visible while muted')).toBeInTheDocument();
 });
 
+
+// #992: ブロック中の作者詳細はフォロー／メッセージを無効にし、解除直後に同じ画面で復帰する。
+function blockedAuthorApi(authorPubkey: string, social: Record<string, unknown>) {
+  return createDesktopMockApi({
+    seedPosts: {
+      'kukuri:topic:general': [
+        {
+          object_id: 'post-author-blocked',
+          envelope_id: 'envelope-author-blocked',
+          author_pubkey: authorPubkey,
+          author_name: 'bob',
+          author_display_name: null,
+          following: false,
+          followed_by: false,
+          mutual: false,
+          friend_of_friend: false,
+          object_kind: 'post',
+          content: 'blocked author detail',
+          content_status: 'Available',
+          attachments: [],
+          created_at: 1,
+          reply_to: null,
+          root_id: 'post-author-blocked',
+          audience_label: 'Public',
+        },
+      ],
+    },
+    authorSocialViews: { [authorPubkey]: { name: 'bob', blocking: true, ...social } },
+  });
+}
+
+test('author detail keeps follow disabled while blocked and restores it right after unblock', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const api = blockedAuthorApi(authorPubkey, { followed_by: true });
+  const followAuthor = vi.spyOn(api, 'followAuthor');
+  const user = userEvent.setup();
+  render(<App api={api} />);
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+  await waitFor(() => expect(getDetailPane('Author')).toBeInTheDocument());
+  const authorPane = getDetailPane('Author');
+
+  const follow = within(authorPane).getByRole('button', { name: 'Follow' });
+  expect(follow).toHaveAttribute('aria-disabled', 'true');
+  expect(within(authorPane).getByText('Blocked', { selector: '.relationship-badge' })).toBeInTheDocument();
+  await user.click(follow);
+  expect(followAuthor).not.toHaveBeenCalled();
+
+  await user.click(within(authorPane).getByRole('button', { name: 'Unblock' }));
+  await waitFor(() => {
+    expect(within(authorPane).getByRole('button', { name: 'Follow' })).not.toHaveAttribute('aria-disabled');
+  });
+  expect(within(authorPane).queryByText('Blocked', { selector: '.relationship-badge' })).not.toBeInTheDocument();
+  await user.click(within(authorPane).getByRole('button', { name: 'Follow' }));
+  await waitFor(() => expect(followAuthor).toHaveBeenCalledWith(authorPubkey));
+  await waitFor(() => {
+    expect(within(authorPane).getByRole('button', { name: 'Unfollow' })).toBeInTheDocument();
+  });
+});
+
+test('author detail keeps message disabled while a mutual follow is blocked', async () => {
+  const authorPubkey = 'b'.repeat(64);
+  const api = blockedAuthorApi(authorPubkey, { following: true, followed_by: true, mutual: true });
+  const user = userEvent.setup();
+  render(<App api={api} />);
+
+  await user.click(await screen.findByRole('button', { name: 'bob' }));
+  await waitFor(() => expect(getDetailPane('Author')).toBeInTheDocument());
+  const authorPane = getDetailPane('Author');
+
+  const message = within(authorPane).getByRole('button', { name: 'Message' });
+  expect(message).toHaveAttribute('aria-disabled', 'true');
+  expect(within(authorPane).getByRole('button', { name: 'Unfollow' })).not.toHaveAttribute('aria-disabled');
+  await user.click(message);
+  expect(window.location.hash).not.toContain('#/messages');
+
+  await user.click(within(authorPane).getByRole('button', { name: 'Unblock' }));
+  await waitFor(() => {
+    expect(within(authorPane).getByRole('button', { name: 'Message' })).not.toHaveAttribute('aria-disabled');
+  });
+  await user.click(within(authorPane).getByRole('button', { name: 'Message' }));
+  await waitFor(() => expect(window.location.hash).toContain('#/messages'));
+});

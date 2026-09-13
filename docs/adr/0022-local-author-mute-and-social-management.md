@@ -57,6 +57,7 @@ Proposed
 - repost / quote repost は card author が未ミュートでも `repost_of.source_author_pubkey` が muted なら非表示にする。
 - author detail と profile social management page では muted / blocked author を表示し、unmute / unblock 導線を失わないようにする。一覧の各行と作者詳細、通報ダイアログのローカル操作から block / unblock できる（#961）。
 - Following / Followed / Muted の一覧は `display_name -> name -> pubkey` の昇順に固定する。
+- #992: 自分がブロック中（`blocking`）の相手に対しては、作者詳細と関係一覧のフォロー（未フォロー時）と作者詳細のメッセージを `aria-disabled` で無効にし、理由は hover / focus の tooltip と accessible description で示す。画面上の常時表示文は増やさず、作者詳細の見出しに「ブロック中」バッジを出す。フォロー解除・ミュート・ブロック解除・通報は残す。これは UI の入口だけの扱いであり、`follow_author` / `block_author` / DM 送信 API と guard、既存会話の Messages Column は変えない。ブロック時の自動フォロー解除は行わない。
 
 ## Public Interfaces
 - `kukuri-store`

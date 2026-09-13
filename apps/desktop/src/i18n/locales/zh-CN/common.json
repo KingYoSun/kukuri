@@ -210,6 +210,9 @@
     "noResults": "没有匹配的回应。"
   },
   "relationships": {
+    "blockedFollowReason": "已屏蔽的用户无法关注。请先取消屏蔽。",
+    "blockedMessageReason": "已屏蔽的用户无法发送消息。请先取消屏蔽。",
+    "blocking": "已屏蔽",
     "followsYou": "对方关注了你",
     "following": "已关注",
     "friendOfFriend": "通过你关注的用户建立联系",

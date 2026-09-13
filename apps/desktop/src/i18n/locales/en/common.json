@@ -210,6 +210,9 @@
     "noResults": "No matching reactions."
   },
   "relationships": {
+    "blockedFollowReason": "You can't follow a user you've blocked. Unblock them first.",
+    "blockedMessageReason": "You can't message a user you've blocked. Unblock them first.",
+    "blocking": "Blocked",
     "followsYou": "follows you",
     "following": "following",
     "friendOfFriend": "followed by someone you follow",

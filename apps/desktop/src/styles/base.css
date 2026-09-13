@@ -51,6 +51,19 @@ button:disabled {
   opacity: 0.56;
 }
 
+/* #992: ブロック中で使えない関係操作。focus 可能なまま無効化し、理由は tooltip / accessible description で示す。 */
+.button.button-blocked-action[aria-disabled='true'] {
+  color: var(--muted-foreground);
+  background: var(--surface-panel-muted);
+  border: 1px dashed var(--muted-foreground-soft);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.button.button-blocked-action[aria-disabled='true']:hover {
+  background: var(--surface-panel-muted);
+}
+
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

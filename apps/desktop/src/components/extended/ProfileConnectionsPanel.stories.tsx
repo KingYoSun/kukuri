@@ -24,6 +24,10 @@ export const Blocked: Story = {};
 export const Following: Story = { args: { activeView: 'following' } };
 export const Followers: Story = { args: { activeView: 'followed' } };
 export const Muted: Story = { args: { activeView: 'muted' } };
+// #992: フォロワータブのブロック中の行はフォローが無効で、理由は tooltip。
+export const BlockedFollower: Story = {
+  args: { activeView: 'followed', items: [{ ...author, following: false, mutual: false, muted: false }] },
+};
 export const Empty: Story = { args: { items: [] } };
 export const Loading: Story = { args: { items: [], status: 'loading' } };
 export const Error: Story = { args: { status: 'error', error: '一覧を更新できませんでした。' } };
