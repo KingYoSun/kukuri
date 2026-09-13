@@ -213,7 +213,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 
 - dark-first。`<html data-theme='dark|light'>`で切り替え、OSの`prefers-color-scheme`へ自動追従しない。
 - fontは`--font-sans`、技術識別子は`--font-mono`とtabular numeralsを使う。
-- surfaceはbase、accent、muted、softの段階で構成し、darkのprimary／accent／focusはteal、lightはwarm-orange、dangerは独立したdestructive familyを使う。
+- surfaceはbase、accent、muted、softの段階で構成し、darkの汎用primary／accent／focusはteal、lightはwarm-orange、dangerは独立したdestructive familyを使う。primary塗りボタンは両themeでwarm-orangeと専用文字色を使う。選択中Columnだけにオレンジの上辺強調を表示し、固定状態では上辺を強調しない。Control Centerボタンの未読数の文字と通知Columnの未読item枠は用途別オレンジ色を使う。
 - panelは`--radius-panel`、input／Noticeは`--radius-input`、pill controlは`--radius-pill`を使う。avatarは大きさに関わらず常に`--radius-pill`（全丸）とし、角丸へ戻さない。
 - textボタンは全丸のまま高さ2rem（`sm`は1.75rem）、横paddingは0.625rem（`sm`は0.5rem）を基準とし、既に小さい文字を縮めずに周辺の余白で密度を確保する。icon-only controlは2rem前後、投稿カードのavatarは1.75rem、profile overviewのavatarは3remを基準にする。
 - elevationは`--shadow-panel`、`--shadow-dropdown`、`--shadow-button-primary`に限定する。
@@ -274,8 +274,10 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | dark | `--surface-panel-soft` | `#292929` |
 | dark | `--surface-input` | `#202020` |
 | dark | `--surface-raised` | `#363636` |
-| dark | `--surface-button-primary` | `#03dac5` |
-| dark | `--surface-button-primary-hover` | `#31e2d0` |
+| dark | `--surface-button-primary` | `#d77d45` |
+| dark | `--surface-button-primary-hover` | `#c86f38` |
+| dark | `--button-primary-foreground` | `#20160e` |
+| dark | `--emphasis-orange` | `#d77d45` |
 | dark | `--surface-button-secondary` | `#363636` |
 | dark | `--surface-button-ghost` | `#292929` |
 | dark | `--surface-button-ghost-hover` | `#3d3d3d` |
@@ -327,6 +329,8 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 | light | `--surface-raised` | `#e5e5e2` |
 | light | `--surface-button-primary` | `#d77d45` |
 | light | `--surface-button-primary-hover` | `#c86f38` |
+| light | `--button-primary-foreground` | `#20160e` |
+| light | `--emphasis-orange` | `#a44a21` |
 | light | `--surface-button-secondary` | `#ececea` |
 | light | `--surface-button-ghost` | `#f7f7f5` |
 | light | `--surface-button-ghost-hover` | `#e5e5e2` |

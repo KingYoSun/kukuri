@@ -398,7 +398,7 @@
 }
 
 .notification-item[data-unread='true'] {
-  border-color: var(--border-accent);
+  border-color: var(--emphasis-orange);
 }
 
 .notification-item-header,
