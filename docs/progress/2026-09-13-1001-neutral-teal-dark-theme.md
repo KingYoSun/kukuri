@@ -61,6 +61,7 @@ WindowsローカルのWebView2と、Remote Desktopで接続中のUbuntu24 / WebK
 - `cargo xtask test`: Rust 911 PASS / 4 skipped、harness 22 PASS、doctest PASS。後段のfrontend suiteは181 files / 1610 tests PASS、2 files / 3 tests timeoutでFAIL。ローカル全体成功とは扱わない。
 - `cargo xtask desktop-ui-check`: lint/typecheck成功後、frontend suiteは180 files / 1608 tests PASS、3 files / 5 tests timeoutでFAIL。後段のStorybook/browser/visualは別実行とCIで補完した。
 - ローカルtimeoutはRust・UI検証の同時実行時に観測。初回失敗したAccountKeyPanel / workspaceResilience / channelsは、対象を分けた再実行で全件成功（前2 filesは11件、channels単独11件）。次の全体実行で別ケースにもtimeoutが出たため、全体結果の補完は同じ製品差分のCIを用いる。test timeout・assertion・本番の操作コードは変更していない。
+- 最終targeted（profile / workspaceResilience / contrast / design-contract / css-vars、`--maxWorkers=1`）: 5 files / 140 tests PASS。追加のtimeoutケースとstyles contractを再確認した。
 - `npx pnpm@10.16.1 storybook:build`: PASS。`cargo xtask desktop-storybook`はWindowsで実行中のxtask.exeを再リンクできず起動前に失敗したため、同じpackage scriptを直接実行した。
 - `npx pnpm@10.16.1 test:e2e:browser`: 270 tests PASS。既存ja/en/zh-CN、狭幅・200% effective viewport、各種状態と操作を含む。
 - Storybook 12状態（Tokens、Button、pressed/disabled IconButton、StatusBadge、更新checking/success/error、接続read-error/connecting/retrying、cached feedback）でaxe color-contrast違反0。[結果](assets/1001/story-contrast.json)。addon-a11yと別実行のaxeの競合を避けて描画後に検査した。Tokensの折り返されたcode文字2箇所が背景推定incompleteだったが、画像で重なりがないことと既存semantic pairの値を確認した。[Tokens描画](assets/1001/foundations-tokens--desktop-width.png)。
