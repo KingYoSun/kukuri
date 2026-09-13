@@ -229,8 +229,7 @@ export function DesktopShellPage({
     openDirectMessagePane,
     openThread,
     openAuthorDetail,
-    openProfileOverview,
-    openOwnProfileColumn,
+    openProfileOverview, openOwnProfileColumn,
     openProfileEditor,
     openProfileConnections,
   } = useDesktopShellRouting({
@@ -937,7 +936,6 @@ export function DesktopShellPage({
           }
         />
       </div>
-
       <DesktopShellOverlays
         actions={shellActions}
         dialogs={dialogs}

@@ -428,6 +428,9 @@ impl IrohDocsNode {
     }
 
     async fn shutdown_owned(&self) -> Result<()> {
+        // Flush before the router invokes BlobsProtocol::shutdown. A later
+        // shutdown RPC may legitimately find that actor already closed.
+        let blob_flush = self.blobs.sync_db().await;
         match timeout(router_shutdown_timeout(), self.router.shutdown()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
@@ -441,7 +444,8 @@ impl IrohDocsNode {
             }
         }
         self.endpoint.close().await;
-        self.blobs.shutdown().await?;
+        let _ = self.blobs.shutdown().await;
+        blob_flush?;
         Ok(())
     }
 }

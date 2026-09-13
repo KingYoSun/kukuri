@@ -559,12 +559,14 @@ mod tests {
         assert_eq!(docs_after.imported_peers, docs_before.imported_peers);
         assert_eq!(blob_after.imported_peers, blob_before.imported_peers);
 
-        timeout(Duration::from_secs(30), stack_a.shutdown())
+        timeout(Duration::from_secs(30), stack_a.shutdown_checked())
             .await
-            .expect("stack a shutdown timeout");
-        timeout(Duration::from_secs(30), stack_b.shutdown())
+            .expect("stack a shutdown timeout")
+            .expect("stack a shutdown");
+        timeout(Duration::from_secs(30), stack_b.shutdown_checked())
             .await
-            .expect("stack b shutdown timeout");
+            .expect("stack b shutdown timeout")
+            .expect("stack b shutdown");
     }
 
     #[tokio::test]
@@ -602,8 +604,9 @@ mod tests {
         );
         drop(current_guard);
 
-        timeout(Duration::from_secs(30), stack.shutdown())
+        timeout(Duration::from_secs(30), stack.shutdown_checked())
             .await
-            .expect("stack shutdown timeout");
+            .expect("stack shutdown timeout")
+            .expect("stack shutdown");
     }
 }

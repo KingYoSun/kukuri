@@ -15,7 +15,10 @@ async fn cancelled_shutdown_caller_still_waits_for_owned_cleanup_on_retry() {
         assert!(futures_util::poll!(shutdown.as_mut()).is_pending());
         // Drop the first caller while the node-owned shutdown continues.
     }
-    tokio::time::timeout(std::time::Duration::from_secs(45), node.clone().shutdown()).await.unwrap().unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(45), node.clone().shutdown())
+        .await
+        .unwrap()
+        .unwrap();
     drop(node);
     let reopened = IrohDocsNode::persistent(dir.path()).await.unwrap();
     reopened.shutdown().await.unwrap();
@@ -24,7 +27,12 @@ async fn cancelled_shutdown_caller_still_waits_for_owned_cleanup_on_retry() {
 #[tokio::test]
 async fn offline_blob_read_does_not_create_a_node_or_missing_store() {
     let dir = tempdir().unwrap();
-    assert!(crate::read_offline_blob(dir.path(), &"0".repeat(64)).await.unwrap().is_none());
+    assert!(
+        crate::read_offline_blob(dir.path(), &"0".repeat(64))
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
 }
 

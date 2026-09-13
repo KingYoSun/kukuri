@@ -10,11 +10,11 @@ import { fileToCreateAttachment } from '@/lib/attachments';
 import type { ProfileInput } from '@/lib/api';
 import { useDesktopShellStore, useDesktopShellStoreApi } from '@/shell/store';
 
-const defaultAccountAccess = { listAccounts, getProfileSetupRequired, saveInitialProfile };
+type AccountAccess = { listAccounts: typeof listAccounts; getProfileSetupRequired: typeof getProfileSetupRequired; saveInitialProfile: typeof saveInitialProfile };
 
 export function InitialProfileSetup({ ready, nodeFailed, onSkipNode, accountAccess }: {
   ready: boolean; nodeFailed: boolean; onSkipNode: () => void;
-  accountAccess?: typeof defaultAccountAccess;
+  accountAccess?: AccountAccess;
 }) {
   const { t } = useTranslation('shell');
   const store = useDesktopShellStoreApi();
