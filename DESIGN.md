@@ -188,6 +188,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 - internal layoutはColumn自身の実幅に応答し、viewportだけに依存しない。Column Canvasの意図的な横scrollは維持し、document-levelの横scrollを発生させない。
 - 直前まで全幅を表示していた選択Columnは、Canvas幅やWebViewの拡大率が変わっても表示範囲へ追従させる。その補正scrollをMobileのpage移動と誤認しない。利用者が手動scrollで選択Columnから離れている場合は、閲覧位置を引き戻さない。
 - overlay、Control Center、Composer、fullscreen controlはsafe areaと互いのhit areaを塞がない。
+- Mobileの下部操作は、Column footerの投稿ボタン（primary action）を右寄せ、アバター・Control Center・フィードバックのclusterを左下に固定し、4つのボタンの高さ（44px）と下辺を揃える。Composer入力中はclusterの各ボタンを隠す。
 - Tauri／WebView依存surfaceはbrowserだけで完了とせず、影響するOS／WebViewでinput ownership、fullscreen、resource縮退を確認する。
 
 ## 8. Component設計

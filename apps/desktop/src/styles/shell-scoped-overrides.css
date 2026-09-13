@@ -949,11 +949,7 @@
 }
 
 @media (max-width: 759px) {
-  .shell-phase1 .shell-control-cluster {
-    right: max(var(--space-md), env(safe-area-inset-right));
-    left: auto;
-  }
-
+  /* 幅狭の control cluster 位置とアバターボタン寸法は mobile-column-workspace.css が持つ。 */
   .shell-phase1 .shell-control-center-trigger > span:not(.shell-control-center-status-dot),
   .shell-phase1 .shell-tester-feedback-trigger > span {
     display: none;
