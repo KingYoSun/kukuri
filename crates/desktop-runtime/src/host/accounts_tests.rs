@@ -133,3 +133,46 @@ async fn creation_queued_behind_lifecycle_guard_cannot_mutate_after_shutdown() {
     assert!(!dir.path().join("account-transitions").exists());
     host.runtime().shutdown().await;
 }
+
+#[tokio::test]
+async fn queued_initial_profile_save_is_rejected_after_account_switch() {
+    let dir = tempfile::tempdir().unwrap();
+    let (host, a, b) = fixture(dir.path()).await;
+    let original_id = list_accounts(dir.path()).unwrap().active_account_id;
+    let next = Arc::new(
+        DesktopRuntime::new_with_config_and_identity(
+            account_db_path(dir.path(), &b.id),
+            kukuri_transport::TransportNetworkConfig::loopback(),
+            IdentityStorageMode::FileOnly,
+        )
+        .await
+        .unwrap(),
+    );
+    let guard = host.operation_guard.lock().await;
+    let queued_host = host.clone();
+    let queued = tokio::spawn(async move {
+        queued_host
+            .save_initial_profile(crate::InitialProfileRequest {
+                account_id: original_id,
+                profile: crate::SetMyProfileRequest {
+                    display_name: Some("Must not save".into()),
+                    ..Default::default()
+                },
+            })
+            .await
+    });
+    tokio::task::yield_now().await;
+    host.replace_runtime_locked(next.clone()).await.unwrap();
+    set_active_account(dir.path(), &b.id).unwrap();
+    let registry = std::fs::read(dir.path().join("accounts.json")).unwrap();
+    drop(guard);
+    assert!(queued.await.unwrap().is_err());
+    assert_eq!(
+        std::fs::read(dir.path().join("accounts.json")).unwrap(),
+        registry
+    );
+    assert_eq!(next.get_my_profile().await.unwrap().updated_at, 0);
+    assert_eq!(a.get_my_profile().await.unwrap().updated_at, 0);
+    a.shutdown().await;
+    host.shutdown().await;
+}
