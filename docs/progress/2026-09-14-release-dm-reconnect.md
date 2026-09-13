@@ -43,6 +43,8 @@ sinkの逆引きは上記2 warmup caller。変更pathはcrates/transport/src/iro
 
 既存tag／公開assetの上書きは禁止されているため、修正済みsourceの公開tagは修正と検証が揃ってからユーザーの指定を確認する。既存v0.2.3-preview.1のノードimageは上書きせず、VMも旧版を維持する。
 
+後続でユーザーがv0.2.3-preview.2を指定し、この判断は解消済み。既存tagを保持したまま[修正版の全クライアント・CN公開とVM更新](./2026-09-14-v0.2.3-preview.2-release-rollout.md)まで完了した。
+
 ## 実装・検証
 
 - Activeなtransport addressをgossip接続済みの根拠に使う早期returnを除去。新しいALPN、relay URL、peer、再試行schedulerは追加しない。既存のwarmup条件、同一peer in-flight guard、Semaphore 2並列、direct／relay backoffを使う。
