@@ -538,5 +538,37 @@
     "observedUnresolvedBody": "有节点显示了该内容，但无法获取其配置信息或举报联系方式，因此无法发送举报。",
     "localActionsHint": "你仍可在本地屏蔽、静音或隐藏。",
     "actionLabel": "举报"
+  },
+  "accountMenu": {
+    "open": "账号菜单",
+    "profile": "查看个人资料",
+    "unknown": "未知用户",
+    "noUsername": "未设置用户名",
+    "current": "当前账号",
+    "add": "添加账号",
+    "manage": "管理账号",
+    "logout": "退出登录",
+    "loading": "正在加载账号…",
+    "loadFailed": "无法加载账号。",
+    "unavailable": "个人资料不可用",
+    "retry": "重试",
+    "actionFailed": "操作未完成，请重试。",
+    "logoutTitle": "退出此账号？",
+    "logoutDescription": "此账号将从设备的管理列表中移除，但本地数据仍会保留。通过“添加账号”导入同一账号密钥即可重新登录。需要已导出的密钥及其密码。",
+    "logoutCreates": "将创建新账号并打开初次设置。",
+    "logoutReturns": "将切换回此前使用的已注册账号。",
+    "importDescription": "导入加密账号密钥。",
+    "cancel": "取消",
+    "yes": "是",
+    "pending": "处理中…",
+    "create": "创建新账号"
+  },
+  "initialProfile": {
+    "title": "首次设置个人资料",
+    "description": "设置显示名称、用户名、简介和头像。保存后的个人资料对其他用户公开。",
+    "save": "保存",
+    "later": "以后再说",
+    "nodeUnavailable": "无法确认社区节点状态。请重试或跳过并继续设置个人资料。",
+    "skipNode": "跳过并继续"
   }
 }

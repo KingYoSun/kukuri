@@ -605,6 +605,10 @@ export type DeleteDirectMessageMessageRequest = { pubkey: string, message_id: st
 
 export type SetMyProfileRequest = { name?: string | null, display_name?: string | null, about?: string | null, picture_upload?: CreateAttachmentRequest | null, clear_picture: boolean, };
 
+export type InitialProfileRequest = { account_id: string, profile: SetMyProfileRequest, };
+
+export type CreateAccountRequest = { account_id: string, operation_id: string, };
+
 export type ListLiveSessionsRequest = { topic: string, scope: TimelineScope, };
 
 export type CreateLiveSessionRequest = { topic: string, channel_ref: ChannelRef, title: string, description: string, };
@@ -710,6 +714,8 @@ export type ImportAccountKeyRequest = { export: string, passphrase: string, labe
 export type SwitchAccountRequest = { account_id: string, };
 
 export type AccountRecord = { id: string, pubkey: string, label?: string | null, created_at: number, last_used_at: number, };
+
+export type AccountDisplay = { id: string, name?: string | null, display_name?: string | null, picture?: string | null, unavailable: boolean, };
 
 export type AccountsSnapshot = { active_account_id: string, accounts: Array<AccountRecord>, };
 

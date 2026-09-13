@@ -129,3 +129,8 @@
     max-height: none;
   }
 }
+
+/* Account rows need room for an avatar and both profile names in the portal. */
+.ui-popover-content.shell-account-menu {
+  width: min(22rem, calc(100vw - 1rem));
+}

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 
 import { ProductionColumnWorkspaceStory } from './ProductionColumnWorkspaceStory';
 
@@ -26,6 +27,11 @@ const REVIEW_VIEWPORT_OPTIONS = {
 };
 
 export const ScopedDraftsAndComposer: Story = {};
+export const AccountMenuOpen: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByTestId('account-menu-trigger'));
+  },
+};
 /** 保存済みlayoutがないfresh installで表示する主要5 Columnのreview surface。 */
 export const DefaultProductOverview: Story = {
   globals: { shellWidth: 'review1440' },

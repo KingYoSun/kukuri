@@ -500,20 +500,23 @@ impl DesktopRuntime {
     }
 
     pub async fn shutdown(&self) {
+        if let Err(error) = self.shutdown_checked().await {
+            tracing::warn!(%error, "runtime shutdown did not finish cleanly");
+        }
+    }
+
+    pub async fn shutdown_checked(&self) -> Result<()> {
         if let Some(handle) = self.sync_status_observer_task.lock().await.take() {
             handle.abort();
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+            let _ = handle.await;
         }
         if let Some(handle) = self.community_node_scheduler_task.lock().await.take() {
             handle.abort();
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+            let _ = handle.await;
         }
         self.app_service.shutdown().await;
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(15),
-            self.iroh_stack.shutdown(),
-        )
-        .await;
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.store.close()).await;
+        self.iroh_stack.shutdown_checked().await?;
+        self.store.close().await;
+        Ok(())
     }
 }

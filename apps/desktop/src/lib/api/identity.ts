@@ -1,4 +1,8 @@
 import type {
+  AccountDisplay,
+  InitialProfileRequest,
+  CreateAccountRequest,
+  Profile,
   AccountKeyExport,
   AccountKeyImportPreview,
   AccountRecord,
@@ -30,15 +34,67 @@ const mockAccounts: AccountsSnapshot = {
 };
 
 const MOCK_EXPORT_PREFIX = 'kukuri-account-key.v1.';
+let mockAccountInitialized = false;
 
 export async function listAccounts(): Promise<AccountsSnapshot> {
   if (isDesktopMockActive()) {
+    if (!mockAccountInitialized && window.__KUKURI_DESKTOP__) {
+      const profile = await window.__KUKURI_DESKTOP__.getMyProfile();
+      MOCK_ACTIVE_ACCOUNT.id = profile.pubkey.slice(0, 16);
+      MOCK_ACTIVE_ACCOUNT.pubkey = profile.pubkey;
+      MOCK_ACTIVE_ACCOUNT.label = profile.display_name ?? null;
+      mockAccounts.active_account_id = MOCK_ACTIVE_ACCOUNT.id;
+      mockAccountInitialized = true;
+    }
     return {
       active_account_id: mockAccounts.active_account_id,
       accounts: mockAccounts.accounts.map((account) => ({ ...account })),
     };
   }
   return invokeDesktop<AccountsSnapshot>('list_accounts');
+}
+
+export async function getAccountDisplay(): Promise<AccountDisplay[]> {
+  if (isDesktopMockActive()) return mockAccounts.accounts.map((a) => ({ id: a.id, name: null, display_name: a.label, picture: null, unavailable: false }));
+  return invokeDesktop<AccountDisplay[]>('get_account_display');
+}
+
+export async function createAccount(accountId: string, operationId: string): Promise<AccountRecord> {
+  if (isDesktopMockActive()) {
+
+    const id = operationId.replaceAll('-', '').slice(0, 16);
+    const existing = mockAccounts.accounts.find((a) => a.id === id);
+    if (existing && mockAccounts.active_account_id === id) return existing;
+    if (mockAccounts.active_account_id !== accountId) throw new Error('account is no longer active');
+    const record = { id, pubkey: id.repeat(4), label: null, created_at: Date.now(), last_used_at: Date.now() };
+    mockAccounts.accounts.push(record); mockAccounts.active_account_id = id;
+    return record;
+  }
+  return invokeDesktop<AccountRecord>('create_account', { request: { account_id: accountId, operation_id: operationId } satisfies CreateAccountRequest });
+}
+
+export async function logoutAccount(accountId: string): Promise<AccountRecord> {
+  if (isDesktopMockActive()) {
+    if (accountId !== mockAccounts.active_account_id) throw new Error('account is no longer active');
+    mockAccounts.accounts = mockAccounts.accounts.filter((a) => a.id !== accountId);
+    if (!mockAccounts.accounts.length) {
+      const id = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
+      mockAccounts.accounts.push({ id, pubkey: id.repeat(4), label: null, created_at: Date.now(), last_used_at: Date.now() });
+    }
+    const next = mockAccounts.accounts[0];
+    mockAccounts.active_account_id = next.id;
+    return next;
+  }
+  return invokeDesktop<AccountRecord>('logout_account', { request: { account_id: accountId } satisfies SwitchAccountRequest });
+}
+
+export async function getProfileSetupRequired(accountId: string): Promise<boolean> {
+  if (isDesktopMockActive()) return false;
+  return invokeDesktop<boolean>('get_profile_setup_required', { request: { account_id: accountId } satisfies SwitchAccountRequest });
+}
+
+export async function saveInitialProfile(request: InitialProfileRequest): Promise<Profile> {
+  return invokeDesktop<Profile>('save_initial_profile', { request });
 }
 
 export async function exportAccountKey(passphrase: string): Promise<AccountKeyExport> {

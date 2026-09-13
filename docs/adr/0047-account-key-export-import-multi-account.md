@@ -42,6 +42,17 @@ Accepted
 - パスフレーズ喪失 = エクスポートの復元不能。運営者を含む誰にも復元できない。
 
 ## Consequences
+
+### 2026-09-13 追加: アカウントメニューとログアウト（#1005）
+
+- Control Center左隣のアバターメニューは、プロフィール表示、登録account一覧、鍵import、設定account、logoutを提供する。プロフィール表示は本人の既存カラムをfocusし、なければ追加する。
+- 「アカウント追加」Dialogには鍵importと「新しいアカウントを作成」を置く。明示的新規作成はoperation ID付き生成予約で冪等にし、既存登録を保持して新accountへ切り替え、初回CN同意／skip後にプロフィール設定へ進む（Scope revision v3）。
+- logoutはローカルデータ・鍵を残して管理登録から外す操作。確認後、直前に使用した登録accountへ戻る。履歴が無効なら残存履歴、旧状態ならlast_used_at降順/id順を使う。他の登録が0件の場合だけ鍵ペアを生成して有効化する。
+- 切替履歴は成功した切替のみを記録する。logout対象の登録除外と次activeは一つのregistry commitで反映する。生成予約と回復情報を永続化し、再試行・restartで二重生成やlogout対象の復活を起こさない。
+- 同じ鍵を再importすると完全pubkeyを照合して残存account directoryを再利用する。DB・blob・鍵を上書きせず、未登録directoryを自動列挙しない。
+- 新規生成accountは初回プロフィール設定対象を永続化する。初回CN案内で同意完了または明示skipした後、プロフィール設定Dialogを表示する。既存accountを空の表示名だけで新規扱いしない。
+- 初回プロフィール保存は既存profile/avatar公開契約を利用する。完了状態はLocal Onlyかつaccount単位。別accountへ遅延した保存や完了通知を適用しない。
+- 固定AC・INVAR・inventory・transitionは [#1005実装計画](../progress/2026-09-13-1005-account-quick-menu-plan.md) に置く。実装・検証状態は同計画の証跡で判断する。
 - ADR 0002 分類は `docs/legal/account-key-export-data-classification.md` に定める。
 - `KUKURI_INSTANCE` / `KUKURI_APP_DATA_DIR` で指定したディレクトリ配下も同じ accounts レイアウトになる(dev runbook の手順は据え置き。ディレクトリ構造だけが 1 段深くなる)。
 - 「アカウントを識別する鍵はユーザーの端末にのみ保存される」という法務文言は維持される(エクスポートはユーザー自身の明示操作であり、アプリが外部へ送信することはない)。`LEGAL_BUNDLE_VERSION` は変更しない。

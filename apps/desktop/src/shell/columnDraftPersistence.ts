@@ -14,6 +14,18 @@ const MAX_DRAFT_CONTENT_LENGTH = 200_000;
 
 export type ColumnDraftStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
+const activeDraftWriters = new WeakMap<ColumnDraftStorage, Set<() => () => void>>();
+
+/** Flush the current store synchronously, then fence its debounce/pagehide
+ * writer until a failed transition explicitly resumes the same account. */
+export function suspendColumnDraftPersistence(storage: ColumnDraftStorage): () => void {
+  const resumes: Array<() => void> = [];
+  try {
+    for (const suspend of activeDraftWriters.get(storage) ?? []) resumes.push(suspend());
+  } catch (error) { resumes.forEach((resume) => resume()); throw error; }
+  return () => resumes.forEach((resume) => resume());
+}
+
 type PersistedColumnDraft = {
   target: ColumnDraftTarget;
   content: string;
@@ -124,16 +136,18 @@ export function startColumnDraftPersistence(
   let previous = serializeColumnDrafts(store.getState().columnDraftsByKey);
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let pending: Record<string, ColumnDraftState> | null = null;
+  let suspended = false;
   const flush = () => {
     if (timeoutId !== null) clearTimeout(timeoutId);
     timeoutId = null;
-    if (!pending) return;
+    if (suspended || !pending) return;
     const next = pending;
     pending = null;
     previous = serializeColumnDrafts(next);
     writeColumnDrafts(storage, next);
   };
   const unsubscribe = store.subscribe((state) => {
+    if (suspended) return;
     const serialized = serializeColumnDrafts(state.columnDraftsByKey);
     if (serialized === previous) return;
     pending = state.columnDraftsByKey;
@@ -141,9 +155,23 @@ export function startColumnDraftPersistence(
     timeoutId = setTimeout(flush, DRAFT_WRITE_DELAY_MS);
   });
   lifecycleTarget.addEventListener('pagehide', flush);
+  const suspend = () => {
+    if (!writeColumnDrafts(storage, store.getState().columnDraftsByKey)) throw new Error('Could not retain account drafts');
+    suspended = true;
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    timeoutId = null; pending = null;
+    return () => {
+      suspended = false;
+      pending = store.getState().columnDraftsByKey;
+      flush();
+    };
+  };
+  const writers = activeDraftWriters.get(storage) ?? new Set();
+  writers.add(suspend); activeDraftWriters.set(storage, writers);
   return () => {
     flush();
     unsubscribe();
     lifecycleTarget.removeEventListener('pagehide', flush);
+    writers.delete(suspend);
   };
 }

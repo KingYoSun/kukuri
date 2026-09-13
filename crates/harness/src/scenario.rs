@@ -14,6 +14,7 @@ pub enum ScenarioKind {
     CommunityNodeTrustRelationClient,
     DomeHostingLifecycle,
     DeviceBackupRestore,
+    AccountLifecycle,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

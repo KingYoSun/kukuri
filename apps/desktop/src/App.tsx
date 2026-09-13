@@ -8,6 +8,7 @@ import { changeDesktopLocale } from '@/i18n/changeLocale';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { DesktopShellPage } from '@/shell/DesktopShellPage';
+import { reconcileAccountDrafts } from '@/lib/accountSession';
 import {
   type AppProps,
   DesktopShellStoreContext,
@@ -113,6 +114,7 @@ export function App(props: AppProps) {
             return;
           }
           if (status.status === 'ready') {
+            if (await reconcileAccountDrafts()) { window.location.reload(); return; }
             const applied = await applyPendingDeviceRestoreFrontendState();
             if (!active) return;
             if (applied) {

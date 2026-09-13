@@ -538,5 +538,37 @@
     "observedUnresolvedBody": "A node surfaced this content but its manifest or report contact is unavailable, so the report cannot be routed.",
     "localActionsHint": "You can still block, mute, or hide this locally.",
     "actionLabel": "Report"
+  },
+  "accountMenu": {
+    "open": "Account menu",
+    "profile": "View profile",
+    "unknown": "Unknown user",
+    "noUsername": "Username not set",
+    "current": "Current account",
+    "add": "Add account",
+    "manage": "Manage accounts",
+    "logout": "Log out",
+    "loading": "Loading accounts…",
+    "loadFailed": "Could not load accounts.",
+    "unavailable": "Profile unavailable",
+    "retry": "Retry",
+    "actionFailed": "Could not complete the action. Please try again.",
+    "logoutTitle": "Log out of this account?",
+    "logoutDescription": "This account will be removed from the managed accounts on this device. Local data stays here. Import the same account key through Add account to log in again. You need the exported key and its passphrase.",
+    "logoutCreates": "A new account will be created and initial setup will open.",
+    "logoutReturns": "You will return to the previously used registered account.",
+    "importDescription": "Import an encrypted account key.",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "pending": "Working…",
+    "create": "Create a new account"
+  },
+  "initialProfile": {
+    "title": "Set up your profile",
+    "description": "Choose your display name, username, bio and avatar. Your saved profile is visible to other people.",
+    "save": "Save",
+    "later": "Later",
+    "nodeUnavailable": "The community node status is unavailable. Retry or skip to continue setting up your profile.",
+    "skipNode": "Skip and continue"
   }
 }

@@ -63,3 +63,5 @@ mod replication_heuristics;
 mod runtime_events;
 mod seeded_dht;
 mod static_peer;
+
+mod account_logout;

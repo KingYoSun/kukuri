@@ -269,8 +269,16 @@ impl DesktopRuntime {
     }
 
     pub async fn set_my_profile(&self, request: SetMyProfileRequest) -> Result<Profile> {
+        let envelope = self.prepare_my_profile(request).await?;
+        self.app_service.commit_my_profile(envelope).await
+    }
+
+    pub(crate) async fn prepare_my_profile(
+        &self,
+        request: SetMyProfileRequest,
+    ) -> Result<kukuri_core::KukuriEnvelope> {
         self.app_service
-            .set_my_profile(ProfileInput {
+            .prepare_my_profile(ProfileInput {
                 name: request.name,
                 display_name: request.display_name,
                 about: request.about,
@@ -281,6 +289,13 @@ impl DesktopRuntime {
                 clear_picture: request.clear_picture,
             })
             .await
+    }
+
+    pub(crate) async fn commit_my_profile(
+        &self,
+        envelope: kukuri_core::KukuriEnvelope,
+    ) -> Result<Profile> {
+        self.app_service.commit_my_profile(envelope).await
     }
 
     pub async fn follow_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {

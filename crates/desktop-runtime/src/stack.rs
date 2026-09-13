@@ -350,11 +350,13 @@ impl SharedIrohStack {
             .await
     }
 
-    pub(crate) async fn shutdown(&self) {
+    pub(crate) async fn shutdown_checked(&self) -> Result<()> {
         if let Some(current) = self.current.lock().await.take() {
-            let _ =
-                tokio::time::timeout(std::time::Duration::from_secs(15), current.shutdown()).await;
+            current.transport.shutdown().await;
+            current.docs_sync.shutdown().await;
+            current.node.clone().shutdown().await?;
         }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -557,12 +559,14 @@ mod tests {
         assert_eq!(docs_after.imported_peers, docs_before.imported_peers);
         assert_eq!(blob_after.imported_peers, blob_before.imported_peers);
 
-        timeout(Duration::from_secs(30), stack_a.shutdown())
+        timeout(Duration::from_secs(30), stack_a.shutdown_checked())
             .await
-            .expect("stack a shutdown timeout");
-        timeout(Duration::from_secs(30), stack_b.shutdown())
+            .expect("stack a shutdown timeout")
+            .expect("stack a shutdown");
+        timeout(Duration::from_secs(30), stack_b.shutdown_checked())
             .await
-            .expect("stack b shutdown timeout");
+            .expect("stack b shutdown timeout")
+            .expect("stack b shutdown");
     }
 
     #[tokio::test]
@@ -600,8 +604,9 @@ mod tests {
         );
         drop(current_guard);
 
-        timeout(Duration::from_secs(30), stack.shutdown())
+        timeout(Duration::from_secs(30), stack.shutdown_checked())
             .await
-            .expect("stack shutdown timeout");
+            .expect("stack shutdown timeout")
+            .expect("stack shutdown");
     }
 }

@@ -1,6 +1,6 @@
 {
   "baseline": "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a",
-  "scope_revision": "2026-09-09-917-initial-locale-r1",
+  "scope_revision": "2026-09-13-1005-account-menu-v3",
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
     {"tauri":"commands::system_locale::get_system_locales","excluded":"os","reason":"#917: desktopの同意前UI言語を選ぶOS local read。UIを持たないCLIの業務commandには追加しない。"},
@@ -18,6 +18,11 @@
     {"tauri":"commands::identity::import_account_key","cli":"import_account_key","inventory":"INV-1"},
     {"tauri":"commands::identity::list_accounts","cli":"list_accounts","inventory":"INV-1"},
     {"tauri":"commands::identity::switch_account","cli":"switch_account","inventory":"INV-1"},
+    {"tauri":"commands::identity::create_account","cli":"create_account","inventory":"INV-1"},
+    {"tauri":"commands::identity::logout_account","cli":"logout_account","inventory":"INV-1"},
+    {"tauri":"commands::identity::get_account_display","cli":"get_account_display","inventory":"INV-1"},
+    {"tauri":"commands::identity::get_profile_setup_required","excluded":"frontend_state","reason":"#1005: GUI初回プロフィールDialogの表示・保存回復状態。CLIは既存set_my_profileで編集し、初回Dialogを持たない。"},
+    {"tauri":"commands::identity::save_initial_profile","excluded":"frontend_state","reason":"#1005: GUI初回Dialogの署名済み保存journalと完了の協調。CLIの通常プロフィール保存契約はset_my_profileを維持する。"},
     {"tauri":"commands::device_backup::create_device_backup_command","cli":"create_device_backup_command","inventory":"INV-1"},
     {"tauri":"commands::device_backup::preview_device_backup_command","cli":"preview_device_backup_command","inventory":"INV-1"},
     {"tauri":"commands::device_backup::restore_device_backup_command","cli":"restore_device_backup_command","inventory":"INV-1"},

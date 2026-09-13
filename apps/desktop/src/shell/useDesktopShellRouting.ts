@@ -42,6 +42,7 @@ import {
 } from '@/shell/store';
 import {
   activeWorkspaceColumn,
+  activateColumn,
   activeWorkspaceScope,
   closeColumn,
   columnIdentityId,
@@ -818,6 +819,23 @@ export function useDesktopShellRouting({
     ]
   );
 
+  const openOwnProfileColumn = useCallback(() => {
+    const state = storeApi.getState();
+    const own = state.workspaceState.columns.filter((column) => column.kind === 'profile' && (!column.entityId || column.entityId === state.syncStatus.local_author_pubkey));
+    const existing = own.find((column) => column.id === state.workspaceState.activeColumnId) ?? own[0];
+    const scope = existing?.scope ?? activeWorkspaceScope(state.workspaceState);
+    const id = existing?.id ?? columnIdentityId('profile', scope);
+    if (existing) setWorkspaceState((current) => activateColumn(current, id));
+    else openWorkspaceColumn('profile', scope);
+    setShellChromeState((current) => ({ ...current, profileMode: 'overview' }));
+    syncRoute('push', { primarySection: 'profile', profileMode: 'overview', activeTopic: scope?.topicId, selectedAuthorPubkey: existing?.entityId ?? null });
+    scheduleAnimationFrame(() => {
+      const column = document.querySelector<HTMLElement>(`[data-column-id="${CSS.escape(id)}"]`);
+      column?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      column?.focus({ preventScroll: true });
+    });
+  }, [storeApi, setWorkspaceState, openWorkspaceColumn, setShellChromeState, syncRoute, scheduleAnimationFrame]);
+
   const openProfileOverview = useCallback(() => {
     setShellChromeState((current) => ({
       ...current,
@@ -931,6 +949,7 @@ export function useDesktopShellRouting({
     openThread,
     openAuthorDetail,
     openProfileOverview,
+    openOwnProfileColumn,
     openProfileEditor,
     openProfileConnections,
   };

@@ -149,3 +149,5 @@ mod desktop_smoke;
 mod direct_messages;
 mod private_channels;
 mod waiters;
+
+mod account_lifecycle;

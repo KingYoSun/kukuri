@@ -146,6 +146,7 @@ pub struct IrohDocsNode {
     docs: DocsApi,
     blobs: BlobStore,
     shutdown_started: AtomicBool,
+    shutdown_result: tokio::sync::watch::Sender<Option<std::result::Result<(), String>>>,
 }
 
 const ENDPOINT_SECRET_FORMAT_VERSION: u32 = 1;
@@ -307,6 +308,7 @@ impl IrohDocsNode {
             docs: docs.api().clone(),
             blobs,
             shutdown_started: AtomicBool::new(false),
+            shutdown_result: tokio::sync::watch::channel(None).0,
         });
         if relay_config.connect_mode() == ConnectMode::DirectOrRelay {
             node.apply_relay_config(relay_config.clone()).await?;
@@ -402,9 +404,33 @@ impl IrohDocsNode {
     }
 
     pub async fn shutdown(self: Arc<Self>) -> Result<()> {
-        if self.shutdown_started.swap(true, Ordering::AcqRel) {
-            return Ok(());
+        let mut result = self.shutdown_result.subscribe();
+        if !self.shutdown_started.swap(true, Ordering::AcqRel) {
+            let node = self.clone();
+            // The owned task survives cancellation of a caller or outer timeout.
+            tokio::spawn(async move {
+                let outcome = node
+                    .shutdown_owned()
+                    .await
+                    .map_err(|error| error.to_string());
+                node.shutdown_result.send_replace(Some(outcome));
+            });
         }
+        loop {
+            if let Some(outcome) = result.borrow().clone() {
+                return outcome.map_err(|message| anyhow!(message));
+            }
+            result
+                .changed()
+                .await
+                .context("node shutdown result unavailable")?;
+        }
+    }
+
+    async fn shutdown_owned(&self) -> Result<()> {
+        // Flush before the router invokes BlobsProtocol::shutdown. A later
+        // shutdown RPC may legitimately find that actor already closed.
+        let blob_flush = self.blobs.sync_db().await;
         match timeout(router_shutdown_timeout(), self.router.shutdown()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
@@ -419,6 +445,7 @@ impl IrohDocsNode {
         }
         self.endpoint.close().await;
         let _ = self.blobs.shutdown().await;
+        blob_flush?;
         Ok(())
     }
 }

@@ -5,6 +5,7 @@ import { createDesktopShellStore } from '@/shell/store';
 import {
   readColumnDrafts,
   startColumnDraftPersistence,
+  suspendColumnDraftPersistence,
   writeColumnDrafts,
   type ColumnDraftStorage,
 } from '@/shell/columnDraftPersistence';
@@ -31,6 +32,26 @@ function memoryStorage(initial: string | null = null): ColumnDraftStorage & {
 describe('Column Draft persistence', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it('flushes the newest draft before transition and fences debounce/pagehide/cleanup writes', () => {
+    const storage = memoryStorage();
+    const events = new EventTarget();
+    const store = createDesktopShellStore({ draftStorage: storage });
+    const stop = startColumnDraftPersistence(store, storage, events);
+    store.getState().setField('columnDraftsByKey', { [columnDraftKey(target)]: { ...createColumnDraft(target), content: 'latest account A input' } });
+    const resume = suspendColumnDraftPersistence(storage);
+    expect(readColumnDrafts(storage)[columnDraftKey(target)]?.content).toBe('latest account A input');
+    writeColumnDrafts(storage, { [columnDraftKey(target)]: { ...createColumnDraft(target), content: 'account B input' } });
+    events.dispatchEvent(new Event('pagehide'));
+    vi.advanceTimersByTime(1000);
+    expect(readColumnDrafts(storage)[columnDraftKey(target)]?.content).toBe('account B input');
+    resume();
+    expect(readColumnDrafts(storage)[columnDraftKey(target)]?.content).toBe('latest account A input');
+    suspendColumnDraftPersistence(storage);
+    writeColumnDrafts(storage, {});
+    stop();
+    expect(readColumnDrafts(storage)).toEqual({});
+  });
 
   it('round-trips only serializable text Draft state', () => {
     const storage = memoryStorage();

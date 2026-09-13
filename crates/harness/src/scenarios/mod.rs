@@ -1,5 +1,6 @@
 use crate::*;
 
+mod account_lifecycle;
 mod community_node;
 mod community_node_index;
 mod community_node_trust_relation;
@@ -85,6 +86,9 @@ pub async fn run_scenario(
         }
         ScenarioKind::DeviceBackupRestore => {
             device_backup::run_device_backup_restore(root, scenario, artifacts_dir).await
+        }
+        ScenarioKind::AccountLifecycle => {
+            account_lifecycle::run_account_lifecycle(root, scenario, artifacts_dir).await
         }
     }
 }
