@@ -165,3 +165,61 @@ test.each([
   expect(screen.getAllByRole('menuitem')).toHaveLength(2);
   expect(screen.queryByRole('menuitem', { name: label })).not.toBeInTheDocument();
 });
+
+// #992: ブロック中の行ではフォローを無効にし、理由は tooltip で示す。解除とミュートは残す。
+test('blocked rows disable follow beside the user information and in the row menu', async () => {
+  const user = userEvent.setup();
+  const onToggleRelationship = vi.fn();
+  const onToggleBlock = vi.fn();
+  const blockedFollower = {
+    author_pubkey: AUTHOR_ID,
+    name: 'alice',
+    display_name: 'Alice',
+    about: null,
+    picture_asset: null,
+    following: false,
+    followed_by: true,
+    mutual: false,
+    friend_of_friend: false,
+    friend_of_friend_via_pubkeys: [],
+    muted: false,
+    blocking: true,
+    blocked_by: false,
+    provenance: null,
+  };
+  const { unmount } = render(
+    <ProfileConnectionsPanel
+      activeView='followed'
+      items={[blockedFollower]}
+      localAuthorPubkey={'f'.repeat(64)}
+      status='ready'
+      error={null}
+      onSelectView={vi.fn()}
+      onToggleRelationship={onToggleRelationship}
+      onToggleMute={vi.fn()}
+      onToggleBlock={onToggleBlock}
+      onBack={vi.fn()}
+    />
+  );
+
+  const follow = screen.getByRole('button', { name: 'Follow' });
+  expect(follow).toHaveAttribute('aria-disabled', 'true');
+  await user.click(follow);
+  expect(onToggleRelationship).not.toHaveBeenCalled();
+  await user.hover(follow);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(
+    "You can't follow a user you've blocked. Unblock them first."
+  );
+  await user.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Unblock' }));
+  expect(onToggleBlock).toHaveBeenCalledWith(AUTHOR_ID, true);
+  unmount();
+
+  renderPanel({ activeView: 'blocking', items: [blockedFollower], onToggleRelationship });
+  await user.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+  const followItem = screen.getByRole('menuitem', { name: 'Follow' });
+  expect(followItem).toBeDisabled();
+  expect(screen.getByRole('menuitem', { name: 'Mute' })).toBeEnabled();
+  await user.click(followItem);
+  expect(onToggleRelationship).not.toHaveBeenCalled();
+});

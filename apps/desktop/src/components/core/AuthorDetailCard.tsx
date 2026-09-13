@@ -1,6 +1,8 @@
 import {
+  type ButtonHTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactElement,
   type ReactNode,
   useMemo,
   useState,
@@ -27,6 +29,7 @@ import { planReportRouting } from '@/lib/api/reportRouting';
 import { copyTextToClipboard } from '@/lib/utils';
 
 import { AuthorAvatar } from './AuthorAvatar';
+import { BlockedActionTooltip } from './BlockedActionTooltip';
 import { RelationshipBadge } from './RelationshipBadge';
 import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
 import { useReportManifests } from './useReportManifests';
@@ -70,6 +73,9 @@ export function AuthorDetailCard({
       onOpenDirectMessage
   );
   const showMuteAction = Boolean(author && author.author_pubkey !== localAuthorPubkey);
+  // #992: ブロック中はフォローとメッセージを無効にし、理由を tooltip で示す。フォロー解除は残す。
+  const blocking = Boolean(author?.blocking);
+  const followBlocked = blocking && !author?.following;
   const [reportOpen, setReportOpen] = useState(false);
   const [identifierMenuPosition, setIdentifierMenuPosition] =
     useState<ContextActionMenuPosition | null>(null);
@@ -121,6 +127,18 @@ export function AuthorDetailCard({
     });
   };
 
+  const actionButton = (label: string, onClick: () => void) => (
+    <button className='button button-secondary' type='button' onClick={onClick}>
+      {label}
+    </button>
+  );
+  const withBlockedReason = (
+    blocked: boolean,
+    reason: string,
+    button: ReactElement<ButtonHTMLAttributes<HTMLButtonElement>>
+  ) =>
+    blocked ? <BlockedActionTooltip reason={reason}>{button}</BlockedActionTooltip> : button;
+
   return (
     <Card
       className='author-detail'
@@ -161,6 +179,11 @@ export function AuthorDetailCard({
                         className='author-detail-relationship'
                       />
                     ) : null}
+                    {blocking ? (
+                      <span className='relationship-badge relationship-badge-direct author-detail-relationship'>
+                        {t('relationships.blocking')}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -175,26 +198,27 @@ export function AuthorDetailCard({
           {showFollowAction || showMuteAction || showMessageAction ? (
             <div className='author-detail-actions'>
               <div className='author-detail-action-buttons'>
-                {showMessageAction ? (
-                  <button
-                    className='button button-secondary'
-                    type='button'
-                    onClick={() => onOpenDirectMessage?.(author.author_pubkey)}
-                  >
-                    {t('actions.message', { defaultValue: 'Message' })}
-                  </button>
-                ) : null}
-                {showFollowAction ? (
-                  <button
-                    className='button button-secondary'
-                    type='button'
-                    onClick={() => onToggleRelationship(author.author_pubkey, author.following)}
-                  >
-                    {view.summary?.followActionLabel === 'Unfollow'
-                      ? t('actions.unfollow')
-                      : t('actions.follow')}
-                  </button>
-                ) : null}
+                {showMessageAction
+                  ? withBlockedReason(
+                      blocking,
+                      t('relationships.blockedMessageReason'),
+                      actionButton(t('actions.message', { defaultValue: 'Message' }), () =>
+                        onOpenDirectMessage?.(author.author_pubkey)
+                      )
+                    )
+                  : null}
+                {showFollowAction
+                  ? withBlockedReason(
+                      followBlocked,
+                      t('relationships.blockedFollowReason'),
+                      actionButton(
+                        view.summary?.followActionLabel === 'Unfollow'
+                          ? t('actions.unfollow')
+                          : t('actions.follow'),
+                        () => onToggleRelationship(author.author_pubkey, author.following)
+                      )
+                    )
+                  : null}
                 {showMuteAction ? (
                   <button
                     className='button button-secondary'

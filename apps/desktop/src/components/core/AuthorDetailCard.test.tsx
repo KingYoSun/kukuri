@@ -240,3 +240,91 @@ test('author report local actions offer block next to mute', async () => {
   await user.click(within(dialog).getByRole('button', { name: 'Block' }));
   expect(onToggleBlock).toHaveBeenCalledWith(author.author_pubkey, false);
 });
+
+// #992: ブロック中は関係操作を無効にし、理由は tooltip と accessible description で示す。
+test('blocked author keeps follow and message disabled with a tooltip reason', async () => {
+  const user = userEvent.setup();
+  const onToggleRelationship = vi.fn();
+  const onOpenDirectMessage = vi.fn();
+  const onToggleBlock = vi.fn();
+  const author = STORY_AUTHOR_DETAIL_VIEW.author!;
+
+  render(
+    <AuthorDetailCard
+      view={{
+        ...STORY_AUTHOR_DETAIL_VIEW,
+        author: { ...author, following: false, blocking: true },
+        summary: {
+          ...STORY_AUTHOR_DETAIL_VIEW.summary!,
+          following: false,
+          blocking: true,
+          followActionLabel: 'Follow',
+          blockActionLabel: 'Unblock',
+        },
+        canMessage: true,
+      }}
+      localAuthorPubkey={'f'.repeat(64)}
+      onToggleRelationship={onToggleRelationship}
+      onToggleMute={vi.fn()}
+      onToggleBlock={onToggleBlock}
+      onOpenDirectMessage={onOpenDirectMessage}
+    />
+  );
+
+  const follow = screen.getByRole('button', { name: 'Follow' });
+  const message = screen.getByRole('button', { name: 'Message' });
+  const followReason = "You can't follow a user you've blocked. Unblock them first.";
+  const messageReason = "You can't message a user you've blocked. Unblock them first.";
+  expect(follow).toHaveAttribute('aria-disabled', 'true');
+  expect(follow).toHaveAccessibleDescription(followReason);
+  expect(message).toHaveAttribute('aria-disabled', 'true');
+  expect(message).toHaveAccessibleDescription(messageReason);
+  expect(screen.getByText('Blocked', { selector: '.relationship-badge' }).closest('.author-detail-identity'))
+    .toContainElement(screen.getByText('bob'));
+
+  await user.click(follow);
+  await user.click(message);
+  expect(onToggleRelationship).not.toHaveBeenCalled();
+  expect(onOpenDirectMessage).not.toHaveBeenCalled();
+
+  await user.hover(follow);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(followReason);
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+  // click で message に focus が残っているため、一度 follow へ移してから focus で開く。
+  follow.focus();
+  message.focus();
+  await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent(messageReason));
+
+  await user.click(screen.getByRole('button', { name: 'Unblock' }));
+  expect(onToggleBlock).toHaveBeenCalledWith(author.author_pubkey, true);
+  expect(screen.getByRole('button', { name: 'Mute' })).not.toHaveAttribute('aria-disabled');
+});
+
+test('blocked author who is still followed keeps unfollow enabled without a reason', async () => {
+  const user = userEvent.setup();
+  const onToggleRelationship = vi.fn();
+  const author = STORY_AUTHOR_DETAIL_VIEW.author!;
+
+  render(
+    <AuthorDetailCard
+      view={{
+        ...STORY_AUTHOR_DETAIL_VIEW,
+        author: { ...author, blocking: true },
+        summary: { ...STORY_AUTHOR_DETAIL_VIEW.summary!, blocking: true, blockActionLabel: 'Unblock' },
+      }}
+      localAuthorPubkey={'f'.repeat(64)}
+      onToggleRelationship={onToggleRelationship}
+      onToggleMute={vi.fn()}
+      onToggleBlock={vi.fn()}
+    />
+  );
+
+  const unfollow = screen.getByRole('button', { name: 'Unfollow' });
+  expect(unfollow).not.toHaveAttribute('aria-disabled');
+  expect(unfollow).not.toHaveAccessibleDescription();
+  expect(screen.getByText('Blocked', { selector: '.relationship-badge' })).toBeInTheDocument();
+  expect(screen.getByText('mutual follow')).toBeInTheDocument();
+  await user.click(unfollow);
+  expect(onToggleRelationship).toHaveBeenCalledWith(author.author_pubkey, true);
+});

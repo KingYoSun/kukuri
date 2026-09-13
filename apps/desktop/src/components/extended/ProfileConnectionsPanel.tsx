@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { MoreHorizontal } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
+import { BlockedActionTooltip } from '@/components/core/BlockedActionTooltip';
 import { RelationshipBadge } from '@/components/core/RelationshipBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -36,6 +37,10 @@ const CONNECTION_VIEWS: ProfileConnectionsView[] = ['following', 'followed', 'mu
 
 function displayLabel(author: AuthorSocialView, unknownAuthorLabel: string): string {
   return author.display_name?.trim() || author.name?.trim() || unknownAuthorLabel;
+}
+
+function followBlocked(author: AuthorSocialView): boolean {
+  return author.blocking && !author.following;
 }
 
 function strongestRelationshipLabel(author: AuthorSocialView): string | null {
@@ -81,6 +86,8 @@ export function ProfileConnectionsPanel({
     const author = menuAuthor;
     return [
       { id: 'follow', label: t(author.following ? 'common:actions.unfollow' : 'common:actions.follow'),
+        // #992: ブロック中はフォローだけ無効。解除は残す。
+        disabled: followBlocked(author),
         onSelect: () => onToggleRelationship(author.author_pubkey, author.following) },
       { id: 'mute', label: t(author.muted ? 'common:actions.unmute' : 'common:actions.mute'),
         onSelect: () => onToggleMute(author.author_pubkey, author.muted) },
@@ -144,6 +151,24 @@ export function ProfileConnectionsPanel({
             const label = displayLabel(author, t('common:fallbacks.unknownAuthor'));
             const relationshipLabel = strongestRelationshipLabel(author);
             const showActions = author.author_pubkey !== localAuthorPubkey;
+            const primaryButton = (
+              <Button
+                variant='secondary'
+                type='button'
+                className='profile-connection-primary-action'
+                onClick={() => {
+                  if (primaryAction === 'block') onToggleBlock(author.author_pubkey, author.blocking);
+                  else if (primaryAction === 'mute') onToggleMute(author.author_pubkey, author.muted);
+                  else onToggleRelationship(author.author_pubkey, author.following);
+                }}
+              >
+                {primaryAction === 'block'
+                  ? t(author.blocking ? 'common:actions.unblock' : 'common:actions.block')
+                  : primaryAction === 'mute'
+                    ? t(author.muted ? 'common:actions.unmute' : 'common:actions.mute')
+                    : t(author.following ? 'common:actions.unfollow' : 'common:actions.follow')}
+              </Button>
+            );
 
             return (
               <li key={author.author_pubkey}>
@@ -206,22 +231,13 @@ export function ProfileConnectionsPanel({
                       </p>
                     </div>
                     {showActions ? (
-                      <Button
-                        variant='secondary'
-                        type='button'
-                        className='profile-connection-primary-action'
-                        onClick={() => {
-                          if (primaryAction === 'block') onToggleBlock(author.author_pubkey, author.blocking);
-                          else if (primaryAction === 'mute') onToggleMute(author.author_pubkey, author.muted);
-                          else onToggleRelationship(author.author_pubkey, author.following);
-                        }}
-                      >
-                        {primaryAction === 'block'
-                          ? t(author.blocking ? 'common:actions.unblock' : 'common:actions.block')
-                          : primaryAction === 'mute'
-                            ? t(author.muted ? 'common:actions.unmute' : 'common:actions.mute')
-                            : t(author.following ? 'common:actions.unfollow' : 'common:actions.follow')}
-                      </Button>
+                      primaryAction === 'follow' && followBlocked(author) ? (
+                        <BlockedActionTooltip reason={t('common:relationships.blockedFollowReason')}>
+                          {primaryButton}
+                        </BlockedActionTooltip>
+                      ) : (
+                        primaryButton
+                      )
                     ) : null}
                   </div>
                 </article>

@@ -191,6 +191,37 @@ export const CommunityNodeClearedPostAdvisory: Story = {
   },
 };
 
+// #992: ブロック中はフォローとメッセージが無効になり、理由は tooltip で出る。
+export const Blocked: Story = {
+  args: {
+    view: {
+      ...authorDetailView,
+      author: { ...authorDetailView.author!, following: false, blocking: true },
+      summary: {
+        ...authorDetailView.summary!,
+        following: false,
+        blocking: true,
+        followActionLabel: 'Follow',
+        blockActionLabel: 'Unblock',
+      },
+      canMessage: true,
+    },
+    onOpenDirectMessage: () => undefined,
+    onToggleBlock: () => undefined,
+  },
+};
+
+export const BlockedWhileFollowing: Story = {
+  args: {
+    view: {
+      ...authorDetailView,
+      author: { ...authorDetailView.author!, blocking: true },
+      summary: { ...authorDetailView.summary!, blocking: true, blockActionLabel: 'Unblock' },
+    },
+    onToggleBlock: () => undefined,
+  },
+};
+
 export const Empty: Story = {
   args: {
     view: STORY_EMPTY_AUTHOR_DETAIL_VIEW,

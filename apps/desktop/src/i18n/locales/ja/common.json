@@ -210,6 +210,9 @@
     "noResults": "一致するリアクションがありません。"
   },
   "relationships": {
+    "blockedFollowReason": "ブロック中はフォローできません。先にブロックを解除してください。",
+    "blockedMessageReason": "ブロック中はメッセージを送れません。先にブロックを解除してください。",
+    "blocking": "ブロック中",
     "followsYou": "相手があなたをフォロー",
     "following": "フォロー中",
     "friendOfFriend": "フォロー中のユーザーを介したつながり",
