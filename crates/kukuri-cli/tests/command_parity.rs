@@ -116,6 +116,8 @@ fn exclusion_allowed(tauri: &str, kind: &str) -> bool {
             tauri,
             "commands::device_backup::get_pending_device_restore_frontend_state"
                 | "commands::device_backup::acknowledge_pending_device_restore_frontend_state"
+                | "commands::identity::get_profile_setup_required"
+                | "commands::identity::save_initial_profile"
         ),
         // #978: GUI process内のin-memory診断(開発者モードのミラーとログ閲覧)。
         "gui_diagnostics" => matches!(
@@ -163,8 +165,8 @@ fn baseline_inventory_is_classified_once() {
         manifest.baseline,
         "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a"
     );
-    assert_eq!(manifest.scope_revision, "2026-09-09-917-initial-locale-r1");
-    assert_eq!(manifest.entries.len(), 146);
+    assert_eq!(manifest.scope_revision, "2026-09-13-1005-account-menu-v3");
+    assert_eq!(manifest.entries.len(), 151);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
 

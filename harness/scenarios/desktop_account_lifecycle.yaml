@@ -1,0 +1,12 @@
+name: desktop_account_lifecycle
+kind: account_lifecycle
+fixtures:
+  seed: 1005
+  topic: kukuri:topic:account-lifecycle
+steps: []
+artifacts:
+  dump_logs: false
+  metrics_snapshot: false
+timeouts:
+  overall_ms: 180000
+  step_ms: 30000

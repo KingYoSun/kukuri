@@ -355,7 +355,6 @@ pub fn run() {
             commands::identity::create_account,
             commands::identity::get_profile_setup_required,
             commands::identity::get_account_display,
-            commands::identity::complete_profile_setup,
             commands::identity::save_initial_profile,
             commands::device_backup::create_device_backup_command,
             commands::device_backup::preview_device_backup_command,

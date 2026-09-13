@@ -254,7 +254,9 @@ pub(crate) fn ensure_accounts_initialized(
                         registry.active_account_id
                     )
                 })?;
-            Ok(account_db_path(app_data_dir, active.id.as_str()))
+            let db = account_db_path(app_data_dir, active.id.as_str());
+            verify_persisted_identity(&db, mode, &active.pubkey)?;
+            Ok(db)
         }
         None => {
             let flat_db = app_data_dir.join(DB_FILE_NAME);
@@ -400,7 +402,7 @@ fn create_account_dir(db_path: &Path) -> Result<()> {
         .with_context(|| format!("failed to create account dir `{}`", dir.display()))
 }
 
-fn verify_persisted_identity(
+pub(crate) fn verify_persisted_identity(
     db_path: &Path,
     mode: IdentityStorageMode,
     expected_pubkey: &str,

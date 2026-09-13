@@ -69,6 +69,33 @@ impl CommandHandler for Handler {
             )
         })?;
         match self.name {
+            "create_account" => encode(
+                context
+                    .host
+                    .ok_or_else(crate::session::failed)?
+                    .create_account(decode(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            "logout_account" => {
+                let request: SwitchAccountRequest = decode(payload)?;
+                encode(
+                    context
+                        .host
+                        .ok_or_else(crate::session::failed)?
+                        .logout_account(&request.account_id)
+                        .await
+                        .map_err(command_error)?,
+                )
+            }
+            "get_account_display" => encode(
+                context
+                    .host
+                    .ok_or_else(crate::session::failed)?
+                    .account_display()
+                    .await
+                    .map_err(command_error)?,
+            ),
             "get_desktop_startup_status" => encode(session.status()),
             "get_app_consent_status" => encode(kukuri_desktop_runtime::app_consent_status(
                 &session.consent_db_path(),
@@ -205,6 +232,9 @@ pub(super) fn registrations(session: Option<Arc<ClientSession>>) -> Vec<CommandR
         ("import_account_key", Write, true, false, true),
         ("list_accounts", Read, false, false, true),
         ("switch_account", Write, false, false, true),
+        ("create_account", Write, false, false, true),
+        ("logout_account", Write, false, false, true),
+        ("get_account_display", Read, false, false, true),
         ("create_device_backup_command", Write, true, false, true),
         ("preview_device_backup_command", Read, true, false, true),
         (

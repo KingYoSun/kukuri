@@ -126,6 +126,24 @@ fn logout_rejects_stale_target_without_mutating_registry() {
 }
 
 #[test]
+fn missing_registered_identity_does_not_generate_a_replacement_on_logout_or_restart() {
+    let dir = tempdir().unwrap();
+    ensure_accounts_initialized(dir.path(), MODE).unwrap();
+    let a = list_accounts(dir.path()).unwrap().active_account_id;
+    let b = add_account(dir.path(), MODE, &KukuriKeys::generate(), None, false).unwrap();
+    set_active_account(dir.path(), &b.id).unwrap();
+    let a_db = account_db_path(dir.path(), &a);
+    fs::remove_file(a_db.with_extension("identity-key")).unwrap();
+    fs::remove_file(a_db.with_extension("identity-store")).unwrap();
+    let before = fs::read(dir.path().join("accounts.json")).unwrap();
+    assert!(prepare_logout(dir.path(), MODE, &b.id).is_err());
+    assert_eq!(fs::read(dir.path().join("accounts.json")).unwrap(), before);
+    set_active_account(dir.path(), &a).unwrap();
+    assert!(ensure_accounts_initialized(dir.path(), MODE).is_err());
+    assert!(load_existing_keys(&a_db, MODE).unwrap().is_none());
+}
+
+#[test]
 fn prepared_last_logout_reselects_an_imported_account_before_commit() {
     let dir = tempdir().unwrap();
     ensure_accounts_initialized(dir.path(), MODE).unwrap();
@@ -166,6 +184,30 @@ async fn profile_test_host(dir: &Path) -> Arc<ClientHost> {
     ClientHost::from_runtime(dir.to_path_buf(), Arc::new(runtime))
         .await
         .unwrap()
+}
+
+#[tokio::test]
+async fn host_switch_rejects_missing_registered_keys_without_changing_identity() {
+    let _resource = lock_test_resource(TestResource::IdentityStorage).await;
+    let dir = tempdir().unwrap();
+    let host = profile_test_host(dir.path()).await;
+    let before = list_accounts(dir.path()).unwrap();
+    let author = host.runtime().get_my_profile().await.unwrap().pubkey;
+    let b = add_account(dir.path(), MODE, &KukuriKeys::generate(), None, false).unwrap();
+    let db = account_db_path(dir.path(), &b.id);
+    fs::remove_file(db.with_extension("identity-key")).unwrap();
+    fs::remove_file(db.with_extension("identity-store")).unwrap();
+    assert!(host.switch_account(&b.id).await.is_err());
+    assert_eq!(
+        list_accounts(dir.path()).unwrap().active_account_id,
+        before.active_account_id
+    );
+    assert_eq!(
+        host.runtime().get_my_profile().await.unwrap().pubkey,
+        author
+    );
+    assert!(load_existing_keys(&db, MODE).unwrap().is_none());
+    host.shutdown().await;
 }
 
 #[tokio::test]

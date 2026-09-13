@@ -1,4 +1,6 @@
 mod accounts;
+#[cfg(test)]
+mod accounts_tests;
 mod consent;
 mod consent_acceptance;
 mod profile;
@@ -333,6 +335,11 @@ impl ClientHost {
         }
 
         let db_path = account_db_path(&self.app_data_dir, account_id);
+        crate::accounts::verify_persisted_identity(
+            &db_path,
+            crate::identity::IdentityStorageMode::from_env(),
+            &record.pubkey,
+        )?;
         let next = Self::build_detached_runtime(db_path)
             .await
             .map_err(|error| anyhow::anyhow!("failed to start the account runtime: {error}"))?;

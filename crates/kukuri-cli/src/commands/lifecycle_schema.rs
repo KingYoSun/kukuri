@@ -50,6 +50,7 @@ pub(super) fn input(name: &str) -> Value {
         "get_desktop_startup_status"
         | "get_app_consent_status"
         | "list_accounts"
+        | "get_account_display"
         | "cancel_device_backup"
         | "export_account_key"
         | "preview_account_key_import" => object(json!({}), &[]),
@@ -57,7 +58,8 @@ pub(super) fn input(name: &str) -> Value {
             json!({"documents": array(fields(json!({"slug": string(), "version": integer()}))), "language": string(), "age_attested": boolean()}),
         ),
         "import_account_key" => object(json!({"label": nullable(string())}), &[]),
-        "switch_account" => fields(json!({"account_id": string()})),
+        "switch_account" | "logout_account" => fields(json!({"account_id": string()})),
+        "create_account" => fields(json!({"account_id": string(), "operation_id": string()})),
         "create_device_backup_command" | "preview_device_backup_command" => {
             fields(json!({"path": string()}))
         }
@@ -81,7 +83,10 @@ pub(super) fn output(name: &str) -> Value {
         "preview_account_key_import" => fields(
             json!({"version": integer(), "kdf": string(), "public_key": string(), "already_registered": boolean()}),
         ),
-        "import_account_key" | "switch_account" => account(),
+        "import_account_key" | "switch_account" | "logout_account" | "create_account" => account(),
+        "get_account_display" => array(fields(
+            json!({"id": string(), "name": nullable(string()), "display_name": nullable(string()), "picture": nullable(string()), "unavailable": boolean()}),
+        )),
         "cancel_device_backup" => json!({"type": "null"}),
         "create_device_backup_command" => {
             fields(json!({"path": string(), "public_key": string(), "bytes": integer()}))

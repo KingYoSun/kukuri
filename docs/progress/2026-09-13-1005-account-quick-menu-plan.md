@@ -212,3 +212,35 @@ T1で共有helperの全callerとsink逆引きを補完し、未分類を残さ�
 - INV-9: 追加モーダルの明示的新規作成→CreateAccountRequest→host生成・切替→registry/鍵/runtime。INVAR-1/2/3/5/6を適用する。
 - TR-12: A使用中に新規作成→Bがactive、A登録・データを保持、B初回flow。cancel／stale対象／生成・保存・起動失敗は既存状態を保持。operation IDでretryを冪等にし、重複登録・別account削除を0にする。Rust/UI/browser/実機で検証する。
 - 新規作成後のlogoutはAへ戻る。既存のimport成功は登録のみという契約を維持する。
+
+## 実装・検証記録（進行中）
+
+- Issue: #1005、関連報告 #993、PR: #1006。
+- registryは履歴・生成予約・完了operation記録・初回対象をLocal Onlyで保持。登録済みidentityは生成前に完全pubkey一致を検証する。
+- 初回profileは署名済みenvelopeとrequest hashを先にjournalへ保存する。同じ要求は再利用し、変更された明示入力は古い操作の回復後に新保存する。既に同じdocs内容なら再送信しない。
+- logout/create/switchのcommit失敗はregistry読戻しで分類。未確定だけ旧runtimeへ戻す。確定済みは再flushして新runtimeを維持、不明なら両runtimeを停止してFailedとする。
+- node停止は所有taskと完了通知でcancel-safeにした。router停止前にblobをflushし、endpoint closeを完了させる。routerが閉じたblob actorへの二回目shutdownは成功条件にしない。
+- 下書きは切替前に現在storeを同期flushし、旧writerのdebounce/pagehide/cleanupを停止する。失敗が旧accountのままと確認できた場合だけwriterを再開する。
+- CLI parityの既存契約によりcreate_account/logout_account/get_account_displayの生commandを共有hostへ配線。初回Dialogの保存/完了協調はGUIのfrontend_stateとして名前を限定して分類。独立したCLI専用機能設計は追加しない。
+
+### 成功した対象検証
+
+| 条件 | 実行・証跡 |
+| --- | --- |
+| AC-8/9/14、TR-4/5/6/12 | `cargo xtask scenario desktop_account_lifecycle`: 3工程PASS（実ClientHost、投稿・プロフィール・暗号化鍵import、restart） |
+| INVAR-2/3、TR-7/8 | `cargo test -p kukuri-desktop-runtime --lib account_logout`: 10 tests PASS（creation tombstone、鍵欠落、再import、profile journal） |
+| commit故障・queued操作 | `cargo test -p kukuri-desktop-runtime --lib host::accounts_tests`: 4 tests PASS（pre-commit、post-rename、unknown commit、終了後mutation 0） |
+| node停止 | `cargo test -p kukuri-iroh-node cancelled_shutdown_caller`: PASS、caller cancel後に完了待ち・store再open |
+| 下書き境界 | `columnDraftPersistence.test.ts` / `accountSession.test.ts`: 最新入力flush、pagehide書戻し禁止、restart回復、storage失敗でbackend mutation 0 |
+| AC-12/13、TR-10/11 | `DesktopShellPage.initialProfile.test.tsx`: 5 tests PASS（skip、同意失敗/中断/成功、保存失敗後の編集、あとで/new session、offline明示skip） |
+| AC-1..7/11/14 | `DesktopShellPage.accountMenu.test.tsx`、`account-menu.spec.ts`: menu順序、切替、logout取消/確定、本人カラムfocus/重複防止、作成入口PASS |
+| 既存CN flow | Playwright `community-node-onboarding.spec.ts` + account-menu: 16 tests PASS（既存Escape regressionを修正後） |
+| CLI全登録分類 | `cargo test -p kukuri-cli --test command_parity`: 5 tests PASS、151 GUI入口を分類 |
+| frontend統合 | 全unit/shell 1624 tests PASS（後続追加分は対象testと最終CIで確認）。browser初回は275 PASS/1 FAIL、既存Escape regression修正後は対象16件PASS |
+| 視覚 | Linux/Chromium専用workflow run 34751037087成功。新しいmenu/addの4画像だけを採用し、無関係な既存画像の揺れをbaseline更新しない |
+
+### 実機確認の途中証跡
+
+- Windows: 専用backendデータ `.codex/test-data/account-1005-windows` と専用WebView user dataでCN skip→初回profile→名前/ユーザー名保存→本人プロフィール反映、アカウントmenuの並びを確認。
+- Ubuntu24: `ssh local2` の `/tmp/kukuri-ui-1005` と専用app dataで起動。Remote DesktopをComputer Useで操作し、CN skip→初回profile→名前/ユーザー名保存→本人プロフィール反映を確認。
+- 新規作成・切替・logoutの実機通し、最終CI、独立監査は確認中。未確認をPASSとは扱わない。

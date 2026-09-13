@@ -66,6 +66,11 @@ pub(crate) fn prepare_logout(
         next,
         generated,
     };
+    verify_persisted_identity(
+        &account_db_path(dir, &prepared.next.id),
+        mode,
+        &prepared.next.pubkey,
+    )?;
     registry.pending_logout = Some(prepared.clone());
     save_registry(dir, &registry)?;
     Ok(prepared)

@@ -12,9 +12,10 @@ import { useDesktopShellStore, useDesktopShellStoreApi } from '@/shell/store';
 
 type AccountAccess = { listAccounts: typeof listAccounts; getProfileSetupRequired: typeof getProfileSetupRequired; saveInitialProfile: typeof saveInitialProfile };
 
-export function InitialProfileSetup({ ready, nodeFailed, onSkipNode, accountAccess }: {
+export function InitialProfileSetup({ ready, nodeFailed, onSkipNode, accountAccess, onRequired }: {
   ready: boolean; nodeFailed: boolean; onSkipNode: () => void;
   accountAccess?: AccountAccess;
+  onRequired?: (required: boolean) => void;
 }) {
   const { t } = useTranslation('shell');
   const store = useDesktopShellStoreApi();
@@ -32,15 +33,15 @@ export function InitialProfileSetup({ ready, nodeFailed, onSkipNode, accountAcce
   const busy = useRef(false);
   useEffect(() => {
     let current = true;
-    setRequired(false); setDismissed(false); setAccountId(null); setError(null);
+    setRequired(false); setDismissed(false); setAccountId(null); setError(null); onRequired?.(false);
     void (accountAccess?.listAccounts ?? listAccounts)().then(async (snapshot) => {
       const account = snapshot.accounts.find((a) => a.id === snapshot.active_account_id && a.pubkey === author);
       if (!account) return;
       const needsSetup = await (accountAccess?.getProfileSetupRequired ?? getProfileSetupRequired)(account.id);
-      if (current) { setAccountId(account.id); setRequired(needsSetup); }
+      if (current) { setAccountId(account.id); setRequired(needsSetup); onRequired?.(needsSetup); }
     }).catch(() => { if (current) setError(t('accountMenu.loadFailed')); });
     return () => { current = false; };
-  }, [author, attempt, t, accountAccess]);
+  }, [author, attempt, t, accountAccess, onRequired]);
   useEffect(() => () => { if (picture) URL.revokeObjectURL(picture); }, [picture]);
   useEffect(() => {
     if (localProfile && !dirty.current) setFields({ name: localProfile.name ?? '', display_name: localProfile.display_name ?? '', about: localProfile.about ?? '', clear_picture: false });

@@ -20,6 +20,7 @@ export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry
 }) {
   const intro = useCommunityNodeOnboarding();
   const [resolvedFor, setResolvedFor] = useState<string | null>(null);
+  const [profileRequired, setProfileRequired] = useState(false);
   const initialReview = useRef(false);
   const setPreference = useDesktopShellFieldSetter('communityIndexNodePreference');
   const state = useDesktopShellStore(useShallow((s) => ({
@@ -33,7 +34,7 @@ export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry
     api, configuredBaseUrls: state.config.nodes.map((node) => node.base_url),
     statuses: state.statuses, acceptConsents: onAccept,
     onAccepted: () => { if (initialReview.current) { initialReview.current = false; setResolvedFor(state.author); } },
-    onDismiss: () => { if (initialReview.current) { initialReview.current = false; intro.resume(); } },
+    onDismiss: () => { if (initialReview.current) { initialReview.current = false; if (profileRequired) intro.resume(); } },
   });
   const baseUrl = intro.baseUrl;
   const availability = communityIndexAvailability(state);
@@ -54,6 +55,6 @@ export function CommunityNodeOnboarding({ api, onAccept, onOpenSettings, onRetry
       onCloseAutoFocus={intro.restoreFocus}
     /> : null}
     {consent.dialog ? <CommunityNodeConsentDialog {...consent.dialog} /> : null}
-    <InitialProfileSetup key={state.author} ready={nodeReady && !baseUrl && !consent.dialog} nodeFailed={state.statusError} onSkipNode={() => setResolvedFor(state.author)} />
+    <InitialProfileSetup key={state.author} onRequired={setProfileRequired} ready={nodeReady && !baseUrl && !consent.dialog} nodeFailed={state.statusError} onSkipNode={() => setResolvedFor(state.author)} />
   </>;
 }

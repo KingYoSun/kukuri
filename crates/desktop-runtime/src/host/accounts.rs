@@ -240,12 +240,4 @@ impl ClientHost {
         })
         .await?
     }
-
-    pub async fn complete_profile_setup(&self, account_id: &str) -> anyhow::Result<()> {
-        let _guard = self.operation_guard.lock().await;
-        if self.shutdown_started.load(Ordering::Acquire) {
-            anyhow::bail!("client host is shutting down");
-        }
-        lifecycle::complete_profile_setup(&self.app_data_dir, account_id)
-    }
 }

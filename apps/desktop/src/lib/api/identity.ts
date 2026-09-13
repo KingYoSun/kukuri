@@ -93,11 +93,6 @@ export async function getProfileSetupRequired(accountId: string): Promise<boolea
   return invokeDesktop<boolean>('get_profile_setup_required', { request: { account_id: accountId } satisfies SwitchAccountRequest });
 }
 
-export async function completeProfileSetup(accountId: string): Promise<void> {
-  if (isDesktopMockActive()) return;
-  return invokeDesktop<void>('complete_profile_setup', { request: { account_id: accountId } satisfies SwitchAccountRequest });
-}
-
 export async function saveInitialProfile(request: InitialProfileRequest): Promise<Profile> {
   return invokeDesktop<Profile>('save_initial_profile', { request });
 }

@@ -154,24 +154,6 @@ pub async fn save_initial_profile(
 }
 
 #[tauri::command]
-pub async fn complete_profile_setup(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, DesktopState>,
-    operation: tauri::State<'_, DesktopOperationState>,
-    request: SwitchAccountRequest,
-) -> Result<(), CommandError> {
-    let _guard = operation.switch_guard.lock().await;
-    crate::desktop_lifecycle::require_running(&app_handle)?;
-    require_runtime_operation_ready(&app_handle.state::<DesktopStartupState>().status())
-        .map_err(CommandError::from)?;
-    state
-        .host()
-        .complete_profile_setup(&request.account_id)
-        .await
-        .map_err(map_error)
-}
-
-#[tauri::command]
 pub async fn list_accounts(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<AccountsSnapshot, CommandError> {
