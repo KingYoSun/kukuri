@@ -560,7 +560,8 @@
     "importDescription": "导入加密账号密钥。",
     "cancel": "取消",
     "yes": "是",
-    "pending": "处理中…"
+    "pending": "处理中…",
+    "create": "创建新账号"
   },
   "initialProfile": {
     "title": "首次设置个人资料",

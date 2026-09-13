@@ -46,6 +46,7 @@ Accepted
 ### 2026-09-13 追加: アカウントメニューとログアウト（#1005）
 
 - Control Center左隣のアバターメニューは、プロフィール表示、登録account一覧、鍵import、設定account、logoutを提供する。プロフィール表示は本人の既存カラムをfocusし、なければ追加する。
+- 「アカウント追加」Dialogには鍵importと「新しいアカウントを作成」を置く。明示的新規作成はoperation ID付き生成予約で冪等にし、既存登録を保持して新accountへ切り替え、初回CN同意／skip後にプロフィール設定へ進む（Scope revision v3）。
 - logoutはローカルデータ・鍵を残して管理登録から外す操作。確認後、直前に使用した登録accountへ戻る。履歴が無効なら残存履歴、旧状態ならlast_used_at降順/id順を使う。他の登録が0件の場合だけ鍵ペアを生成して有効化する。
 - 切替履歴は成功した切替のみを記録する。logout対象の登録除外と次activeは一つのregistry commitで反映する。生成予約と回復情報を永続化し、再試行・restartで二重生成やlogout対象の復活を起こさない。
 - 同じ鍵を再importすると完全pubkeyを照合して残存account directoryを再利用する。DB・blob・鍵を上書きせず、未登録directoryを自動列挙しない。

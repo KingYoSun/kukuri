@@ -80,6 +80,7 @@ pub use host::{
     persist_restore_activation_phase, recover_device_restore_before_startup,
     require_runtime_operation_ready, restore_startup_action, runtime_access_allowed,
 };
+pub use requests::CreateAccountRequest;
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。
 pub use kukuri_store::StoreStartupError;
 pub use paths::{resolve_app_data_dir_from_env, resolve_db_path_from_env};

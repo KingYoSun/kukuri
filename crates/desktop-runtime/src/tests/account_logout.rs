@@ -1,8 +1,37 @@
 use super::*;
+use crate::accounts::create::{commit_account_creation, prepare_account_creation};
 use crate::accounts::{add_account, ensure_accounts_initialized, lifecycle::*};
 use crate::identity::load_existing_keys;
 
 const MODE: IdentityStorageMode = IdentityStorageMode::FileOnly;
+
+#[test]
+fn explicit_creation_preserves_accounts_and_reuses_operation_on_retry() {
+    let dir = tempdir().unwrap();
+    ensure_accounts_initialized(dir.path(), MODE).unwrap();
+    let original = list_accounts(dir.path()).unwrap().active_account_id;
+    let request = CreateAccountRequest {
+        account_id: original.clone(),
+        operation_id: uuid::Uuid::new_v4().to_string(),
+    };
+    let first = prepare_account_creation(dir.path(), MODE, &request).unwrap();
+    let retry = prepare_account_creation(dir.path(), MODE, &request).unwrap();
+    assert_eq!(first, retry);
+    assert_eq!(list_accounts(dir.path()).unwrap().accounts.len(), 1);
+    commit_account_creation(dir.path(), &retry).unwrap();
+    let snapshot = list_accounts(dir.path()).unwrap();
+    assert_eq!(snapshot.accounts.len(), 2);
+    assert_eq!(snapshot.active_account_id, first.next.id);
+    assert_eq!(
+        prepare_account_creation(dir.path(), MODE, &request)
+            .unwrap()
+            .next,
+        first.next
+    );
+    let logout = prepare_logout(dir.path(), MODE, &first.next.id).unwrap();
+    assert_eq!(logout.next.id, original);
+    assert!(profile_setup_required(dir.path(), &first.next.id).unwrap());
+}
 
 #[test]
 fn logout_returns_to_previous_account_and_retains_local_data() {

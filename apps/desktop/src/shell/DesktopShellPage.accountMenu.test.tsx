@@ -60,3 +60,13 @@ test('view profile focuses an existing own column and does not duplicate it', as
   await waitFor(() => expect(document.activeElement).toBe(first));
   expect(document.querySelectorAll('[data-column-id]')).toHaveLength(count);
 });
+
+test('add account dialog offers key import and explicit account creation', async () => {
+  const { user, menu, change, a } = await setup();
+  await user.click(within(menu).getByRole('menuitem', { name: 'Add account' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Add account' });
+  expect(within(dialog).getByTestId('import-input')).toBeVisible();
+  await user.click(within(dialog).getByRole('button', { name: 'Create a new account' }));
+  expect(change).toHaveBeenCalledExactlyOnceWith(a.id, false, expect.stringMatching(/^[a-f0-9-]{36}$/));
+  expect(within(dialog).getByRole('button', { name: 'Working…' })).toBeDisabled();
+});

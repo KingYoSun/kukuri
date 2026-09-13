@@ -368,6 +368,7 @@ fn export_ipc_types() {
         DeleteDirectMessageMessageRequest,
         SetMyProfileRequest,
         crate::InitialProfileRequest,
+        crate::CreateAccountRequest,
         ListLiveSessionsRequest,
         CreateLiveSessionRequest,
         LiveSessionCommandRequest,

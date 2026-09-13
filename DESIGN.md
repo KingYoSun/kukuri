@@ -74,6 +74,8 @@ Control Center左隣の丸いアバターボタンからアカウントメニュ
 
 logout確認はローカルデータ保持と同じ鍵のimportによる再ログインを説明し、「はい」「キャンセル」を置く。初期focusはキャンセル。成功後は直前の登録accountへ戻り、他の登録がない場合だけ新規鍵を生成する。新規accountの初回プロフィールDialogはCN同意完了または明示skipの後に開き、他Dialogと重ねない。保存操作は本文のscrollから分離する。「あとで」はsession内の自動再表示を抑止し、未完了なら次回起動で再案内する。完了状態はaccount単位で保持する。
 
+「アカウント追加」Dialogには既存鍵のimportに加え「新しいアカウントを作成」を置く。新規作成は既存accountを残して作成・切替し、必要な初回CN同意／skipの後にプロフィール設定へ進む。処理中は重複操作を無効化し、失敗時は同じ操作を再試行できる。
+
 menu表示のために非active accountの通信を起動しない。local profile/imageの欠落は既存fallbackと取得不能表示で扱い、取得失敗を空一覧としない。
 
 interactive componentは、該当する`default`、`hover`、`focus-visible`、`pressed`、`selected`、`disabled`、`pending`、`error`を定義する。

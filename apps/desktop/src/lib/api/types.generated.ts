@@ -607,6 +607,8 @@ export type SetMyProfileRequest = { name?: string | null, display_name?: string 
 
 export type InitialProfileRequest = { account_id: string, profile: SetMyProfileRequest, };
 
+export type CreateAccountRequest = { account_id: string, operation_id: string, };
+
 export type ListLiveSessionsRequest = { topic: string, scope: TimelineScope, };
 
 export type CreateLiveSessionRequest = { topic: string, channel_ref: ChannelRef, title: string, description: string, };

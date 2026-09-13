@@ -8,6 +8,35 @@ struct InitialProfileSave {
 }
 
 impl ClientHost {
+    pub async fn create_account(
+        &self,
+        request: crate::CreateAccountRequest,
+    ) -> anyhow::Result<AccountRecord> {
+        use crate::accounts::create::{commit_account_creation, prepare_account_creation};
+        let _guard = self.operation_guard.lock().await;
+        if self.is_stopped() {
+            anyhow::bail!("client host is shut down");
+        }
+        let pending = prepare_account_creation(
+            &self.app_data_dir,
+            crate::identity::IdentityStorageMode::from_env(),
+            &request,
+        )?;
+        if list_accounts(&self.app_data_dir)?.active_account_id == pending.next.id {
+            return Ok(pending.next);
+        }
+        let next =
+            Self::build_detached_runtime(account_db_path(&self.app_data_dir, &pending.next.id))
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let previous = self
+            .replace_runtime_locked(next)
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let commit = commit_account_creation(&self.app_data_dir, &pending);
+        self.finish_account_change(previous, &pending.previous, pending.next, false, commit)
+            .await
+    }
     pub async fn save_initial_profile(
         &self,
         request: crate::InitialProfileRequest,

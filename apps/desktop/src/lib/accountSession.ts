@@ -1,4 +1,4 @@
-import { switchAccount, logoutAccount, listAccounts } from '@/lib/api/identity';
+import { switchAccount, logoutAccount, listAccounts, createAccount } from '@/lib/api/identity';
 import { COLUMN_DRAFT_STORAGE_KEY } from '@/shell/columnDraftPersistence';
 
 const retainedDraftKey = (id: string) => `kukuri:account:${id}:retained-column-drafts`;
@@ -17,7 +17,7 @@ export async function reconcileAccountDrafts(): Promise<boolean> {
   return true;
 }
 
-export async function changeAccountSession(accountId: string, logout = false) {
+export async function changeAccountSession(accountId: string, logout = false, createOperationId?: string) {
   const before = await listAccounts();
   const draft = localStorage.getItem(COLUMN_DRAFT_STORAGE_KEY);
   if (logout) {
@@ -27,7 +27,7 @@ export async function changeAccountSession(accountId: string, logout = false) {
   localStorage.setItem(TRANSITION_KEY, JSON.stringify({ sourceId: before.active_account_id, draft }));
   localStorage.removeItem(COLUMN_DRAFT_STORAGE_KEY);
   try {
-    await (logout ? logoutAccount(accountId) : switchAccount(accountId));
+    await (createOperationId ? createAccount(accountId, createOperationId) : logout ? logoutAccount(accountId) : switchAccount(accountId));
   } catch (error) {
     try {
       const actual = await listAccounts();

@@ -27,6 +27,7 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
   const [display, setDisplay] = useState<AccountDisplay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [creationId] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -58,7 +59,7 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
           <AuthorAvatar label={label} picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)} />
         </IconButton>
       </PopoverTrigger>
-      <PopoverContent ref={menu} role='menu' aria-label={t('accountMenu.open')} align='start' className='w-[min(22rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto space-y-1'
+      <PopoverContent ref={menu} role='menu' aria-label={t('accountMenu.open')} align='start' className='shell-account-menu w-[min(22rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto space-y-1'
         onOpenAutoFocus={(event) => { event.preventDefault(); menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus(); }}
         onCloseAutoFocus={(event) => { if (moveFocus.current) event.preventDefault(); }}
         onKeyDown={(event) => {
@@ -95,7 +96,14 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
         onOpenAutoFocus={(event) => { if (dialog === 'logout') { event.preventDefault(); document.querySelector<HTMLButtonElement>('[data-testid="logout-cancel"]')?.focus(); } }}>
         <DialogHeader><DialogTitle>{t(dialog === 'import' ? 'accountMenu.add' : 'accountMenu.logoutTitle')}</DialogTitle><DialogDescription>{t(dialog === 'import' ? 'accountMenu.importDescription' : 'accountMenu.logoutDescription')}</DialogDescription></DialogHeader>
         <DialogBody>
-          {dialog === 'import' ? <AccountKeyImportForm onImported={refresh} onSwitch={(id) => switchTo(id)} switching={pending} /> : <>
+          {dialog === 'import' ? <>
+            <Button disabled={pending || !active} className='mb-4 w-full' data-testid='create-new-account' onClick={() => {
+              if (!active || pending) return;
+              setPending(true); setError(null);
+              void changeAccountSession(active.id, false, creationId).catch(() => { setError(t('accountMenu.actionFailed')); setPending(false); });
+            }}>{t(pending ? 'accountMenu.pending' : 'accountMenu.create')}</Button>
+            <fieldset disabled={pending}><AccountKeyImportForm onImported={refresh} onSwitch={(id) => switchTo(id)} switching={pending} /></fieldset>
+          </> : <>
             <p className='font-semibold'>{label}</p><p>{localProfile?.name ? `@${localProfile.name}` : t('accountMenu.noUsername')}</p>
             <p>{t(snapshot?.accounts.length === 1 ? 'accountMenu.logoutCreates' : 'accountMenu.logoutReturns')}</p>
           </>}

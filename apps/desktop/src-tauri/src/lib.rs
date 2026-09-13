@@ -352,6 +352,7 @@ pub fn run() {
             commands::identity::list_accounts,
             commands::identity::switch_account,
             commands::identity::logout_account,
+            commands::identity::create_account,
             commands::identity::get_profile_setup_required,
             commands::identity::get_account_display,
             commands::identity::complete_profile_setup,

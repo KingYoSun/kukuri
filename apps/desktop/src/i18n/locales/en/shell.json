@@ -560,7 +560,8 @@
     "importDescription": "Import an encrypted account key.",
     "cancel": "Cancel",
     "yes": "Yes",
-    "pending": "Working…"
+    "pending": "Working…",
+    "create": "Create a new account"
   },
   "initialProfile": {
     "title": "Set up your profile",

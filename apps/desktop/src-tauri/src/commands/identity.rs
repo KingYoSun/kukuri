@@ -17,6 +17,26 @@ use crate::state::{
 };
 
 #[tauri::command]
+pub async fn create_account(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    operation: tauri::State<'_, DesktopOperationState>,
+    request: kukuri_desktop_runtime::CreateAccountRequest,
+) -> Result<AccountRecord, CommandError> {
+    let _guard = operation.switch_guard.lock().await;
+    crate::desktop_lifecycle::require_running(&app_handle)?;
+    let startup = app_handle.state::<DesktopStartupState>();
+    require_runtime_operation_ready(&startup.status()).map_err(CommandError::from)?;
+    startup.set_status(DesktopStartupStatus::Initializing);
+    let result = state.host().create_account(request).await.map_err(map_error);
+    if result.is_ok() { app_handle.state::<OsNotificationBackground>().reset_for_account_switch(); }
+    if state.host().is_stopped() {
+        startup.set_status(kukuri_desktop_runtime::failed_startup_status(kukuri_desktop_runtime::ClientStartupError::unknown("Account transition requires restart".to_string()), None));
+    } else { startup.set_status(DesktopStartupStatus::Ready); }
+    result
+}
+
+#[tauri::command]
 pub async fn export_account_key(
     state: tauri::State<'_, DesktopState>,
     request: ExportAccountKeyRequest,

@@ -16,7 +16,7 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - 必須 scenario: flat レイアウトからの一括移行(中断・再開含む)で鍵が失われないこと(`crates/desktop-runtime/src/tests/accounts_migration.rs`)。
 
 ### Feature Data Classification: ログアウト・初回プロフィール（#1005）
-- Feature 名: 履歴へ戻るlogout、他の登録がない場合の鍵生成、初回プロフィール案内
+- Feature 名: 履歴へ戻るlogout、他の登録がない場合と明示的新規作成の鍵生成、初回プロフィール案内
 - Durable / Transient: registryの履歴・生成予約・初回対象、生成鍵、署名済み初回保存journal、退避下書きはDurable。menu・Dialog・未送信入力はTransient。
 - Canonical Source: `accounts.json`、既存identity storage、account配下の `kukuri.initial-profile.json`、既存プロフィールprojection/blob。生成準備は `account-transitions/<sequence>-<account_id>/` に置く。
 - Replicated?: 管理・回復情報と下書きは複製しない。保存済みプロフィールとavatarは既存の公開・複製契約に従う。

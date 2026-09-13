@@ -59,30 +59,7 @@ pub(crate) fn prepare_logout(
             .join("account-transitions")
             .join(format!("{}-{target}", registry.logout_sequence))
             .join(DB_FILE_NAME);
-        create_account_dir(&staging)?;
-        let keys = load_or_create_keys(&staging, mode)?;
-        let pubkey = keys.public_key_hex();
-        let id = account_id_for_pubkey(&pubkey)?;
-        let db = account_db_path(dir, &id);
-        create_account_dir(&db)?;
-        if let Some(existing) = load_existing_keys(&db, mode)? {
-            if existing.public_key_hex() != pubkey {
-                bail!("generated account identity collision");
-            }
-        } else {
-            if db.exists() {
-                bail!("generated account path already contains data");
-            }
-            persist_keys(&db, mode, &keys)?;
-        }
-        verify_persisted_identity(&db, mode, &pubkey)?;
-        AccountRecord {
-            id,
-            pubkey,
-            label: None,
-            created_at: now_millis(),
-            last_used_at: now_millis(),
-        }
+        generate_account(dir, mode, &staging)?
     };
     let prepared = PreparedLogout {
         target: target.to_owned(),
@@ -161,4 +138,35 @@ pub(crate) fn reconcile_account_commit(
         return Ok(false);
     }
     bail!("account commit outcome is unknown")
+}
+
+pub(crate) fn generate_account(
+    dir: &Path,
+    mode: IdentityStorageMode,
+    staging: &Path,
+) -> Result<AccountRecord> {
+    create_account_dir(staging)?;
+    let keys = load_or_create_keys(staging, mode)?;
+    let pubkey = keys.public_key_hex();
+    let id = account_id_for_pubkey(&pubkey)?;
+    let db = account_db_path(dir, &id);
+    create_account_dir(&db)?;
+    if let Some(existing) = load_existing_keys(&db, mode)? {
+        if existing.public_key_hex() != pubkey {
+            bail!("generated account identity collision");
+        }
+    } else {
+        if db.exists() {
+            bail!("generated account path already contains data");
+        }
+        persist_keys(&db, mode, &keys)?;
+    }
+    verify_persisted_identity(&db, mode, &pubkey)?;
+    Ok(AccountRecord {
+        id,
+        pubkey,
+        label: None,
+        created_at: now_millis(),
+        last_used_at: now_millis(),
+    })
 }
