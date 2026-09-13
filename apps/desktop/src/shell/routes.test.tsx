@@ -128,7 +128,7 @@ test('bookmark page route closes detail context and normalizes timeline-specific
     expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Ageneral&timelineView=bookmarks');
   });
   expect(screen.queryByRole('complementary', { name: 'Thread' })).not.toBeInTheDocument();
-  expect(screen.getByText('No bookmarked posts yet.')).toBeInTheDocument();
+  expect(await screen.findByText('No bookmarked posts yet.')).toBeInTheDocument();
 });
 
 test('notifications route keeps topic context and strips unrelated nested params', async () => {

@@ -92,6 +92,7 @@
     "failedToGenerateVideoPoster": "Failed to generate the video preview.",
     "failedToImportPeer": "Failed to import the peer.",
     "failedToLoadAuthor": "Failed to load user information.",
+    "failedToLoadBookmarks": "Failed to load bookmarks.",
     "failedToLoadDirectMessages": "Failed to load direct messages.",
     "failedToLoadGameRooms": "Failed to load game rooms.",
     "failedToLoadLiveSessions": "Failed to load live sessions.",

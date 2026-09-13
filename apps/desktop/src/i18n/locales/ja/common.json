@@ -92,6 +92,7 @@
     "failedToGenerateVideoPoster": "動画プレビューの生成に失敗しました",
     "failedToImportPeer": "接続先の追加に失敗しました",
     "failedToLoadAuthor": "ユーザー情報の読み込みに失敗しました",
+    "failedToLoadBookmarks": "ブックマークの読み込みに失敗しました",
     "failedToLoadDirectMessages": "ダイレクトメッセージの読み込みに失敗しました",
     "failedToLoadGameRooms": "ゲームルームの読み込みに失敗しました",
     "failedToLoadLiveSessions": "ライブセッションの読み込みに失敗しました",

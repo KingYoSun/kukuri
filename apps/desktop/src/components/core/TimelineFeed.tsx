@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useRef } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -22,6 +22,11 @@ import { useInfiniteScrollSentinel } from './useInfiniteScrollSentinel';
 type TimelineFeedProps = {
   posts: PostCardView[];
   emptyCopy: string;
+  /**
+   * #994: 0 件時の描画を呼出し側が差し替える。`null` は空文言も出さない(loading / error を呼出し側が示す)。
+   * 未指定なら従来どおり `emptyCopy` を 1 行表示する。
+   */
+  emptyState?: ReactNode;
   listClassName?: string;
   itemClassName?: string;
   onOpenAuthor: (authorPubkey: string) => void;
@@ -66,6 +71,7 @@ type TimelineFeedProps = {
 export function TimelineFeed({
   posts,
   emptyCopy,
+  emptyState,
   listClassName = 'post-list',
   itemClassName,
   onOpenAuthor,
@@ -157,6 +163,7 @@ export function TimelineFeed({
   };
 
   if (posts.length === 0 && !canApplyPending) {
+    if (emptyState !== undefined) return <>{emptyState}</>;
     return <p className='empty'>{emptyCopy}</p>;
   }
 

@@ -255,6 +255,12 @@
     "composeTarget": "Compose Target",
     "feed": "Feed",
     "noBookmarks": "No bookmarked posts yet.",
+    "bookmarksLoading": "Loading bookmarks…",
+    "bookmarksEmpty": {
+      "step": "Press <action/> on a post card in the timeline or Explore to save the post here.",
+      "note": "Bookmarks are kept on this device only. They are not sent to other devices or to anyone else.",
+      "showTimeline": "Show timeline"
+    },
     "noPosts": "No posts yet for this topic.",
     "noPublicPosts": "No public posts from you in this topic yet.",
     "refresh": "Refresh",

@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo } from 'react';
 import { Link2 } from 'lucide-react';
 
+import { BookmarksEmptyState, BookmarksListFrame } from '@/components/core/BookmarksEmptyState';
 import { TimelineFeed } from '@/components/core/TimelineFeed';
 import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspace';
 import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexingRequestDialog';
@@ -20,6 +21,7 @@ import type { ProfileConnectionsView } from '@/components/shell/types';
 import {
   primarySectionForColumn,
   type ColumnState,
+  type ColumnTimelineView,
 } from '@/shell/slices/workspace';
 
 import type {
@@ -92,6 +94,10 @@ export type DesktopShellPrimarySurfaceProps = {
   /** #960: 見つけるの空状態から既存の接続診断・タイムライン・索引登録申請へ移る。 */
   openConnectivitySettings?: () => void;
   openTimelineSection?: () => void;
+  /** #994: 空状態の CTA。見つける section へ移る / 同じ Column の表示をフィードへ戻す / ブックマーク再取得。 */
+  openExploreSection?: () => void;
+  selectTimelineView?: (column: ColumnState, view: ColumnTimelineView) => void;
+  retryBookmarks?: () => void;
   requestIndexing?: (target: CommunityIndexingTarget) => void;
   communityNodePanelView?: CommunityNodePanelView;
   onFetchCommunityNodeConsents?: FetchCommunityNodePolicyView;
@@ -157,6 +163,9 @@ export function DesktopShellPrimarySurface({
   openCommunityNodeSettings,
   openConnectivitySettings,
   openTimelineSection,
+  openExploreSection,
+  selectTimelineView,
+  retryBookmarks,
   requestIndexing,
   communityNodePanelView,
   onFetchCommunityNodeConsents,
@@ -200,6 +209,7 @@ export function DesktopShellPrimarySurface({
 }: DesktopShellPrimarySurfaceProps) {
   const {
     bookmarkedPosts,
+    bookmarksPanelState,
     bookmarkedReactionAssets,
     knownAuthorsByPubkey,
     gameCreatePending,
@@ -249,6 +259,7 @@ export function DesktopShellPrimarySurface({
   } = useDesktopShellStore(
     useShallow((s) => ({
       bookmarkedPosts: s.bookmarkedPosts,
+      bookmarksPanelState: s.bookmarksPanelState,
       bookmarkedReactionAssets: s.bookmarkedReactionAssets,
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
       gameCreatePending: s.gameCreatePending,
@@ -478,36 +489,53 @@ export function DesktopShellPrimarySurface({
                   onMuteReportAuthor={muteReportAuthor}
                 />
               ) : (
-                <TimelineFeed
-                  posts={viewModels.bookmarkedTimelinePostViews}
-                  emptyCopy={t('shell:workspace.noBookmarks')}
-                  onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
-                  onOpenThread={openThreadInSurfaceScope}
-                  onOpenThreadInTopic={openThreadInTopicFromSurface}
-                  onReply={beginColumnReply}
-                  onRepost={(post) => void handleSimpleRepost(post)}
-                  onQuoteRepost={beginColumnQuoteRepost}
-                  onRetryLocalPost={handleRetryLocalPost}
-                  onRestoreLocalPost={handleRestoreLocalPost}
-                  localAuthorPubkey={syncStatus.local_author_pubkey}
-                  mediaObjectUrls={mediaObjectUrls}
-                  ownedReactionAssets={ownedReactionAssets}
-                  bookmarkedReactionAssets={bookmarkedReactionAssets}
-                  recentReactions={recentReactions}
-                  onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
-                  onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
-                  onReactionPickerOpen={() => void loadReactionCatalogData()}
-                  showBookmarkAction={true}
-                  bookmarkedPostIds={bookmarkedPostIds}
-                  onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
-                  onWithdraw={(post) => void handleWithdrawPost(post)}
-                  onActivateReference={(reference) => void handleActivateReference(reference)}
-                  onCopyPostLink={handleCopyInternalLink}
-                  onSubmitReport={submitReport}
-                  onCopyReportContact={copyReportContact}
-                  onFetchReportManifest={fetchReportManifest}
-                  onMuteReportAuthor={muteReportAuthor}
-                />
+                <BookmarksListFrame
+                  status={bookmarksPanelState.status}
+                  error={bookmarksPanelState.error}
+                  onRetry={() => retryBookmarks?.()}
+                >
+                  {(bookmarksDisplayedStatus) => (
+                    <TimelineFeed
+                      posts={viewModels.bookmarkedTimelinePostViews}
+                      emptyCopy={t('shell:workspace.noBookmarks')}
+                      emptyState={
+                        bookmarksDisplayedStatus === 'ready' ? (
+                          <BookmarksEmptyState
+                            onShowTimeline={
+                              selectTimelineView ? () => selectTimelineView(column, 'feed') : undefined
+                            }
+                          />
+                        ) : null
+                      }
+                      onOpenAuthor={(authorPubkey) => void openAuthorDetail(authorPubkey)}
+                      onOpenThread={openThreadInSurfaceScope}
+                      onOpenThreadInTopic={openThreadInTopicFromSurface}
+                      onReply={beginColumnReply}
+                      onRepost={(post) => void handleSimpleRepost(post)}
+                      onQuoteRepost={beginColumnQuoteRepost}
+                      onRetryLocalPost={handleRetryLocalPost}
+                      onRestoreLocalPost={handleRestoreLocalPost}
+                      localAuthorPubkey={syncStatus.local_author_pubkey}
+                      mediaObjectUrls={mediaObjectUrls}
+                      ownedReactionAssets={ownedReactionAssets}
+                      bookmarkedReactionAssets={bookmarkedReactionAssets}
+                      recentReactions={recentReactions}
+                      onToggleReaction={(post, reactionKey) => void handleToggleReaction(post, reactionKey)}
+                      onBookmarkCustomReaction={(asset) => void handleBookmarkCustomReaction(asset)}
+                      onReactionPickerOpen={() => void loadReactionCatalogData()}
+                      showBookmarkAction={true}
+                      bookmarkedPostIds={bookmarkedPostIds}
+                      onToggleBookmark={(post) => void handleToggleBookmarkedPost(post)}
+                      onWithdraw={(post) => void handleWithdrawPost(post)}
+                      onActivateReference={(reference) => void handleActivateReference(reference)}
+                      onCopyPostLink={handleCopyInternalLink}
+                      onSubmitReport={submitReport}
+                      onCopyReportContact={copyReportContact}
+                      onFetchReportManifest={fetchReportManifest}
+                      onMuteReportAuthor={muteReportAuthor}
+                    />
+                  )}
+                </BookmarksListFrame>
               )}
             </Card>
           </>
@@ -772,6 +800,8 @@ export function DesktopShellPrimarySurface({
                   void handleBlockAction(authorPubkey, blocking)
                 }
                 onBack={openProfileOverview}
+                onOpenTimeline={openTimelineSection}
+                onOpenExplore={openExploreSection}
               />
             ) : (
               <ProfileOverviewPanel
