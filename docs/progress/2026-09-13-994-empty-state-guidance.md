@@ -121,7 +121,7 @@ repo 固定の chromium build（1234）が container に無いため、Playwrigh
 
 ### 追加発見の分類
 
-- Regression（merge 前に修正）: `orange-emphasis.spec.ts` の「primary filled buttons alone use orange (dark)」が本差分の build でのみ失敗した。基準 commit の build では成功する。原因は spec の race で、開いた composer の送信ボタンが click 位置の直下に現れ、pointer が乗ったまま静止色を検証していた（基準 build でも取得時点の背景は既に hover 色へ遷移中で、最初の poll が遷移前に当たるかどうかだけの差）。本差分は button の色・layout を変えないが、bundle の変化で timing が動いた。静止色の検証前に `page.mouse.move(0, 0)` で pointer を外す最小修正を同じ PR に含め、hover 色は既存の `hover()` で確認する。
+- Regression（merge 前に修正）: `orange-emphasis.spec.ts` の「primary filled buttons alone use orange (dark)」が本差分の build でのみ失敗した。基準 commit の build では成功する。原因は spec の race で、開いた composer の送信ボタンが click 位置の直下に現れ、pointer が乗ったまま静止色を検証していた（基準 build でも取得時点の背景は既に hover 色へ遷移中で、最初の poll が遷移前に当たるかどうかだけの差）。本差分は button の色・layout を変えないが、bundle の変化で timing が動いた。静止色の検証前に `page.mouse.move(0, 0)` で pointer を外す最小修正を同じ PR に含め、hover 色は既存の `hover()` で確認する。 その後 main の #1007 が同じ修正（pointer 退避）を先に取り込んだため、main を merge した時点で本 PR 側の差分は main と同一になった（conflict は comment 文言のみで、main 側を採用）。
 - Existing-gap（同じ Issue で対応）: ブックマーク一覧の false empty（取得前・失敗時の0件表示）。loading / error 要件として AC-9 / AC-12 に固定した。
 - New-requirement（別 Issue 候補、本 Issue の blocker にしない）: 自分の投稿／他ユーザーの投稿／タイムライン本体の空文言にも同型の案内を置くこと。
 

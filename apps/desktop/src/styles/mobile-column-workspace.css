@@ -72,8 +72,25 @@
     min-block-size: 44px;
   }
 
+  /* 投稿ボタンは右寄せ。左下は固定の control cluster(アバター・Control Center・フィードバック)が使う。 */
   .shell-phase1 .shell-column-footer {
+    justify-content: flex-end;
     padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  }
+
+  /* control cluster は左下(desktop と同じ left)に置き、投稿ボタンと下辺を揃える。 */
+  .shell-phase1 .shell-control-cluster {
+    bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  }
+
+  /* アバターボタンの高さを投稿ボタン・Control Center・フィードバックと同じ 44px にする。 */
+  .shell-phase1 .shell-account-menu-trigger {
+    inline-size: 2.75rem;
+    min-inline-size: 2.75rem;
+    block-size: 2.75rem;
+    min-block-size: 2.75rem;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-panel);
   }
 
   .shell-phase1 .shell-column-body {
@@ -159,6 +176,7 @@
   }
 
   .shell-phase1 .shell-column-canvas:has(.shell-column-composer) .shell-column-page-indicator,
+  .shell-phase1:has(.shell-column-composer:focus-within) .shell-account-menu-trigger,
   .shell-phase1:has(.shell-column-composer:focus-within) .shell-control-center-trigger,
   .shell-phase1:has(.shell-column-composer:focus-within) .shell-tester-feedback-trigger {
     display: none;

@@ -54,8 +54,8 @@ for (const theme of ['dark', 'light'] as const) {
     const timeline = page.locator('.shell-column-surface[data-active]');
     await timeline.getByRole('button', { name: 'Post to Public · general' }).click();
     const post = timeline.locator('.shell-column-composer').getByRole('button', { name: 'Post', exact: true });
-    // 開いた composer の送信ボタンは click 位置の直下に現れ、pointer が乗ったままだと hover 色へ遷移し始める。
-    // 静止色の検証前に pointer を外し、hover 色は後段の hover() で明示的に確認する(#994 で顕在化した race)。
+    // 展開後の投稿ボタンはクリック位置の直下に来るため、hover 色へ遷移する前に
+    // pointer を外して通常色を確定させる。
     await page.mouse.move(0, 0);
     await expect(post).toHaveCSS('background-color', 'rgb(215, 125, 69)');
     await expect(post).toHaveCSS('color', 'rgb(32, 22, 14)');
