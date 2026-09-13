@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 for (const theme of ['dark', 'light'] as const) {
-  test(`orange emphasis follows active columns and unread state (${theme})`, async ({ page }) => {
+  test(`columns have no top glow and unread keeps theme accent (${theme})`, async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 980 });
     await page.addInitScript(theme => {
       localStorage.setItem('kukuri.desktop.theme', theme);
@@ -19,26 +19,29 @@ for (const theme of ['dark', 'light'] as const) {
       });
     }, theme);
     await page.goto('/#/notifications?topic=kukuri%3Atopic%3Ageneral');
-    const orange = theme === 'dark' ? 'rgb(215, 125, 69)' : 'rgb(164, 74, 33)';
+    const borderAccent = theme === 'dark' ? 'rgb(3, 218, 197)' : 'rgb(164, 74, 33)';
+    const textAccent = theme === 'dark' ? borderAccent : 'rgb(113, 55, 23)';
     const notifications = page.locator('.shell-column-surface[data-active]');
     const header = notifications.locator('.shell-column-header');
-    await expect(header).toHaveCSS('box-shadow', `${orange} 0px 3px 0px 0px inset`);
+    await expect(header).toHaveCSS('box-shadow', 'none');
+    await expect(header).toHaveCSS('border-top-width', '0px');
+    await expect(notifications).not.toHaveCSS('box-shadow', /inset/);
     const height = await header.evaluate(element => element.getBoundingClientRect().height);
     await notifications.locator('.shell-column-pin-button').click();
-    await expect(header).toHaveCSS('box-shadow', `${orange} 0px 3px 0px 0px inset`);
+    await expect(header).toHaveCSS('box-shadow', 'none');
     expect(await header.evaluate(element => element.getBoundingClientRect().height)).toBe(height);
     for (const inactive of await page.locator('.shell-column-surface:not([data-active]) .shell-column-header').all()) {
       await expect(inactive).toHaveCSS('box-shadow', 'none');
       await expect(inactive).toHaveCSS('border-top-width', '0px');
     }
     const badge = page.locator('.shell-control-center-trigger-badge');
-    await expect(badge).toHaveCSS('color', orange);
+    await expect(badge).toHaveCSS('color', textAccent);
     const unread = page.locator('.notification-item[data-unread="true"]').first();
-    await expect(unread).toHaveCSS('border-top-color', orange);
+    await expect(unread).toHaveCSS('border-top-color', borderAccent);
     await unread.hover();
-    await expect(unread).toHaveCSS('border-top-color', orange);
+    await expect(unread).toHaveCSS('border-top-color', borderAccent);
     await unread.focus();
-    await expect(unread).toHaveCSS('border-top-color', orange);
+    await expect(unread).toHaveCSS('border-top-color', borderAccent);
     await page.screenshot({ path: `test-results/orange-${theme}.png` });
   });
 

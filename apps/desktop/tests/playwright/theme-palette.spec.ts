@@ -51,8 +51,8 @@ for (const width of [1600, 390]) {
       await page.keyboard.press('Escape');
       await expect(timeline.locator('.shell-column-primary-action')).toBeFocused();
       const primary = timeline.locator('.shell-column-primary-action');
-      await expect(primary).toHaveCSS('color', theme === 'dark' ? 'rgb(0, 51, 46)' : 'rgb(32, 22, 14)');
-      await expect(primary).toHaveCSS('background-color', theme === 'dark' ? 'rgb(3, 218, 197)' : 'rgb(215, 125, 69)');
+      await expect(primary).toHaveCSS('color', 'rgb(32, 22, 14)');
+      await expect(primary).toHaveCSS('background-color', 'rgb(215, 125, 69)');
       await expect(primary).toHaveCSS('outline-style', 'solid');
       await expect(primary).toHaveCSS('outline-offset', '2px');
       await testInfo.attach(`column-${theme}`, { body: await timeline.screenshot(), contentType: 'image/png' });

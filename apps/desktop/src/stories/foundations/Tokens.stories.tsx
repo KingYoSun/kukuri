@@ -21,7 +21,6 @@ const swatches = [
   { name: 'Input', value: 'var(--surface-input)' },
   { name: 'Primary Surface', value: 'var(--surface-button-primary)' },
   { name: 'Primary Hover', value: 'var(--surface-button-primary-hover)' },
-  { name: 'Orange emphasis', value: 'var(--emphasis-orange)' },
   { name: 'Accent', value: 'var(--accent)' },
   { name: 'Selected surface', value: 'var(--surface-active)' },
   { name: 'Control boundary', value: 'var(--border-subtle-strong)' },
