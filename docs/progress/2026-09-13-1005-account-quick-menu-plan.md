@@ -255,3 +255,5 @@ T1で共有helperの全callerとsink逆引きを補完し、未分類を残さ�
 - 新scenarioは `desktop_account_lifecycle` としてharness test／fast+release+nightly inventoryへ登録済み。直接scenario実行とharness testはともにPASS。
 - CLI登録は既存136から139に増えるため、daemonのページ列挙期待値を139へ同期。全名前とschemaの整合はcommand_parity testが別途検証する。
 - コード監査: 8fe37337までの製品コードと境界testの独立監査でblocker0・未分類0。後続はscenarioのCI登録、テスト件数期待値、証跡文書のみ。最終head CI完了と合わせて監査担当が最終判定する。
+- CIのRust再実行では952件中951件が成功し、`account_logout.rs`の既存2箇所の`IdentityStorage`取得がlock分類表に未登録だったため最終contractが失敗した。分類行と総数132→134を同期し、同じcontractを単独実行してPASS。テストのlockや検査条件は変更していない。
+- 同CIの初回DM接続timeoutは、製品コードを変更せずUbuntu24単独実行とCI再実行の双方でPASSを確認。初回失敗と再実行結果はPRの最終監査記録に併記する。
