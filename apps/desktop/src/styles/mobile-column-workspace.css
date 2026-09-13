@@ -72,7 +72,9 @@
     min-block-size: 44px;
   }
 
+  /* 投稿ボタンは右寄せ。左下は固定の control cluster(アバター・Control Center・フィードバック)が使う。 */
   .shell-phase1 .shell-column-footer {
+    justify-content: flex-end;
     padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
   }
 
@@ -159,6 +161,7 @@
   }
 
   .shell-phase1 .shell-column-canvas:has(.shell-column-composer) .shell-column-page-indicator,
+  .shell-phase1:has(.shell-column-composer:focus-within) .shell-account-menu-trigger,
   .shell-phase1:has(.shell-column-composer:focus-within) .shell-control-center-trigger,
   .shell-phase1:has(.shell-column-composer:focus-within) .shell-tester-feedback-trigger {
     display: none;

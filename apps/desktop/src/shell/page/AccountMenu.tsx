@@ -54,7 +54,7 @@ export function AccountMenu({ onProfile, onManage, onOpen }: {
   return <>
     <Popover open={open} onOpenChange={(next) => { if (next) onOpen(); moveFocus.current = false; setOpen(next); }}>
       <PopoverTrigger asChild>
-        <IconButton ref={trigger} type='button' variant='secondary' label={t('accountMenu.open')} aria-haspopup='menu' aria-expanded={open} data-testid='account-menu-trigger'>
+        <IconButton ref={trigger} type='button' variant='secondary' className='shell-account-menu-trigger' label={t('accountMenu.open')} aria-haspopup='menu' aria-expanded={open} data-testid='account-menu-trigger'>
           <AuthorAvatar label={label} picture={resolveProfilePictureSrc(localProfile, mediaObjectUrls)} />
         </IconButton>
       </PopoverTrigger>
