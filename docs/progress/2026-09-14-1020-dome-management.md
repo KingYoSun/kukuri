@@ -93,3 +93,5 @@ CI初回の失敗は新scenarioの台帳件数・lane登録、大型ファイル
 | 実機 | [UI review](../ui-reviews/2026-09-14-1020-dome-management.md)にviewport/OS/WebView/locale、操作と画像、未確認事項を記録 |
 
 local全suiteの途中失敗は消していない。旧CLI台帳/件数とreadiness待機は修正後の対象testおよび最終CIへ対応。負荷中に発生した無関係なshell timeoutは単体rerunとCIで確認する。単体成功を全suite成功へ読み替えない。PR最終headの必須CI成功、監査対象とmerge tree一致、Issue本文更新を満たしてからCompleteとする。
+
+最終CIのRust testで963成功・1失敗となり、追加したCN delete/input testの共有資源lock分類が5→7へ未更新と判明した。取得箇所を保ったまま分類表と総数134→136を同期し、同じcontractで検証する。製品コード・lock取得・既存assertは変更しない。

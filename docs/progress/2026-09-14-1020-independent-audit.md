@@ -140,3 +140,9 @@ CN releaseのconsent gateはauth token取得・POSTの前。401では既存再�
 - Dome削除で独立owner資産のPresetまで破壊しないこと、remote peer copyの消去を保証しないことはADR 0036/0040の対象境界に適合する。
 
 判定をPASSへ進めるにはB-1の再現・修正・回帰testとdelta監査が必要。全体CIと実機ゲートは別途完了させる。
+
+## 最終文書・lock分類delta（2026-09-14）
+
+`102865b3`の作業記録・UI review・画像追加と、その後の`tests/support/lock_contract.rs`分類表差分を独立確認し、**PASS**。製品コードは`ade5a5ea`から変更されていない。文書はnative操作の実施者・対象build・先行buildとの差・未確認事項とCI gateを区別しており、監査PASSの範囲を変更しない。
+
+transfer_contract.rsのCommunityNodeServer取得は実コードで7箇所（従来5＋delete retry/stale input各1）。分類5→7、合計134→136はこれと一致する。lock取得位置・分類比較assertの削除や緩和はない。未分類0、追加blocker0。`.codex/plans/1020-final-lock-contract.log`は監査時点でcompile中のため、そのtest成功と最終CI全件成功は親担当が結果確認する別gateとして保持する。既存のコード監査PASSを維持し、監査を終了する。
