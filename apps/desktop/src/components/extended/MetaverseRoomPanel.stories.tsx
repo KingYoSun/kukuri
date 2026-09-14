@@ -10,6 +10,7 @@ import { MetaverseRoomPanel } from './MetaverseRoomPanel';
 import { DEFAULT_SHARED_OBJECT } from './MetaverseSceneModel';
 import { MetaverseRoomDiscovery } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
+import type { MetaverseOverlay, MetaverseCategory } from './metaverse/MetaverseCategories';
 import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
 import type { DomeNeighborTransitionView } from './metaverse/DomeTransitionModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
@@ -136,7 +137,9 @@ function selectedRoom(
   initialChatOpen = true,
   transitionNeighbors: DomeNeighborTransitionView[] = [],
   domeRecovery: DomeRecoveryStatus = ONLINE_DOME_RECOVERY,
-  fullscreen = false
+  fullscreen = false,
+  initialOverlay?: MetaverseOverlay,
+  initialCategory?: MetaverseCategory
 ) {
   return (
     <StoryFrame>
@@ -146,6 +149,8 @@ function selectedRoom(
         before={fullscreen ? <p>Dome discovery and management</p> : null}
         after={fullscreen ? <label>Connection draft<input defaultValue='North neighbor' /></label> : null}>
       <MetaverseRoomView
+        initialOverlay={initialOverlay}
+        initialCategory={initialCategory}
         room={room}
         activeTopic='kukuri:topic:demo'
         localPeerId='local-endpoint-a:story'
@@ -282,6 +287,13 @@ export const NarrowHudAndChat: Story = {
 export const SelectedCollapsed: Story = {
   render: () => selectedRoom(false, false),
 };
+
+export const CategoryMenu: Story = { render: () => selectedRoom(false, false, [], ONLINE_DOME_RECOVERY, false, 'categories') };
+export const NarrowCategoryMenu: Story = { render: () => <div style={{ width: 360 }}>{selectedRoom(false, false, [], ONLINE_DOME_RECOVERY, false, 'categories')}</div> };
+export const DomeSettings: Story = { render: () => selectedRoom(true, false, [], ONLINE_DOME_RECOVERY, false, 'details', 'dome') };
+export const AvatarSettings: Story = { render: () => selectedRoom(true, false, [], ONLINE_DOME_RECOVERY, false, 'details', 'avatar') };
+export const SharedObjects: Story = { render: () => selectedRoom(true, false, [], ONLINE_DOME_RECOVERY, false, 'details', 'objects') };
+export const Diagnostics: Story = { render: () => selectedRoom(true, false, [], ONLINE_DOME_RECOVERY, false, 'details', 'diagnostics') };
 
 export const ReadyNorthTransition: Story = {
   render: () => selectedRoom(false, false, [readyNorthNeighbor]),

@@ -1,5 +1,8 @@
 {
-  "fullscreen": { "openTools": "Dome tools", "closeTools": "Close Dome tools" },
+  "fullscreen": {
+    "openTools": "Dome tools",
+    "closeTools": "Close Dome tools"
+  },
   "title": "Metaverse Rooms",
   "rooms": {
     "summary_one": "{{count}} room in this topic",
@@ -206,10 +209,10 @@
     "floorMaterial": "Floor material",
     "wallTexture": "Wall texture",
     "floorTexture": "Floor texture",
-    "keyLight": "Key light (milli)",
-    "ambient": "Ambient light (milli)",
-    "fog": "Fog density (micro)",
-    "gravity": "Gravity (milli m/s²)",
+    "keyLight": "Key light (×)",
+    "ambient": "Ambient light (×)",
+    "fog": "Fog strength (%)",
+    "gravity": "Gravity (m/s²)",
     "propInteractions": "Persistent prop interactions",
     "visualOnly": "Visual only",
     "save": "Save Dome",
@@ -311,6 +314,26 @@
       "locked": "Avatar controls active",
       "unavailable": "Pointer capture unavailable. Use the view adjustment buttons or resume to retry.",
       "inactive": "Avatar controls paused"
+    }
+  },
+  "menu": {
+    "title": "Dome menu",
+    "open": "Menu (Tab)",
+    "close": "Close",
+    "details": "Dome details",
+    "categoriesLabel": "Categories",
+    "unavailable": "Not available for this Dome.",
+    "slider": "Slider",
+    "conflict": "These settings changed elsewhere. Cancel to reload before saving.",
+    "hostChanges": "Hosting changes",
+    "hostChangesHelp": "Moving or stopping hosting affects the people in this Dome.",
+    "categories": {
+      "dome": "Dome settings",
+      "hosting": "Hosting",
+      "connections": "Connections",
+      "avatar": "Avatar",
+      "objects": "Shared objects",
+      "diagnostics": "Diagnostics"
     }
   }
 }

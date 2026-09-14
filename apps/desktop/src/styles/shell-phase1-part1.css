@@ -382,28 +382,7 @@
   scrollbar-width: thin;
 }
 
-.metaverse-hud-scrollbar-indicator {
-  position: absolute;
-  top: 4.85rem;
-  right: 1rem;
-  bottom: 1.85rem;
-  z-index: 3;
-  width: 0.28rem;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-raised) 82%, black 10%);
-  pointer-events: none;
-}
 
-.metaverse-hud-scrollbar-indicator span {
-  position: absolute;
-  top: 0.35rem;
-  right: 0;
-  left: 0;
-  height: 31%;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--accent) 78%, white 12%);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface-panel) 70%, transparent);
-}
 
 .metaverse-room-hud::-webkit-scrollbar,
 .metaverse-chat-list::-webkit-scrollbar {
@@ -423,45 +402,11 @@
   background: color-mix(in srgb, var(--accent) 72%, white 8%);
 }
 
-.metaverse-hud-header {
-  gap: var(--space-xs);
-  padding: 0;
-}
 
-.metaverse-hud-header h3 {
-  font-size: var(--text-h3);
-  line-height: 1.2;
-}
 
-.metaverse-hud-accordion {
-  display: grid;
-  gap: var(--space-xs);
-  min-width: 0;
-}
 
-.metaverse-hud-accordion-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xs);
-  width: 100%;
-  min-height: 2.25rem;
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--surface-button-secondary) 76%, transparent);
-  color: var(--foreground);
-  font-size: var(--text-body);
-  font-weight: 700;
-}
 
-.metaverse-hud-accordion-trigger svg {
-  transition: transform 160ms ease;
-}
 
-.metaverse-hud-accordion[data-open='true'] .metaverse-hud-accordion-trigger svg {
-  transform: rotate(180deg);
-}
 
 .metaverse-room-diagnostics {
   display: grid;
@@ -792,12 +737,6 @@
     max-height: 46%;
   }
 
-  .metaverse-hud-scrollbar-indicator {
-    top: auto;
-    right: 1rem;
-    bottom: 1.6rem;
-    height: calc(46% - 1.7rem);
-  }
 
   .metaverse-room-chat-log {
     right: 0.75rem;

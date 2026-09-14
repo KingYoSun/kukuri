@@ -41,10 +41,13 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
-  const hostingWidth = await metaverse.locator('.metaverse-aux-after > .panel-subsection').evaluate(
+  await metaverse.getByRole('button', { name: 'Menu (Tab)' }).click();
+  await metaverse.getByRole('button', { name: 'Hosting', exact: true }).click();
+  const hostingWidth = await metaverse.locator('.metaverse-category-content:not([hidden]) .panel-subsection').evaluate(
     (element) => element.getBoundingClientRect().width / Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
   );
   expect(hostingWidth).toBeLessThanOrEqual(40);
+  await metaverse.getByRole('button', { name: 'Open room chat' }).click();
   const draft = metaverse.locator('.metaverse-chat-form input');
   await draft.fill('Unsent fullscreen draft 1023');
   const originalCanvas = await stage.locator('canvas').elementHandle();
@@ -82,7 +85,7 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await expect(metaverse.getByRole('button', { name: 'Refresh dome connections' })).toBeHidden();
   await metaverse.getByRole('button', { name: 'Dome tools', exact: true }).click();
   await expect(metaverse.locator('.metaverse-aux-before')).toBeVisible();
-  await expect(metaverse.locator('.metaverse-aux-after')).toBeVisible();
+  await expect(metaverse.getByRole('button', { name: 'Refresh dome connections' })).toBeHidden();
   await metaverse.locator('.metaverse-auxiliary').getByRole('button', { name: 'Close Dome tools', exact: true }).click();
   await expect(metaverse.getByRole('button', { name: 'Dome tools', exact: true })).toBeFocused();
   await expect(draft).toHaveValue('Unsent fullscreen draft 1023');
@@ -110,6 +113,7 @@ test('fullscreen at a small effective viewport keeps chat and tools inside the s
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse } = await createMetaverseRoom(page);
+  await metaverse.getByRole('button', { name: 'Open room chat' }).click();
   await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
   await page.getByRole('menuitem', { name: 'Enter Metaverse fullscreen' }).click();
   await expect(metaverse.getByRole('button', { name: 'Dome tools', exact: true })).toBeVisible();

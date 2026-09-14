@@ -52,6 +52,7 @@ test('span expansion reveals the selected header before the next interaction', a
 
 test('narrow HUD and chat remain contained and keep their drafts across spans', async ({ page }) => {
   const column = await openRoom(page);
+  await column.getByRole('button', { name: en.chat.open }).click();
   const chat = column.locator('.metaverse-chat-form input');
   await chat.fill('幅を変えても保持する');
   for (const value of [1, 2, 3]) {
@@ -65,12 +66,13 @@ test('narrow HUD and chat remain contained and keep their drafts across spans', 
     }
     await expect.poll(() => column.locator('.shell-column-body').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
     await expect(chat).toHaveValue('幅を変えても保持する');
+    await expect(column.locator('.metaverse-room-hud')).toBeHidden();
+    await column.getByRole('button', { name: en.menu.open }).click();
+    await column.getByRole('button', { name: en.menu.categories.dome, exact: true }).click();
     await expect(column.locator('.metaverse-room-hud')).toBeVisible();
-    await expect.poll(() => column.evaluate(el => {
-      const hud = el.querySelector('.metaverse-room-hud')!.getBoundingClientRect();
-      const chat = el.querySelector('.metaverse-room-chat-log')!.getBoundingClientRect();
-      return hud.right <= chat.left || chat.right <= hud.left || hud.bottom <= chat.top || chat.bottom <= hud.top;
-    })).toBe(true);
+    await expect(chat).toHaveCount(0);
+    await column.getByRole('button', { name: en.chat.open }).click();
+    await expect(chat).toHaveValue('幅を変えても保持する');
   }
 });
 
@@ -121,11 +123,13 @@ for (const [locale, copy, shell] of [['en', en, shellEn], ['ja', ja, shellJa], [
           await column.getByRole('button', { name: shell.columnMenu.open.replace('{{title}}', 'Metaverse') }).click();
           await page.getByRole('menuitemradio').filter({ hasText: /^1\s/ }).click();
         }
+        await column.getByRole('button', { name: copy.chat.open }).click();
         const chat = column.locator('.metaverse-chat-form input');
         const light = column.locator('.metaverse-dome-customization input[type=number]').first();
         await chat.fill('未送信 draft');
-        await light.fill('2300');
-        const room = await column.locator('.metaverse-room-hud h3').textContent();
+        await column.getByRole('button', { name: copy.menu.open }).click();
+        await column.getByRole('button', { name: copy.menu.categories.dome, exact: true }).click();
+        await light.fill('2.3');
         const sceneElement = await column.locator('.metaverse-room-stage').elementHandle();
         await page.evaluate(() => {
           const api = window.__KUKURI_DESKTOP__ as unknown as Record<string, (...args: unknown[]) => unknown>;
@@ -143,9 +147,9 @@ for (const [locale, copy, shell] of [['en', en, shellEn], ['ja', ja, shellJa], [
         await column.getByRole('button', { name: shell.columnMenu.open.replace('{{title}}', 'Metaverse') }).click();
         await page.getByRole('menuitemradio').filter({ hasText: new RegExp(`^${value}\\s`) }).click();
         await headerVisible(column);
+        await expect(light).toHaveValue('2.3');
+        await column.getByRole('button', { name: copy.chat.open }).click();
         await expect(chat).toHaveValue('未送信 draft');
-        await expect(light).toHaveValue('2300');
-        await expect(column.locator('.metaverse-room-hud h3')).toHaveText(room!);
         await expect.poll(() => column.locator('.shell-column-body').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
         for (const target of [column.getByRole('button', { name: copy.chat.send, exact: true }), column.getByRole('button', { name: copy.chat.hide, exact: true }), column.getByRole('button', { name: copy.hud.leave, exact: true })]) {
           await target.scrollIntoViewIfNeeded();
@@ -157,7 +161,7 @@ for (const [locale, copy, shell] of [['en', en, shellEn], ['ja', ja, shellJa], [
         }
         // Layout must not submit the draft or save customization.
         await expect(chat).toHaveValue('未送信 draft');
-        await expect(light).toHaveValue('2300');
+        await expect(light).toHaveValue('2.3');
         expect(await sceneElement!.evaluate(el => el.isConnected)).toBe(true);
         expect(await page.evaluate(() => (window as unknown as { layoutMutations: string[] }).layoutMutations)).toEqual([]);
       });

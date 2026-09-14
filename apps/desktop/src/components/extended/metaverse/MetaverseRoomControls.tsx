@@ -1,7 +1,7 @@
-import type { FormEventHandler, RefObject } from 'react';
+import { useRef, type FormEventHandler, type RefObject } from 'react';
+import { MetaverseCategories, type MetaverseCategory, type MetaverseOverlay, type MetaversePanels } from './MetaverseCategories';
 import {
   Box,
-  ChevronDown,
   House,
   LogOut,
   MessageSquare,
@@ -9,7 +9,6 @@ import {
   Move3D,
   Mic,
   MicOff,
-  PanelRightClose,
   PanelRightOpen,
   RefreshCw,
   Send,
@@ -53,7 +52,13 @@ type MetaverseRoomControlsProps = {
   pending: boolean;
   isOwner: boolean;
   hudOpen: boolean;
-  hudDebugOpen: boolean;
+  overlay: MetaverseOverlay;
+  category: MetaverseCategory;
+  panels?: MetaversePanels;
+  sessionIdentity: string;
+  onSelectCategory: (category: MetaverseCategory) => void;
+  onCategories: () => void;
+  onCloseOverlay: () => void;
   chatOpen: boolean;
   messages: RoomChatMessage[];
   messageDraft: string;
@@ -61,7 +66,6 @@ type MetaverseRoomControlsProps = {
   onLeaveRoom: () => void;
   onReturnHome?: () => void;
   onToggleHud: () => void;
-  onToggleHudDebug: () => void;
   onImportAvatar: (file: File) => void;
   onImportDefaultAvatar: () => void;
   onSaveCustomization: (customization: DomeCustomizationV1) => Promise<void>;
@@ -106,7 +110,7 @@ export function MetaverseRoomControls({
   pending,
   isOwner,
   hudOpen,
-  hudDebugOpen,
+  overlay, category, panels, sessionIdentity, onSelectCategory, onCategories, onCloseOverlay,
   chatOpen,
   messages,
   messageDraft,
@@ -114,7 +118,6 @@ export function MetaverseRoomControls({
   onLeaveRoom,
   onReturnHome,
   onToggleHud,
-  onToggleHudDebug,
   onImportAvatar,
   onImportDefaultAvatar,
   onSaveCustomization,
@@ -129,6 +132,7 @@ export function MetaverseRoomControls({
   onToggleMicrophone,
 }: MetaverseRoomControlsProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
+  const composing = useRef(false);
   const avatarStatusLabel = t(`hud.avatarStatuses.${avatarAssetStatus}`);
   return (
     <>
@@ -192,70 +196,22 @@ export function MetaverseRoomControls({
           variant='ghost'
           className='metaverse-hud-icon-button'
           type='button'
-          label={t(hudOpen ? 'hud.hide' : 'hud.open')}
+          label={t('menu.open')}
           onClick={onToggleHud}
         >
-          {hudOpen ? (
-            <PanelRightClose className='size-4' aria-hidden='true' />
-          ) : (
-            <PanelRightOpen className='size-4' aria-hidden='true' />
-          )}
+          <PanelRightOpen className='size-4' aria-hidden='true' />
+          <span>{t('menu.open')}</span>
         </IconButton>
       </div>
-      {hudOpen ? (
-        <>
-          <aside className='metaverse-room-hud'>
-            <div className='panel-header metaverse-hud-header'>
-              <div>
-                <h3>{room.title}</h3>
-              </div>
-            </div>
-            <section className='metaverse-hud-accordion' data-open={hudDebugOpen}>
-              <button
-                type='button'
-                className='metaverse-hud-accordion-trigger'
-                aria-expanded={hudDebugOpen}
-                onClick={onToggleHudDebug}
-              >
-                <span>{t('hud.debug')}</span>
-                <ChevronDown className='size-4' aria-hidden='true' />
-              </button>
-              {hudDebugOpen ? (
-                <div className='metaverse-room-diagnostics'>
-                  <span>{t('hud.topic', { topic: topicDisplayName(activeTopic) })}</span>
-                  <span>{t('hud.localPeer', { peer: localPeerId })}</span>
-                  <span>{t('hud.knownPeers', { count: knownPeerCount })}</span>
-                  <span>{t('hud.lastSentSeq', { seq: lastSentSeq })}</span>
-                  <span>
-                    {t('hud.lastReceived', {
-                      time: lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : t('hud.none'),
-                    })}
-                  </span>
-                  <span>{t('hud.remoteAnimation', { value: remoteAnimationSummary || t('hud.none') })}</span>
-                  <span>{t('hud.avatarAsset', { status: avatarStatusLabel })}</span>
-                  <span>
-                    {t('hud.blobResolve', {
-                      value: localAvatarAssetRef?.blob_hash ?? t('hud.publicFallback'),
-                    })}
-                  </span>
-                  <span>{t('hud.persistence', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
-                  <span>
-                    {t('hud.communityAssist', {
-                      value: t(communityAssistAvailable ? 'hud.assistAvailable' : 'hud.assistOptional'),
-                    })}
-                  </span>
-                </div>
-              ) : null}
-            </section>
-            <DomeCustomizationControls
-              customization={room.metaverse!.dome.customization}
-              isOwner={isOwner}
-              pending={pending}
-              locale={locale}
-              onSave={onSaveCustomization}
-              onImportTexture={onImportTexture}
-            />
-            <div className='metaverse-object-controls'>
+      <DomeCustomizationControls key={sessionIdentity}
+        customization={room.metaverse!.dome.customization} isOwner={isOwner} pending={pending} locale={locale}
+        onSave={onSaveCustomization} onImportTexture={onImportTexture}
+        renderSections={({ settings, objects, actions }) => <MetaverseCategories
+          overlay={overlay} category={category} locale={locale} onSelect={onSelectCategory}
+          onCategories={onCategories} onClose={onCloseOverlay} panels={{
+            ...panels,
+            dome: <>{settings}{actions}</>,
+            avatar: <>            <div className='metaverse-object-controls'>
               <strong>{t('avatar.title')}</strong>
               <div className='metaverse-avatar-asset-controls'>
                 <Label>
@@ -284,7 +240,8 @@ export function MetaverseRoomControls({
                 </Button>
               </div>
             </div>
-            <div className='metaverse-object-controls'>
+</>,
+            objects: <>{objects}{actions}            <div className='metaverse-object-controls'>
               <strong>
                 <Box className='size-4' aria-hidden='true' />
                 {t('object.title')}
@@ -323,13 +280,33 @@ export function MetaverseRoomControls({
                   </Button>
                 ))}
               </div>
-            </div>
-          </aside>
-          <span className='metaverse-hud-scrollbar-indicator' aria-hidden='true'>
-            <span />
-          </span>
-        </>
-      ) : null}
+            </div>{panels?.objects}</>,
+            diagnostics: <>                <div className='metaverse-room-diagnostics'>
+                  <span>{t('hud.topic', { topic: topicDisplayName(activeTopic) })}</span>
+                  <span>{t('hud.localPeer', { peer: localPeerId })}</span>
+                  <span>{t('hud.knownPeers', { count: knownPeerCount })}</span>
+                  <span>{t('hud.lastSentSeq', { seq: lastSentSeq })}</span>
+                  <span>
+                    {t('hud.lastReceived', {
+                      time: lastReceivedAt ? formatLocalizedTime(lastReceivedAt, locale) : t('hud.none'),
+                    })}
+                  </span>
+                  <span>{t('hud.remoteAnimation', { value: remoteAnimationSummary || t('hud.none') })}</span>
+                  <span>{t('hud.avatarAsset', { status: avatarStatusLabel })}</span>
+                  <span>
+                    {t('hud.blobResolve', {
+                      value: localAvatarAssetRef?.blob_hash ?? t('hud.publicFallback'),
+                    })}
+                  </span>
+                  <span>{t('hud.persistence', { value: room.manifest_blob_hash ?? t('room.pending') })}</span>
+                  <span>
+                    {t('hud.communityAssist', {
+                      value: t(communityAssistAvailable ? 'hud.assistAvailable' : 'hud.assistOptional'),
+                    })}
+                  </span>
+                </div>{panels?.diagnostics}</>,
+          }} />}
+      />
       {chatOpen ? (
         <section className='metaverse-room-chat-log' aria-label={t('chat.title')}>
           <div className='metaverse-room-chat-log-header'>
@@ -360,7 +337,11 @@ export function MetaverseRoomControls({
               </li>
             ))}
           </ul>
-          <form className='metaverse-chat-form' onSubmit={onSendMessage}>
+          <form className='metaverse-chat-form'
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={() => { composing.current = false; }}
+            onKeyDown={event => { if (event.key === 'Enter' && (composing.current || event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault(); }}
+            onSubmit={event => { if (composing.current) event.preventDefault(); else onSendMessage(event); }}>
             <Label>
               <span className='sr-only'>{t('chat.messageLabel')}</span>
               <Input

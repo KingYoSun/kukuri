@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { SupportedLocale } from '@/i18n';
@@ -18,7 +18,10 @@ import { InvokeError } from '@/lib/api/invoke/error';
 import { formatBytes } from '@/shell/presentation';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
 
+export type DomeHostingSections = { hosting: ReactNode; objects: ReactNode; diagnostics: ReactNode };
+
 type DomeHostingPanelProps = {
+  renderSections?: (sections: DomeHostingSections) => ReactNode;
   actions: MetaverseRoomActions;
   room: GameRoomView | null;
   localAuthorPubkey: string;
@@ -36,6 +39,7 @@ type DomeHostingPanelProps = {
 export function DomeHostingPanel({
   actions,
   room,
+  renderSections,
   localAuthorPubkey,
   localEndpointId,
   locale,
@@ -89,7 +93,7 @@ export function DomeHostingPanel({
       .catch(() => { if (!cancelled) setHosting(null); });
     return () => { cancelled = true; };
   }, [actions, room?.metaverse]);
-  if (!room?.metaverse) return null;
+  if (!room?.metaverse) return renderSections?.({ hosting: null, objects: null, diagnostics: null }) ?? null;
 
   const isOwner = room.host_pubkey === localAuthorPubkey;
   const state = hosting?.state ?? room.dome_hosting;
@@ -191,40 +195,14 @@ export function DomeHostingPanel({
     }
   };
 
-  return (
+  const hostingSection = (
     <Card className='panel-subsection' aria-busy={pending}>
       <CardHeader>
         <h3>{t('hosting.title')}</h3>
         <small>{t(`hosting.states.${state?.kind ?? 'closed'}`)}</small>
       </CardHeader>
-      <div className='topic-diagnostic topic-diagnostic-secondary'>
-        <span>{t('hosting.epoch', { value: state?.lease_epoch ?? 0 })}</span>
-        <span>{t('hosting.session', { value: state?.session_id ?? t('hosting.none') })}</span>
-        <span>{t('hosting.expiry', { value: state?.lease_expires_at ? new Date(state.lease_expires_at).toLocaleString(locale) : t('hosting.none') })}</span>
-        <span>{t('hosting.participants', { value: hosting?.participants ?? 0 })}</span>
-        <span>{t(`hosting.sleep.${hosting?.sleeping === false ? 'awake' : 'sleeping'}`)}</span>
-        <span>{t('hosting.revision', { value: room.metaverse.preset_ref.revision })}</span>
-        <span>{t('hosting.cacheLimit', {
-          value: formatBytes(hosting?.resource_budget.client.cache_capacity_bytes ?? 0, locale)
-        })}</span>
-        <span>{t('hosting.participantBudget', {
-          used: hosting?.participants ?? 0,
-          limit: hosting?.resource_budget.host.max_participants ?? 0
-        })}</span>
-        <span>{t('hosting.rigidBodyBudget', {
-          used: hosting?.resource_metrics.rigid_body_high_water ?? 0,
-          limit: hosting?.resource_budget.host.max_simulated_rigid_bodies ?? 0
-        })}</span>
-        <span>{t('hosting.rejectedResources', {
-          value: hosting?.resource_metrics.rejected_total ?? 0
-        })}</span>
-        <span>{t('hosting.snapshotBytes', {
-          value: formatBytes(hosting?.resource_metrics.snapshot_bytes ?? 0, locale)
-        })}</span>
-      </div>
+      <p>{t('hosting.participants', { value: hosting?.participants ?? 0 })}</p>
       {error ? <Notice tone='destructive'>{error}</Notice> : null}
-      {layoutResult ? <Notice>{layoutResult}</Notice> : null}
-      {resyncResult ? <Notice>{resyncResult}</Notice> : null}
       {!isOwner ? <Notice>{t('hosting.ownerOnly')}</Notice> : null}
       {isOwner ? (
         <div className='composer composer-compact'>
@@ -258,7 +236,7 @@ export function DomeHostingPanel({
           </Label>
           {selectedCommunityNode ? (
             <small className='break-all font-mono'>
-              {selectedCommunityNode.nodeId} · {selectedCommunityNode.baseUrl}
+              {selectedCommunityNode.baseUrl}
             </small>
           ) : (
             <Notice>
@@ -272,6 +250,7 @@ export function DomeHostingPanel({
               ) : null}
             </Notice>
           )}
+          <fieldset className='metaverse-impact-actions'><legend>{t('menu.hostChanges')}</legend><p>{t('menu.hostChangesHelp')}</p>
           <Button
             type='button'
             variant='secondary'
@@ -292,7 +271,19 @@ export function DomeHostingPanel({
           >
             {t('hosting.close')}
           </Button>
-          <Button
+          </fieldset>
+
+        </div>
+      ) : null}
+
+    </Card>
+  );
+  const sections: DomeHostingSections = {
+    hosting: hostingSection,
+    objects: <section aria-label={t('object.title')}>
+      {renderSections && error ? <Notice tone='destructive'>{error}</Notice> : null}
+      {layoutResult ? <Notice>{layoutResult}</Notice> : null}
+      {isOwner && <div className='composer composer-compact'>          <Button
             type='button'
             disabled={pending || !state || state.kind === 'closed' || state.kind === 'transferring'}
             onClick={() => void saveLayout()}
@@ -311,23 +302,55 @@ export function DomeHostingPanel({
             type='button'
             variant='secondary'
             disabled={pending || !state || state.kind === 'closed' || state.kind === 'transferring'}
+            className='metaverse-delete-object text-destructive'
             onClick={() => void run(onDeletePersistentProp)}
           >
             {t('hosting.deletePersistentProp')}
-          </Button>
-        </div>
-      ) : null}
-      {state && state.kind !== 'closed' ? (
+          </Button></div>}
+            {state && state.kind !== 'closed' ? (
         <div className='composer composer-compact'>
           <Button type='button' variant='secondary' disabled={pending} onClick={() => void run(onSpawnGuestProp)}>
             {t('hosting.spawnGuestProp')}
           </Button>
-          <Button type='button' variant='secondary' disabled={pending} onClick={() => void resync()}>
-            {t('hosting.resync')}
-          </Button>
+
         </div>
       ) : null}
-      {consentFlow.dialog ? <CommunityNodeConsentDialog {...consentFlow.dialog} /> : null}
-    </Card>
-  );
+    </section>,
+    diagnostics: <section aria-label={t('hud.debug')}>
+      {renderSections && error ? <Notice tone='destructive'>{error}</Notice> : null}
+            <div className='topic-diagnostic topic-diagnostic-secondary'>
+        <span>{t('hosting.epoch', { value: state?.lease_epoch ?? 0 })}</span>
+        <span>{t('hosting.session', { value: state?.session_id ?? t('hosting.none') })}</span>
+        <span>{t('hosting.expiry', { value: state?.lease_expires_at ? new Date(state.lease_expires_at).toLocaleString(locale) : t('hosting.none') })}</span>
+        <span>{t('hosting.participants', { value: hosting?.participants ?? 0 })}</span>
+        <span>{t(`hosting.sleep.${hosting?.sleeping === false ? 'awake' : 'sleeping'}`)}</span>
+        <span>{t('hosting.revision', { value: room.metaverse.preset_ref.revision })}</span>
+        <span>{t('hosting.cacheLimit', {
+          value: formatBytes(hosting?.resource_budget.client.cache_capacity_bytes ?? 0, locale)
+        })}</span>
+        <span>{t('hosting.participantBudget', {
+          used: hosting?.participants ?? 0,
+          limit: hosting?.resource_budget.host.max_participants ?? 0
+        })}</span>
+        <span>{t('hosting.rigidBodyBudget', {
+          used: hosting?.resource_metrics.rigid_body_high_water ?? 0,
+          limit: hosting?.resource_budget.host.max_simulated_rigid_bodies ?? 0
+        })}</span>
+        <span>{t('hosting.rejectedResources', {
+          value: hosting?.resource_metrics.rejected_total ?? 0
+        })}</span>
+        <span>{t('hosting.snapshotBytes', {
+          value: formatBytes(hosting?.resource_metrics.snapshot_bytes ?? 0, locale)
+        })}</span>
+      </div>
+      {selectedCommunityNode && <p>{selectedCommunityNode.nodeId}</p>}
+      {state && state.kind !== 'closed' && <>          <Button type='button' variant='secondary' disabled={pending} onClick={() => void resync()}>
+            {t('hosting.resync')}
+          </Button></>}
+      {resyncResult && <Notice>{resyncResult}</Notice>}
+    </section>,
+  };
+  return <>{renderSections ? renderSections(sections) : <>{sections.hosting}{sections.objects}{sections.diagnostics}</>}
+    {consentFlow.dialog ? <CommunityNodeConsentDialog {...consentFlow.dialog} /> : null}
+  </>;
 }
