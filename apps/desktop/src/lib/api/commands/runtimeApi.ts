@@ -631,7 +631,8 @@ export const runtimeApi: DesktopApi = {
     spatialContext,
     instanceId,
     endpointId,
-    leaseDurationMillis
+    leaseDurationMillis,
+    expectedGeneration
   ) => {
     return invokeDesktop<DomeHostingView>('start_owner_dome_hosting', {
       request: {
@@ -639,6 +640,7 @@ export const runtimeApi: DesktopApi = {
         instance_id: instanceId,
         endpoint_id: endpointId,
         lease_duration_millis: leaseDurationMillis,
+        expected_generation: expectedGeneration,
       } satisfies StartOwnerDomeHostingRequest,
     });
   }),
@@ -647,7 +649,8 @@ export const runtimeApi: DesktopApi = {
     instanceId,
     nodeId,
     baseUrl,
-    leaseDurationMillis
+    leaseDurationMillis,
+    expectedGeneration
   ) => {
     return invokeDesktop<DomeHostingView>('delegate_dome_hosting', {
       request: {
@@ -656,14 +659,16 @@ export const runtimeApi: DesktopApi = {
         node_id: nodeId,
         base_url: baseUrl,
         lease_duration_millis: leaseDurationMillis,
+        expected_generation: expectedGeneration,
       } satisfies DelegateDomeHostingRequest,
     });
   }),
-  closeDomeHosting: command('closeDomeHosting', async (spatialContext, instanceId) => {
+  closeDomeHosting: command('closeDomeHosting', async (spatialContext, instanceId, expectedGeneration) => {
     return invokeDesktop<DomeHostingView>('close_dome_hosting', {
       request: {
         spatial_context: spatialContext,
         instance_id: instanceId,
+        expected_generation: expectedGeneration,
       } satisfies CloseDomeHostingRequest,
     });
   }),

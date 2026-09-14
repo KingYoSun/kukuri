@@ -119,15 +119,20 @@ async fn activate_generation(
 
 #[tokio::test]
 async fn old_release_cannot_remove_recreated_generation_runtime_or_pins() -> Result<()> {
-    release_race(false).await
+    release_race(false, false).await
 }
 
 #[tokio::test]
 async fn release_lock_protects_pins_across_server_instances() -> Result<()> {
-    release_race(true).await
+    release_race(true, false).await
 }
 
-async fn release_race(separate_node_state: bool) -> Result<()> {
+#[tokio::test]
+async fn expired_status_cannot_remove_recreated_generation() -> Result<()> {
+    release_race(false, true).await
+}
+
+async fn release_race(separate_node_state: bool, expired_status: bool) -> Result<()> {
     if std::env::var("KUKURI_CN_RUN_INTEGRATION_TESTS").as_deref() != Ok("1") {
         eprintln!("skipping CN deletion race test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
         return Ok(());
@@ -200,7 +205,7 @@ async fn release_race(separate_node_state: bool) -> Result<()> {
         .dome_hosting
         .as_ref()
         .unwrap()
-        .release_pause
+        .lifecycle_pause
         .lock()
         .await = Some((reached.clone(), resume.clone()));
     let close = close_dome_hosting_lease(
@@ -208,18 +213,26 @@ async fn release_race(separate_node_state: bool) -> Result<()> {
         &original.signed_lease,
         chrono::Utc::now().timestamp_millis(),
     )?;
+    if expired_status {
+        sqlx::query("UPDATE cn_metaverse.dome_hosting_assignments SET expires_at=0 WHERE instance_id='same-instance'")
+            .execute(&state.pool).await?;
+    }
     let old_state = state.clone();
     let old_headers = headers.clone();
     let old_release = tokio::spawn(async move {
-        release_dome_hosting(
-            State(old_state),
-            old_headers,
-            Json(DomeHostingReleaseRequest {
-                instance_id: "same-instance".into(),
-                signed_close: close,
-            }),
-        )
-        .await
+        if expired_status {
+            dome_hosting_status(State(old_state), Path("same-instance".into()), old_headers).await
+        } else {
+            release_dome_hosting(
+                State(old_state),
+                old_headers,
+                Json(DomeHostingReleaseRequest {
+                    instance_id: "same-instance".into(),
+                    signed_close: close,
+                }),
+            )
+            .await
+        }
     });
     tokio::time::timeout(std::time::Duration::from_secs(5), reached.notified()).await?;
     let next = assignment(&owner, &node, 2);

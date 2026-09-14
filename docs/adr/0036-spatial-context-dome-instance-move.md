@@ -87,11 +87,13 @@ target staging前のPreset / asset検証失敗ではsourceを変更しない。d
 
 所有者は入室せずにInstanceを削除できる。`delete_dome`は完全なContext、Instance ID、expected generation、operation IDを要求し、署名者とowner、現在のContext権限、active/attached状態を最初のwriteより前に確認する。停止操作はleaseだけを閉じ、削除操作はInstanceをtombstoneにしてowner slotを再利用可能にする。
 
-削除journalは対象Context replicaの`metaverse/dome-deletions/<Context+Instance+generationのhash>/state`へowner署名付きで保存する。request、元manifest、作成時刻、local完了、旧CN targetと署名済みcloseを持ち、同じoperationのretry・restartに使う。private情報をpublic author replicaへ転記しない。完了recordは旧retryを新世代へ適用しないための履歴として保持する。
+削除journalは対象Context replicaの`metaverse/dome-deletions/<Context+Instance+generationのhash>/state`へowner署名付きで保存する。request、Instanceメタデータの削除用投影、作成時刻、local完了、旧CN targetと署名済みcloseを持ち、同じoperationのretry・restartに使う。private情報をpublic author replicaへ転記しない。完了recordは旧retryを新世代へ適用しないための履歴として保持する。
 
 lease close、関係の即時失効、Instance tombstone、game projection、通知hintを完了してからlocal完了を記録する。途中失敗は同じ世代・operationで再試行し、tombstone後の未完了処理も`list_pending_dome_deletions`から到達可能にする。旧operationの完了済みretryは保存結果だけを返し、新世代のInstanceへ書き込まない。CN releaseの失敗はlocal失効と別にcleanup pendingとして示す。
 
 削除対象はContext内のInstanceである。独立したowner資産のPresetと、他Instanceからも使われる素材を一括で消去しない。Current/active lease/staging/rollback参照と24時間graceはADR 0040に従う。既に他peerへ渡ったcopyの強制消去は保証しない。
+
+管理一覧と削除は署名検証済みのInstanceから復元でき、Preset bytesや派生game manifest/cacheの取得を前提としない。入室データが未取得のowner viewは`management_only`として管理に限定し、scene/admission候補へ使わない。Preset取得後は検証済みInstance/Presetから通常viewへ解決する。hosting viewの`preset_manifest_json`は未取得時nullになり、host状態・epoch・理由は実際のauthority状態を維持する。削除journalのmanifest欄はこのInstanceメタデータから作る削除用投影であり、仮のPresetをactiveな定義としてpublishしない。
 
 ### Event binding（現行契約）
 

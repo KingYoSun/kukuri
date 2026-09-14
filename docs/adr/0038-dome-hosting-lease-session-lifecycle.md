@@ -75,6 +75,8 @@ Postgres は Dome ごとに active assignment を最大一件に制限する。N
 
 #1020ではassign/activate/releaseのassignment、blob pin、runtimeを一つのlifecycle操作として直列化する。同じserver processの排他に加え、同じDBを使うserver間ではInstance IDに対するPostgres advisory transaction lockを保持する。旧epochのreleaseがDBをcloseした後に新generationのruntime・pinを消さないことを、DB closeとcleanupの間にbarrierを置くcontractで固定する。auth/consentとowner/epoch照合は従来どおり維持する。
 
+期限切れruntimeを除去するstatus取得も同じlifecycle境界でassignmentを読む。古いstatus応答の処理が新generationのruntimeを除去しないことを並行contractで固定する。GUIの開始・停止・委譲要求は管理対象の`expected_generation`を送信し、app-apiは署名済みInstanceのgenerationと一致しない要求を最初のlease mutation前に拒否する。CLIの省略は、現在のInstanceを対象とする既存の明示操作モードを維持する。
+
 ## Consequences
 
 Issue #797の5秒heartbeat、15秒offline grace、30秒participant timeoutは[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。

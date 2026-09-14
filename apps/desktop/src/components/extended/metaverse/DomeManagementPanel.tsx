@@ -37,6 +37,7 @@ export function DomeManagementPanel({ room, actions, endpointId, locale, admitte
   const request = useRef(0);
   const operationId = useRef(`delete-${room.metaverse!.instance_id}-${room.metaverse!.instance_generation}`);
   const dome = room.metaverse!;
+  const sceneReady = Boolean(hosting?.preset_manifest_json) && room.phase_label !== 'management_only';
   const active = hosting?.state.kind === 'owner_hosted' || hosting?.state.kind === 'community_node_hosted';
   useEffect(() => {
     alive.current = true;
@@ -55,12 +56,12 @@ export function DomeManagementPanel({ room, actions, endpointId, locale, admitte
     ++request.current;
     setPending(kind); setError(null);
     try { await action(); }
-    catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : t('hosting.error')); }
+    catch (cause) { if (alive.current) setError(cause instanceof Error && cause.message.includes('STALE_INSTANCE') ? t('management.staleTarget') : cause instanceof Error ? cause.message : t('hosting.error')); }
     finally { busy.current = false; if (alive.current) setPending(null); }
   }
   async function enter() {
     if (!active) {
-      const result = await actions.startOwnerHosting(dome.spatial_context, dome.instance_id, endpointId);
+      const result = await actions.startOwnerHosting(dome.spatial_context, dome.instance_id, endpointId, dome.instance_generation);
       if (!alive.current) return;
       setHosting(result);
       if (result.state.kind !== 'owner_hosted') throw new Error(t('management.startFailed'));
@@ -83,18 +84,20 @@ export function DomeManagementPanel({ room, actions, endpointId, locale, admitte
     <p role='status'>{pending === 'start' ? t('management.starting') : pending === 'enter' ? t('entry.admitting')
       : admitted ? t('management.entered') : hosting ? t(`hosting.states.${hosting.state.kind}`) : t('management.checking')}</p>
     <p>{t('management.explanation')}</p>
+    {hosting && !sceneReady ? <Notice>{t('management.presetUnavailable')}</Notice> : null}
     {error ? <Notice tone='destructive'>{error}</Notice> : null}
     {cleanupPending ? <Button disabled={pending !== null} onClick={() => void run('delete', remove)}>{t('management.retryDelete')}</Button> : <>
-      {!admitted ? <Button disabled={pending !== null || (!active && !endpointId) || !hosting}
+      {!admitted ? <Button disabled={pending !== null || (!active && !endpointId) || !hosting || !sceneReady}
         onClick={() => void run(active ? 'enter' : 'start', enter)}>{t(active ? 'room.join' : 'management.startAndEnter')}</Button> : null}
       {hosting?.lease || active || admitted ? <Button variant='secondary' disabled={pending !== null} onClick={() => void run('stop', async () => {
-        const result = await actions.closeHosting(dome.spatial_context, dome.instance_id);
+        const result = await actions.closeHosting(dome.spatial_context, dome.instance_id, dome.instance_generation);
         if (!alive.current) return;
         setHosting(result); onStopped(); await actions.refresh();
       })}>{t('hosting.close')}</Button> : null}
       <Button variant='secondary' disabled={pending !== null} onClick={() => void run('read', async () => {
         const value = await actions.getHosting(dome.spatial_context, dome.instance_id);
         if (alive.current) setHosting(value);
+        await actions.refresh();
       })}>{t('management.refresh')}</Button>
       <Button variant='secondary' className='text-destructive' disabled={pending !== null} onClick={() => setConfirm(true)}>{t('management.delete')}</Button>
     </>}

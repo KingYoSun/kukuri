@@ -117,7 +117,7 @@ function presenceJoinEvent(peerId: string, seq: number): MetaverseRoomEventView 
 
 function physicsSnapshot(animations: Array<[string, string | null]>): DomePhysicsSnapshotV1 {
   return {
-    instance_id: room.room_id,
+    instance_id: room.metaverse!.instance_id,
     instance_generation: 1,
     lease_epoch: 1,
     session_id: room.room_id,
@@ -247,6 +247,15 @@ function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
 }
 
 describe('MetaverseRoomPanel animation sharing', () => {
+  test('requires a new authoritative admission when the same room id has a new generation', async () => {
+    const api = createDesktopMockApi();
+    const input = vi.spyOn(api, 'submitDomeSessionInput');
+    const view = renderPanel(api);
+    await screen.findByLabelText('Metaverse room viewport');
+    input.mockImplementation(() => new Promise(() => undefined));
+    view.rerender(panelElement(api, { rooms: [{ ...room, metaverse: { ...room.metaverse!, instance_generation: 2 } }] }));
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+  });
   test('does not render a room before authoritative admission completes', async () => {
     const baseApi = createDesktopMockApi();
     const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);

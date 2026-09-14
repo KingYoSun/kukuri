@@ -579,7 +579,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let metaverse = room.metaverse.context("entry Dome metaverse state")?;
                     runtime
                         .app()?
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: room.room_id.clone(),
                             endpoint_id: "harness-entry-owner".into(),
@@ -780,7 +780,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         .await?;
                     runtime
                         .app()?
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             endpoint_id: "harness-transition-source".into(),
@@ -788,7 +788,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         })
                         .await?;
                     target_host
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: target_instance_id.clone(),
                             endpoint_id: "harness-transition-target".into(),

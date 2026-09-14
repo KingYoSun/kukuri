@@ -1,6 +1,6 @@
 {
   "baseline": "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a",
-  "scope_revision": "2026-09-13-1005-account-menu-v3",
+  "scope_revision": "2026-09-14-1020-dome-management-v1",
   "entries": [
     {"tauri":"commands::startup::get_desktop_startup_status","cli":"get_desktop_startup_status","inventory":"INV-1"},
     {"tauri":"commands::system_locale::get_system_locales","excluded":"os","reason":"#917: desktopの同意前UI言語を選ぶOS local read。UIを持たないCLIの業務commandには追加しない。"},
@@ -98,6 +98,8 @@
     {"tauri":"commands::live_game::start_owner_dome_hosting","cli":"start_owner_dome_hosting","inventory":"INV-6"},
     {"tauri":"commands::live_game::delegate_dome_hosting","cli":"delegate_dome_hosting","inventory":"INV-6"},
     {"tauri":"commands::live_game::close_dome_hosting","cli":"close_dome_hosting","inventory":"INV-6"},
+    {"tauri":"commands::live_game::delete_dome","cli":"delete_dome","inventory":"INV-6"},
+    {"tauri":"commands::live_game::list_pending_dome_deletions","cli":"list_pending_dome_deletions","inventory":"INV-6"},
     {"tauri":"commands::live_game::submit_dome_session_input","cli":"submit_dome_session_input","inventory":"INV-6"},
     {"tauri":"commands::live_game::prepare_dome_transition","cli":"prepare_dome_transition","inventory":"INV-6"},
     {"tauri":"commands::live_game::preview_dome_transition_access","cli":"preview_dome_transition_access","inventory":"INV-6"},

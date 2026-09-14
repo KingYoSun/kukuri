@@ -219,7 +219,7 @@ export type DomePhysicsBodyV1 = { entity_id: string, kind: DomePhysicsBodyKindV1
 
 export type DomePhysicsSnapshotV1 = { instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, sequence: number, simulated_at: number, sleeping: boolean, bodies: Array<DomePhysicsBodyV1>, };
 
-export type DomeHostingView = { instance_id: string, state: DomeHostingStateV1, lease?: DomeHostingLeaseV1 | null, signed_lease_json?: string | null, signed_activation_json?: string | null, signed_close_json?: string | null, instance_manifest_json: string, preset_manifest_json: string, participants: number, sleeping: boolean, resource_budget: MetaverseResourceBudgetConfig, resource_metrics: MetaverseResourceMetricsV1, };
+export type DomeHostingView = { instance_id: string, state: DomeHostingStateV1, lease?: DomeHostingLeaseV1 | null, signed_lease_json?: string | null, signed_activation_json?: string | null, signed_close_json?: string | null, instance_manifest_json: string, preset_manifest_json?: string | null, participants: number, sleeping: boolean, resource_budget: MetaverseResourceBudgetConfig, resource_metrics: MetaverseResourceMetricsV1, };
 
 export type DomeLayoutCandidateV1 = { operation_id: string, instance_id: string, instance_generation: number, lease_epoch: number, session_id: string, host_pubkey: string, base_manifest_revision: number, snapshot_sequence: number, captured_at: number, persistent_props: Array<MetaversePersistentPropV1>, };
 
@@ -669,11 +669,11 @@ export type UpdateMetaverseRoomRequest = { topic: string, room_id: string, statu
 
 export type GetDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, };
 
-export type StartOwnerDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, endpoint_id: string, lease_duration_millis: number, };
+export type StartOwnerDomeHostingRequest = { expected_generation?: number | null, spatial_context: SpatialContextV1, instance_id: string, endpoint_id: string, lease_duration_millis: number, };
 
-export type DelegateDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, node_id: string, base_url: string, lease_duration_millis: number, };
+export type DelegateDomeHostingRequest = { expected_generation?: number | null, spatial_context: SpatialContextV1, instance_id: string, node_id: string, base_url: string, lease_duration_millis: number, };
 
-export type CloseDomeHostingRequest = { spatial_context: SpatialContextV1, instance_id: string, };
+export type CloseDomeHostingRequest = { expected_generation?: number | null, spatial_context: SpatialContextV1, instance_id: string, };
 
 export type SubmitDomeSessionInputRequest = { spatial_context: SpatialContextV1, instance_id: string, sequence: number, input: DomeSessionInputKindV1, };
 

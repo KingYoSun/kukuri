@@ -287,6 +287,10 @@
     "cancel": "取消",
     "confirmDelete": "确认删除",
     "localRunning": "正在此设备运行",
-    "pendingReadFailed": "无法检查未完成的删除。请刷新此空间重试。"
+    "pendingReadFailed": "无法检查未完成的删除。请刷新此空间重试。",
+    "presetUnavailable": "尚未获取空间数据。仍可管理或删除此Dome。请刷新重试。",
+    "scenePending": "空间数据未就绪",
+    "loadingRooms": "正在检查Dome列表…",
+    "staleTarget": "此Dome已更新。请关闭管理并重新选择。"
   }
 }

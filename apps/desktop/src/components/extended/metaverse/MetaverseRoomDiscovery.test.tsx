@@ -50,6 +50,12 @@ function renderDiscovery(
 }
 
 describe('MetaverseRoomDiscovery', () => {
+  test('does not report an unknown catalog as empty or allow creating into an unknown owner slot', () => {
+    renderDiscovery({ rooms: [], catalogReady: false });
+    expect(screen.getByText('Checking the Dome list…')).toBeInTheDocument();
+    expect(screen.queryByText('No metaverse rooms in this topic.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create metaverse room' })).not.toBeInTheDocument();
+  });
   test('keeps owner management reachable while hosting is stopped without joining', async () => {
     const user = userEvent.setup();
     const { props } = renderDiscovery({ rooms: [{ ...room, dome_hosting: { kind: 'closed' } }] });

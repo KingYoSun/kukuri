@@ -43,13 +43,19 @@ CodeGraphのcaller一覧にはmacro/文字列IPC/一部method呼出しの欠落�
 
 ## 設計判断
 
-- 削除journalは対象Contextの`metaverse/dome-deletions/<Context+Instance+generationのhash>/state`。owner署名付きで、request、元manifest、作成時刻、local完了、旧CN target/署名closeを保持する。private Contextの情報をauthor public replicaへ出さない。
+- 削除journalは対象Contextの`metaverse/dome-deletions/<Context+Instance+generationのhash>/state`。owner署名付きで、request、Instanceメタデータの削除用投影、作成時刻、local完了、旧CN target/署名closeを保持する。private Contextの情報をauthor public replicaへ出さない。
 - UIのoperation IDはInstance/generationから安定して作る。CLIもrequestを保持して同じoperation IDをretryする。異なるoperation IDで同世代journalを上書きしない。
 - local削除完了とCN cleanup pendingを区別。CNに到達できなくてもlocal close/tombstoneを巻き戻さない。旧lease epochに束縛したreleaseだけをretryする。
 - Instanceの公開停止はtombstone、topology失効、hosting closeで行う。PresetはContextから独立したowner資産（ADR 0036）であり、Dome Instance削除をPreset全体の破壊へ拡大しない。Current/rollback等の有効な参照と共有assetを保持する。blobの即時消去や他peerの取得済みcopy消去は保証しない。ADR 0040の参照0・24時間graceを変更しない。
 - UI専用の管理対象・確認状態をnetwork sessionから分離。managed targetはaccount/Context/Instance/generationで識別し、旧async結果を現在の対象へ適用しない。
 
 ## 検証経過
+
+Ubuntuでの既存Dome確認から、Preset未取得でownerまで一覧から消え、deleteもPreset/派生game blobを要求する残存経路を確認した。`owner_can_manage_and_delete_without_preset_bytes`と`owner_can_delete_without_derived_game_manifest`をred→greenにし、署名済みInstanceだけから管理メタデータ・削除投影を作るよう分離した。後者は空のprojection storeからの管理復元も確認する。入室準備とhostingの状態理由を混同せず、未取得の入室データはnullableなPreset情報とmetadata-only viewで表す。
+
+古い管理画面のstart/stop/delegate要求が新generationを変更するケースもred→greenにした。GUIはgenerationを送信し、backend guardが拒否した場合はdocs全体と新runtimeが不変であることを確認する。対象を切り替えた際は高度なHosting panelもremountし、同意Dialogの委譲先Domeを持ち越さない。
+
+同じroom IDでgenerationが変わると旧admissionが新Domeへ引き継がれるUI経路を`requires a new authoritative admission when the same room id has a new generation`で再現した。admissionをaccount/Context/ID/generationへ束縛し、snapshotもID/generationとlease epochで拒否・再基準化する。管理中に新generationを観測した場合は旧targetの高度な操作を閉じ、選び直す案内を表示する。focus移動もgenerationへ束縛する。
 
 独立監査の初回commit `e5ced6b0` はCN releaseと新generation activationの競合B-1でFAIL。実際のDB close後・pin/runtime cleanup前にbarrierを置くtestで、新runtimeが消えることを再現した。assign/activate/releaseのprocess内排他とDB advisory transaction lockで修正する。旧FAIL記録は独立監査記録へ残し、修正commitをdelta監査する。
 

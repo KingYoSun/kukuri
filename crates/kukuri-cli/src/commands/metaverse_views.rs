@@ -19,7 +19,7 @@ pub(super) fn hosting() -> Value {
     view(
         json!({"instance_id": string(), "state": game_views::hosting_state(), "lease": nullable(lease),
         "signed_lease_json": nullable(string()), "signed_activation_json": nullable(string()), "signed_close_json": nullable(string()),
-        "instance_manifest_json": string(), "preset_manifest_json": string(), "participants": unsigned(), "sleeping": {"type": "boolean"},
+        "instance_manifest_json": string(), "preset_manifest_json": nullable(string()), "participants": unsigned(), "sleeping": {"type": "boolean"},
         "resource_budget": budget(), "resource_metrics": view(json!({"rejected_total": unsigned(),
             "rejection_counts": array(view(json!({"code": string(), "count": unsigned()}))), "participant_high_water": unsigned(),
             "rigid_body_high_water": unsigned(), "snapshot_bytes": unsigned(), "snapshot_throttled": unsigned()}))}),

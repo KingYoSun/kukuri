@@ -86,15 +86,33 @@ pub(super) fn input(name: &str) -> Value {
         "update_metaverse_room" => view(
             json!({"topic": string(), "room_id": string(), "status": game_views::status(), "customization": game_views::customization()}),
         ),
-        "get_dome_hosting" | "close_dome_hosting" => view(common),
+        "get_dome_hosting" => view(common),
+        "close_dome_hosting" => object(
+            json!({"spatial_context": spatial_context(), "instance_id": string(), "expected_generation": nullable(unsigned())}),
+            &["spatial_context", "instance_id"],
+        ),
+        "list_pending_dome_deletions" => view(json!({"spatial_context": spatial_context()})),
         "delete_dome" => view(
             json!({"spatial_context": spatial_context(), "instance_id": string(), "expected_generation": unsigned(), "operation_id": string()}),
         ),
-        "start_owner_dome_hosting" => view(
-            json!({"spatial_context": spatial_context(), "instance_id": string(), "endpoint_id": string(), "lease_duration_millis": integer()}),
+        "start_owner_dome_hosting" => object(
+            json!({"spatial_context": spatial_context(), "instance_id": string(), "endpoint_id": string(), "lease_duration_millis": integer(), "expected_generation": nullable(unsigned())}),
+            &[
+                "spatial_context",
+                "instance_id",
+                "endpoint_id",
+                "lease_duration_millis",
+            ],
         ),
-        "delegate_dome_hosting" => view(
-            json!({"spatial_context": spatial_context(), "instance_id": string(), "node_id": string(), "base_url": string(), "lease_duration_millis": integer()}),
+        "delegate_dome_hosting" => object(
+            json!({"spatial_context": spatial_context(), "instance_id": string(), "node_id": string(), "base_url": string(), "lease_duration_millis": integer(), "expected_generation": nullable(unsigned())}),
+            &[
+                "spatial_context",
+                "instance_id",
+                "node_id",
+                "base_url",
+                "lease_duration_millis",
+            ],
         ),
         "submit_dome_session_input" => view(
             json!({"spatial_context": spatial_context(), "instance_id": string(), "sequence": unsigned(), "input": session_input()}),
@@ -142,6 +160,9 @@ pub(super) fn input(name: &str) -> Value {
 pub(super) fn output(name: &str) -> Value {
     match name {
         "create_metaverse_room" => string(),
+        "list_pending_dome_deletions" => array(view(
+            json!({"request": input("delete_dome"), "title": string(), "deleted": {"type":"boolean"}}),
+        )),
         "delete_dome" => view(
             json!({"instance_id": string(), "generation": unsigned(), "deleted": {"type":"boolean"}, "cleanup_pending": {"type":"boolean"}}),
         ),

@@ -42,7 +42,7 @@ pub(crate) struct DomeHostingNodeState {
     sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
     budget: kukuri_core::MetaverseResourceBudgetConfig,
     #[cfg(test)]
-    release_pause: Mutex<Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>>,
+    lifecycle_pause: Mutex<Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>>,
 }
 
 impl DomeHostingNodeState {
@@ -58,7 +58,7 @@ impl DomeHostingNodeState {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             budget,
             #[cfg(test)]
-            release_pause: Mutex::new(None),
+            lifecycle_pause: Mutex::new(None),
         };
         let now = chrono::Utc::now().timestamp_millis();
         for assignment in list_recoverable_dome_hosting_assignments(&pool, now).await? {
@@ -437,7 +437,7 @@ pub(crate) async fn release_dome_hosting(
         serde_json::from_value(assignment.preset_manifest_json.clone())
             .map_err(hosting_internal_error)?;
     #[cfg(test)]
-    if let Some((reached, resume)) = hosting.release_pause.lock().await.take() {
+    if let Some((reached, resume)) = hosting.lifecycle_pause.lock().await.take() {
         reached.notify_one();
         resume.notified().await;
     }
@@ -471,6 +471,8 @@ pub(crate) async fn dome_hosting_status(
     let hosting = require_hosting(&state)?;
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let _lifecycle = hosting.lifecycle.lock().await;
+    let _database_lifecycle = lock_hosting_lifecycle(&state.pool, &instance_id).await?;
     let assignment = get_dome_hosting_assignment(&state.pool, &instance_id)
         .await
         .map_err(hosting_internal_error)?
@@ -481,6 +483,11 @@ pub(crate) async fn dome_hosting_status(
                 "Dome hosting assignment was not found",
             )
         })?;
+    #[cfg(test)]
+    if let Some((reached, resume)) = hosting.lifecycle_pause.lock().await.take() {
+        reached.notify_one();
+        resume.notified().await;
+    }
     let now = chrono::Utc::now().timestamp_millis();
     let mut sessions = hosting.sessions.lock().await;
     if assignment.expires_at <= now {

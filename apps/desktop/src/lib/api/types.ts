@@ -417,16 +417,18 @@ export interface DesktopApi {
     spatialContext: SpatialContextV1,
     instanceId: string,
     endpointId: string,
-    leaseDurationMillis: number
+    leaseDurationMillis: number,
+    expectedGeneration?: number
   ): Promise<DomeHostingView>;
   delegateDomeHosting(
     spatialContext: SpatialContextV1,
     instanceId: string,
     nodeId: string,
     baseUrl: string,
-    leaseDurationMillis: number
+    leaseDurationMillis: number,
+    expectedGeneration?: number
   ): Promise<DomeHostingView>;
-  closeDomeHosting(spatialContext: SpatialContextV1, instanceId: string): Promise<DomeHostingView>;
+  closeDomeHosting(spatialContext: SpatialContextV1, instanceId: string, expectedGeneration?: number): Promise<DomeHostingView>;
   submitDomeSessionInput(
     spatialContext: SpatialContextV1,
     instanceId: string,

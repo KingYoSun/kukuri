@@ -235,6 +235,7 @@ async fn create_owner(runtime: &DesktopRuntime) -> (SpatialContextV1, String) {
     };
     runtime
         .start_owner_dome_hosting(crate::StartOwnerDomeHostingRequest {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: instance.clone(),
             endpoint_id: "owner-device".into(),
@@ -252,6 +253,7 @@ fn delegate_request(
     instance: &str,
 ) -> crate::DelegateDomeHostingRequest {
     crate::DelegateDomeHostingRequest {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: instance.into(),
         node_id: node.keys.public_key_hex(),
@@ -385,8 +387,13 @@ async fn public_layout_restart_preserves_transfer_failure_and_operation_retry() 
                 saved.signed_activation_json
             );
         }
-        let manifest: kukuri_core::DomePresetManifestV1 =
-            serde_json::from_str(&saved.preset_manifest_json).expect("preset");
+        let manifest: kukuri_core::DomePresetManifestV1 = serde_json::from_str(
+            saved
+                .preset_manifest_json
+                .as_deref()
+                .expect("available preset"),
+        )
+        .expect("preset");
         assert_eq!(manifest.revision, 2);
         assert_eq!(manifest.dome.customization.persistent_props, vec![prop()]);
         assert_eq!(

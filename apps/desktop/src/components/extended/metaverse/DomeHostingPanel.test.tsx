@@ -161,7 +161,8 @@ describe('DomeHostingPanel Community Node consent', () => {
         room.metaverse!.spatial_context,
         room.metaverse!.instance_id,
         'f'.repeat(64),
-        'https://node.example'
+        'https://node.example',
+        room.metaverse!.instance_generation
       )
     );
     expect(onFetch).not.toHaveBeenCalled();
@@ -193,7 +194,8 @@ describe('DomeHostingPanel Community Node consent', () => {
       room.metaverse!.spatial_context,
       room.metaverse!.instance_id,
       'f'.repeat(64),
-      'https://node.example'
+      'https://node.example',
+      room.metaverse!.instance_generation
     );
   });
 

@@ -120,6 +120,7 @@ export function DomeHostingPanel({
         return;
       }
       setError(
+        cause instanceof Error && cause.message.includes('STALE_INSTANCE') ? t('management.staleTarget') :
         cause instanceof InvokeError && cause.code.startsWith('METAVERSE_')
           ? t('hosting.resourceRejected', { code: cause.code })
           : cause instanceof Error ? cause.message : t('hosting.error')
@@ -136,7 +137,8 @@ export function DomeHostingPanel({
           room.metaverse!.spatial_context,
           room.metaverse!.instance_id,
           node.nodeId!.trim(),
-          node.baseUrl
+          node.baseUrl,
+          room.metaverse!.instance_generation
         ),
       node
     );
@@ -232,7 +234,8 @@ export function DomeHostingPanel({
             onClick={() => void run(() => actions.startOwnerHosting(
               room.metaverse!.spatial_context,
               room.metaverse!.instance_id,
-              localEndpointId
+              localEndpointId,
+              room.metaverse!.instance_generation
             ))}
           >
             {t('hosting.ownerHost')}
@@ -283,7 +286,8 @@ export function DomeHostingPanel({
             disabled={pending || !state || state.kind === 'closed'}
             onClick={() => void run(() => actions.closeHosting(
               room.metaverse!.spatial_context,
-              room.metaverse!.instance_id
+              room.metaverse!.instance_id,
+              room.metaverse!.instance_generation
             ))}
           >
             {t('hosting.close')}

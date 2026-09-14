@@ -287,6 +287,10 @@
     "cancel": "Cancel",
     "confirmDelete": "Confirm deletion",
     "localRunning": "Running on this device",
-    "pendingReadFailed": "Could not check pending deletions. Refresh this space to retry."
+    "pendingReadFailed": "Could not check pending deletions. Refresh this space to retry.",
+    "presetUnavailable": "Scene data is not available yet. You can still manage or delete this Dome. Refresh to check again.",
+    "scenePending": "Scene data unavailable",
+    "loadingRooms": "Checking the Dome list…",
+    "staleTarget": "This Dome has changed. Close management and select it again."
   }
 }

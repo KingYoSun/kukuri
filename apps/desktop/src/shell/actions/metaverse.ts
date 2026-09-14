@@ -45,11 +45,11 @@ export function createMetaverseRoomActions({
     updateRoom: (roomId, status, customization) =>
       api.updateMetaverseRoom(activeTopic, roomId, status, customization),
     getHosting: (context, instanceId) => api.getDomeHosting(context, instanceId),
-    startOwnerHosting: (context, instanceId, endpointId) =>
-      api.startOwnerDomeHosting(context, instanceId, endpointId, 86_400_000),
-    delegateHosting: (context, instanceId, nodeId, baseUrl) =>
-      api.delegateDomeHosting(context, instanceId, nodeId, baseUrl, 86_400_000),
-    closeHosting: (context, instanceId) => api.closeDomeHosting(context, instanceId),
+    startOwnerHosting: (context, instanceId, endpointId, expectedGeneration) =>
+      api.startOwnerDomeHosting(context, instanceId, endpointId, 86_400_000, expectedGeneration),
+    delegateHosting: (context, instanceId, nodeId, baseUrl, expectedGeneration) =>
+      api.delegateDomeHosting(context, instanceId, nodeId, baseUrl, 86_400_000, expectedGeneration),
+    closeHosting: (context, instanceId, expectedGeneration) => api.closeDomeHosting(context, instanceId, expectedGeneration),
     setChannelEntryDome: (topicId, channelId, instanceId) =>
       api.setPrivateChannelEntryDome(topicId, channelId, instanceId).then(() => undefined),
     submitSessionInput: (context, instanceId, sequence, input) =>

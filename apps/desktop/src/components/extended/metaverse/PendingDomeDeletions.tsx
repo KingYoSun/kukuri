@@ -11,14 +11,15 @@ export function PendingDomeDeletions({ actions, context, locale }: { actions: Me
   const [entries, setEntries] = useState<Awaited<ReturnType<MetaverseRoomActions['listPendingDeletions']>>>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    void actions.listPendingDeletions(context).then((value) => { if (!cancelled) setEntries(value); })
+    void actions.listPendingDeletions(context).then((value) => { if (!cancelled) { setEntries(value); setError(null); } })
       .catch(() => { if (!cancelled) setError(t('management.pendingReadFailed')); });
     return () => { cancelled = true; };
-  }, [actions, context, t]);
+  }, [actions, context, refresh, t]);
   return <>
-    {error ? <Notice>{error}</Notice> : null}
+    {error ? <Notice>{error}<Button variant='secondary' disabled={pending} onClick={() => setRefresh((value) => value + 1)}>{t('management.refresh')}</Button></Notice> : null}
     {entries.map((entry) => <Notice key={entry.request.operation_id}>
       <span>{entry.title} — {t('management.retryDelete')}</span>
       <Button variant='secondary' disabled={pending} onClick={async () => {

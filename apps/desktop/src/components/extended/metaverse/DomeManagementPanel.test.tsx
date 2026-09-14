@@ -12,17 +12,32 @@ const room: GameRoomView = {
   scores: [], phase_label: null, room_kind: 'metaverse_room', metaverse: createDefaultMetaverseRoomState(8),
   dome_hosting: { kind: 'closed' }, manifest_blob_hash: 'manifest', updated_at: 1, channel_id: null, audience_label: 'Public',
 };
-function setup() {
+function setup(overrides: Partial<ReturnType<typeof createMetaverseRoomActions>> = {}) {
   const api = createDesktopMockApi();
   const actions = createMetaverseRoomActions({ api, activeTopic: 'kukuri:topic:demo', activeComposeChannel: { kind: 'public' }, onRefresh: vi.fn() });
   actions.startOwnerHosting = vi.fn(actions.startOwnerHosting);
   actions.deleteRoom = vi.fn().mockResolvedValue({ deleted: true, cleanup_pending: false });
+  Object.assign(actions, overrides);
   const onEnter = vi.fn().mockResolvedValue(false);
   const onDeleted = vi.fn();
   const view = render(<DomeManagementPanel room={room} actions={actions} endpointId='endpoint' locale='en'
     admitted={false} onEnter={onEnter} onDeleted={onDeleted} onStopped={vi.fn()} onClose={vi.fn()} />);
   return { ...view, actions, onEnter, onDeleted };
 }
+test('missing scene data keeps deletion available and never starts admission', async () => {
+  const user = userEvent.setup();
+  const api = createDesktopMockApi();
+  const { actions, onEnter } = setup({ getHosting: async (context, id) => ({
+    ...await api.getDomeHosting(context, id), preset_manifest_json: null,
+  }) });
+  await screen.findByText('Scene data is not available yet. You can still manage or delete this Dome. Refresh to check again.');
+  expect(screen.getByRole('button', { name: 'Start hosting and enter' })).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Delete Dome' }));
+  await user.click(screen.getByRole('button', { name: 'Confirm deletion' }));
+  expect(actions.deleteRoom).toHaveBeenCalledOnce();
+  expect(actions.startOwnerHosting).not.toHaveBeenCalled();
+  expect(onEnter).not.toHaveBeenCalled();
+});
 test('management reads without starting, and retrying failed entry does not restart hosting', async () => {
   const user = userEvent.setup();
   const { actions, onEnter } = setup();

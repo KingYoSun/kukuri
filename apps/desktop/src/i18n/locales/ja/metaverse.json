@@ -287,6 +287,10 @@
     "cancel": "キャンセル",
     "confirmDelete": "削除を確定",
     "localRunning": "この端末で稼働中",
-    "pendingReadFailed": "未完了の削除処理を取得できませんでした。この空間を更新して再試行してください。"
+    "pendingReadFailed": "未完了の削除処理を取得できませんでした。この空間を更新して再試行してください。",
+    "presetUnavailable": "空間のデータをまだ取得できていません。管理・削除は利用できます。更新して再確認してください。",
+    "scenePending": "空間データを取得中",
+    "loadingRooms": "Domeの一覧を確認中です。",
+    "staleTarget": "Domeが更新されました。管理を閉じて対象を選び直してください。"
   }
 }

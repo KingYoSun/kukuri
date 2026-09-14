@@ -24,6 +24,12 @@ struct Handler(&'static str);
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ContextInput {
+    spatial_context: kukuri_core::SpatialContextV1,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct AssetInput {
     topic: String,
     room_id: String,
@@ -68,6 +74,12 @@ impl CommandHandler for Handler {
             "delegate_dome_hosting" => encode(
                 runtime
                     .delegate_dome_hosting(decode::<DelegateDomeHostingRequest>(payload)?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            "list_pending_dome_deletions" => encode(
+                runtime
+                    .list_pending_dome_deletions(decode::<ContextInput>(payload)?.spatial_context)
                     .await
                     .map_err(command_error)?,
             ),
@@ -222,6 +234,7 @@ pub(super) fn registrations() -> Vec<CommandRegistration> {
         ("delegate_dome_hosting", Write),
         ("close_dome_hosting", Destructive),
         ("delete_dome", Destructive),
+        ("list_pending_dome_deletions", Read),
         ("submit_dome_session_input", Write),
         ("prepare_dome_transition", Write),
         ("preview_dome_transition_access", Read),

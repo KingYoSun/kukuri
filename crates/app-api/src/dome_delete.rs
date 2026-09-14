@@ -135,24 +135,9 @@ impl AppService {
                 {
                     anyhow::bail!("DOME_DELETE_STALE_INSTANCE");
                 }
-                let (source, _, manifest) = self
-                    .fetch_game_room_state_and_manifest(
-                        input.spatial_context.topic_id().as_str(),
-                        &input.instance_id,
-                    )
-                    .await?
-                    .context("Dome room not found")?;
-                if source != replica
-                    || manifest.owner_pubkey != owner
-                    || manifest
-                        .metaverse
-                        .as_ref()
-                        .is_none_or(|m| m.instance_generation != input.expected_generation)
-                {
-                    anyhow::bail!("DOME_DELETE_STALE_INSTANCE");
-                }
+                let manifest = crate::dome_management::instance_management_manifest(&instance);
                 let hosting = self
-                    .get_dome_hosting(input.spatial_context.clone(), &input.instance_id)
+                    .get_dome_hosting_authority(input.spatial_context.clone(), &input.instance_id)
                     .await?;
                 let node_url = hosting.lease.as_ref().and_then(|lease| match &lease.host {
                     DomeHostTargetV1::CommunityNode { api_base_url, .. } => {
@@ -184,11 +169,12 @@ impl AppService {
         }
         if instance.status == DomeInstanceStatusV1::Active {
             let hosting = self
-                .get_dome_hosting(input.spatial_context.clone(), &input.instance_id)
+                .get_dome_hosting_authority(input.spatial_context.clone(), &input.instance_id)
                 .await?;
             if hosting.lease.is_some() && operation.signed_close_json.is_none() {
                 let closed = self
                     .close_dome_hosting_unlocked(CloseDomeHostingInput {
+                        expected_generation: Some(input.expected_generation),
                         spatial_context: input.spatial_context.clone(),
                         instance_id: input.instance_id.clone(),
                     })

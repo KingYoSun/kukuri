@@ -74,6 +74,7 @@ async fn dome_delete_write_failures_remain_retryable_after_restart() {
         };
         if hosted {
             app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                expected_generation: None,
                 spatial_context: context.clone(),
                 instance_id: room.clone(),
                 endpoint_id: "fault-owner".into(),
@@ -114,6 +115,106 @@ fn create_input() -> CreateMetaverseRoomInput {
         title: "Deletion contract".into(),
         description: String::new(),
         max_peers: Some(8),
+    }
+}
+
+#[tokio::test]
+async fn stale_management_hosting_requests_cannot_mutate_recreated_dome() {
+    for action in ["start", "stop", "delegate"] {
+        let app = AppService::new(
+            Arc::new(MemoryStore::default()),
+            Arc::new(FakeTransport::new(
+                "stale-management",
+                FakeNetwork::default(),
+            )),
+        );
+        let topic = "kukuri:topic:stale-management";
+        let context = SpatialContextV1::Topic {
+            topic_id: TopicId::new(topic),
+        };
+        let id = app
+            .create_metaverse_room(topic, create_input())
+            .await
+            .unwrap();
+        app.delete_dome(DeleteDomeInput {
+            spatial_context: context.clone(),
+            instance_id: id.clone(),
+            expected_generation: 1,
+            operation_id: "replace".into(),
+        })
+        .await
+        .unwrap();
+        app.create_metaverse_room(topic, create_input())
+            .await
+            .unwrap();
+        app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+            expected_generation: Some(2),
+            spatial_context: context.clone(),
+            instance_id: id.clone(),
+            endpoint_id: "new-owner".into(),
+            lease_duration_millis: 60_000,
+        })
+        .await
+        .unwrap();
+        let replica = topic_replica_id(topic);
+        let before = app
+            .services
+            .docs_sync
+            .query_replica(&replica, DocQuery::Prefix(String::new()))
+            .await
+            .unwrap();
+        let result = match action {
+            "start" => app
+                .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                    expected_generation: Some(1),
+                    spatial_context: context.clone(),
+                    instance_id: id.clone(),
+                    endpoint_id: "stale-owner".into(),
+                    lease_duration_millis: 60_000,
+                })
+                .await
+                .map(|_| ()),
+            "stop" => app
+                .close_dome_hosting(crate::CloseDomeHostingInput {
+                    expected_generation: Some(1),
+                    spatial_context: context.clone(),
+                    instance_id: id.clone(),
+                })
+                .await
+                .map(|_| ()),
+            _ => app
+                .prepare_community_node_dome_hosting(crate::PrepareCommunityNodeDomeHostingInput {
+                    expected_generation: Some(1),
+                    spatial_context: context.clone(),
+                    instance_id: id.clone(),
+                    node_id: generate_keys().public_key_hex(),
+                    api_base_url: "https://node.example".into(),
+                    lease_duration_millis: 60_000,
+                })
+                .await
+                .map(|_| ()),
+        };
+        assert!(result.is_err(), "stale {action} must be rejected");
+        let after = app
+            .services
+            .docs_sync
+            .query_replica(&replica, DocQuery::Prefix(String::new()))
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(before).unwrap(),
+            serde_json::to_value(after).unwrap()
+        );
+        assert_eq!(
+            app.dome_host_sessions
+                .lock()
+                .await
+                .get(&id)
+                .unwrap()
+                .lease()
+                .instance_generation,
+            2
+        );
     }
 }
 
@@ -231,6 +332,7 @@ async fn active_dome_deletion_stops_host_and_survives_service_restart() {
         topic_id: TopicId::new(topic),
     };
     app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: room.clone(),
         endpoint_id: "owner".into(),
@@ -258,6 +360,7 @@ async fn active_dome_deletion_stops_host_and_survives_service_restart() {
     );
     let hosted = restarted
         .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+            expected_generation: None,
             spatial_context: context,
             instance_id: room,
             endpoint_id: "owner".into(),

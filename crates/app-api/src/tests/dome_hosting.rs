@@ -38,6 +38,7 @@ async fn owner_explicitly_transfers_hosting_to_one_community_node() {
 
     let owner_hosted = app
         .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: room_id.clone(),
             endpoint_id: "owner-endpoint".into(),
@@ -51,6 +52,7 @@ async fn owner_explicitly_transfers_hosting_to_one_community_node() {
     let node_keys = KukuriKeys::generate();
     let transferring = app
         .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: room_id.clone(),
             node_id: node_keys.public_key_hex(),
@@ -107,6 +109,7 @@ async fn owner_explicitly_transfers_hosting_to_one_community_node() {
 
     let closed = app
         .close_dome_hosting(CloseDomeHostingInput {
+            expected_generation: None,
             spatial_context: context,
             instance_id: room_id,
         })
@@ -136,6 +139,7 @@ async fn owner_layout_commit_is_explicit_idempotent_and_restarts_from_new_revisi
         topic_id: kukuri_core::TopicId::new(topic),
     };
     app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: room_id.clone(),
         endpoint_id: "owner-endpoint".into(),

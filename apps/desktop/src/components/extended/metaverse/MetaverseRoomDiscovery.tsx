@@ -30,6 +30,8 @@ export type CreateMetaverseRoomInput = {
 
 type MetaverseRoomDiscoveryProps = {
   rooms: GameRoomView[];
+  catalogReady?: boolean;
+  onRetry?: () => Promise<void>;
   selectedRoomId: string | null;
   joinedRoomIds: ReadonlySet<string>;
   pending: boolean;
@@ -52,6 +54,8 @@ type MetaverseRoomDiscoveryProps = {
 
 export function MetaverseRoomDiscovery({
   rooms,
+  catalogReady = true,
+  onRetry,
   selectedRoomId,
   joinedRoomIds,
   pending,
@@ -181,6 +185,8 @@ export function MetaverseRoomDiscovery({
           <small>{t('rooms.summary', { count: rooms.length })}</small>
         </div>
       </div>
+      {!catalogReady && !error ? <Notice>{t('management.loadingRooms')}</Notice> : null}
+      {!catalogReady && onRetry ? <Button variant='secondary' disabled={pending} onClick={() => void onRetry()}>{t('management.refresh')}</Button> : null}
       {validationError || error ? (
         <Notice tone='destructive'>{validationError ? t('create.titleRequired') : error}</Notice>
       ) : null}
@@ -214,7 +220,7 @@ export function MetaverseRoomDiscovery({
           ) : <small>{t('entry.ownerOnly')}</small>}
         </section>
       ) : null}
-      {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? (
+      {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) && catalogReady ? (
       <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
         <button
           className='shell-nav-accordion-trigger'
@@ -251,8 +257,8 @@ export function MetaverseRoomDiscovery({
           </form>
         ) : null}
       </section>
-      ) : <Notice>{t('management.ownerLimit')}</Notice>}
-      {rooms.length === 0 ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
+      ) : rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? <Notice>{t('management.ownerLimit')}</Notice> : null}
+      {rooms.length === 0 && catalogReady ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
           <li key={room.room_id}>
@@ -300,7 +306,7 @@ export function MetaverseRoomDiscovery({
                 onClick={() => onJoinRoom(room.room_id)}
               >
                 <Play className='size-4' aria-hidden='true' />
-                {t(joinedRoomIds.has(room.room_id) ? 'management.entered' : domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
+                {t(joinedRoomIds.has(room.room_id) ? 'management.entered' : room.phase_label === 'management_only' ? 'management.scenePending' : domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
               </Button>
               {onMoveRoom && room.host_pubkey === localAuthorPubkey ? (
                 <>

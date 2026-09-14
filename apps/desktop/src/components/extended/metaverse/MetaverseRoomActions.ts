@@ -60,15 +60,17 @@ export type MetaverseRoomActions = {
   startOwnerHosting: (
     context: SpatialContextV1,
     instanceId: string,
-    endpointId: string
+    endpointId: string,
+    expectedGeneration?: number
   ) => Promise<DomeHostingView>;
   delegateHosting: (
     context: SpatialContextV1,
     instanceId: string,
     nodeId: string,
-    baseUrl: string
+    baseUrl: string,
+    expectedGeneration?: number
   ) => Promise<DomeHostingView>;
-  closeHosting: (context: SpatialContextV1, instanceId: string) => Promise<DomeHostingView>;
+  closeHosting: (context: SpatialContextV1, instanceId: string, expectedGeneration?: number) => Promise<DomeHostingView>;
   setChannelEntryDome?: (
     topicId: string,
     channelId: string,

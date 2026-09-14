@@ -358,6 +358,7 @@ impl DesktopRuntime {
     ) -> Result<DomeHostingView> {
         self.app_service
             .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context,
                 instance_id: request.instance_id,
                 endpoint_id: request.endpoint_id,
@@ -373,6 +374,7 @@ impl DesktopRuntime {
         let prepared = self
             .app_service
             .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context.clone(),
                 instance_id: request.instance_id.clone(),
                 node_id: request.node_id,
@@ -404,6 +406,7 @@ impl DesktopRuntime {
         let closed = self
             .app_service
             .close_dome_hosting(CloseDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context,
                 instance_id: request.instance_id.clone(),
             })
@@ -804,7 +807,10 @@ impl DesktopRuntime {
                     .build_dome_hosting_assignment_request(
                         signed_lease,
                         &prepared.instance_manifest_json,
-                        &prepared.preset_manifest_json,
+                        prepared
+                            .preset_manifest_json
+                            .as_deref()
+                            .context("Dome preset manifest is unavailable")?,
                     )
                     .await?,
             )

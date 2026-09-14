@@ -57,7 +57,7 @@ impl AppService {
             .collect();
         }
         let mut items = Vec::with_capacity(rows.len());
-        for row in rows {
+        for mut row in rows {
             let dome_hosting = if let Some(metaverse) = row.metaverse.as_ref() {
                 let replica = self
                     .hosting_context_replica(&metaverse.spatial_context)
@@ -82,7 +82,18 @@ impl AppService {
                     .get_dome_hosting(metaverse.spatial_context.clone(), &metaverse.instance_id)
                     .await
                 {
-                    Ok(hosting) => Some(hosting.state),
+                    Ok(hosting)
+                        if hosting.preset_manifest_json.is_none()
+                            && instance.owner_pubkey != self.services.keys.public_key() =>
+                    {
+                        continue;
+                    }
+                    Ok(hosting) => {
+                        if hosting.preset_manifest_json.is_none() {
+                            row.phase_label = Some("management_only".into());
+                        }
+                        Some(hosting.state)
+                    }
                     Err(error)
                         if matches!(
                             error.downcast_ref::<DomeReadUnavailable>(),
@@ -127,6 +138,8 @@ impl AppService {
                     .await,
             });
         }
+        self.append_owned_dome_management(topic_id, &allowed, &mut items)
+            .await?;
         Ok(items)
     }
 

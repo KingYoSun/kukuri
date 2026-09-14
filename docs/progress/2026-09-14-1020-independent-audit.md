@@ -1,5 +1,34 @@
 # #1020 独立監査
 
+## 現在判定: 9382357a delta監査
+
+- 対象commit: `9382357a`（比較元 `e5ced6b0`）、Scope revision: `2026-09-14-r1`、区分C。
+- 判定: **FAIL**。B-1のassign/activate/release競合はコード上解消したが、runtime removalの逆引きで同じ境界を迂回するstatus入口が残る。
+- inventory: 8群 / 適合7 / 不適合1 / 未分類0。群3へstatus poll/GETのruntime削除を追加し、不適合理由を下記B-1残存入口へ更新する。
+
+### 修正されたB-1経路
+
+`lock_hosting_lifecycle`のcallerはassign/activate/releaseの3件。各handlerが認証・同意後、DB read/write、pin mutation、runtime insert/removeより前にprocess MutexとInstance IDのPostgres advisory transaction lockを取り、全区間保持する。トランザクション値を関数末尾まで保持するため、DB closeとruntime removalの間で新assignment/activationが割り込まない。advisory lockにより別server stateでも同DBの同Instance pin操作を直列化する。SQLパラメータ化とlock取得順も確認した。
+
+`dome_hosting_delete_tests.rs`は実handlerのDB close後にNotify barrierを置き、generation/epoch 2のassign→activateを交差させ、最終runtime epoch=2と新manifestのactive_lease pin=1をassertする。同processと別DomeHostingNodeStateの2caseがあり、単なるエラー値検証ではない。実装担当から、修正前runtime Noneの失敗とprocess Mutex修正後の1case成功を受領。9382357aの2case最終実行はこの時点では未確認。300ms timeoutは競合実行の猶予であり、全件実行成功の証拠とは区別する。
+
+### B-1残存入口: 旧status readによる新runtime removal
+
+- 固定条件: INVAR-1/2、INV-3のpollと群3のsensitive sink逆引き、Existing-gap。
+- `crates/cn-user-api/src/dome_hosting.rs:474`でassignmentをDB readし、485行でsessions lockを後から取得する。486～487行はread済みassignmentの期限だけを根拠にInstance IDでruntimeをremoveする。新lifecycle lockにもruntime epoch照合にも参加していない。
+- sequence: 期限切れgeneration G/epoch Eをstatusがread → statusをsessions取得前で停止 → 削除後再作成されたG+1/E+1のassign/activateが新runtimeを格納 → status再開 → 旧assignment.expires_atを使い新runtimeを削除。
+- 影響: DB上activeの新Domeがauthoritative runtimeを失い、新入室/inputが失敗する。期限切れ旧readから新世代へのmutationであり、B-1と同じ保護境界。
+- 根拠: 到達可能な制御フローとinterleaving。動的barrier testは未実行。修正はstatus readからremoveまで共通lifecycleに参加させるか、remove対象を現在runtimeのlease/epochで検証する。新世代runtimeが保持される回帰testが必要。
+- 他のruntime remove callerも分類済み。submit_dome_hosting_inputの期限処理はsessions lock内で現runtime自身のlease.expires_atを検証するため、この旧DB snapshot競合に該当しない。restoreはstartupの復元であり旧releaseの後処理ではない。
+
+### その他deltaとvalidation
+
+Managerのstop表示条件はleaseにactive/admittedを追加しただけで、backend owner guardは維持。Storybook3状態はmockのみ。scenario21件の台帳とnightly配線は一致し、新製品入口を増やさない。oversized baselineは理由付きの変更6pathに限定されている。
+
+実装担当からCN release retry contract、browserの管理→停止→cancel→削除→再作成1test、新harness delete 7steps成功を受領した。監査者はこのdeltaでbuild競合を避けるため重いtestを重複実行していない。全CI、Windows/Linux実機、全必須gateは別ゲートとして未確認。コード上の残存B-1を解消した固定headでdelta監査を続ける。
+
+## 初回監査: e5ced6b0（当時の判定を保持）
+
 - 対象: PR #1026、commit `e5ced6b0`、base `64a1b4729a197e4131703bf724e574f657716e27`
 - Scope revision: `2026-09-14-r1`
 - リスク区分: C

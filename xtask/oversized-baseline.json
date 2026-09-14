@@ -17,6 +17,10 @@
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
+      "lines": 1211,
+      "path": "crates/app-api/src/dome_hosting.rs"
+    },
+    {
       "lines": 1191,
       "path": "crates/cn-operator/src/docs.rs"
     },
@@ -25,31 +29,27 @@
       "path": "crates/metaverse-host/src/lib.rs"
     },
     {
-      "lines": 1176,
-      "path": "crates/app-api/src/dome_hosting.rs"
+      "lines": 1134,
+      "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
     },
     {
       "lines": 1129,
       "path": "crates/app-api/src/private_channels.rs"
     },
     {
-      "lines": 1128,
-      "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
-    },
-    {
       "lines": 1097,
       "path": "crates/app-api/src/service/private_channels_support.rs"
+    },
+    {
+      "lines": 1058,
+      "path": "crates/app-api/src/game.rs"
     },
     {
       "lines": 1056,
       "path": "crates/metaverse-host/src/tests.rs"
     },
     {
-      "lines": 1045,
-      "path": "crates/app-api/src/game.rs"
-    },
-    {
-      "lines": 1044,
+      "lines": 1049,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {

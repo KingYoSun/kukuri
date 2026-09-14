@@ -20,6 +20,7 @@ mod dome_connections;
 mod dome_delete;
 pub use dome_delete::{DeleteDomeInput, DeleteDomeView, PendingDomeDeletionView};
 mod dome_hosting;
+mod dome_management;
 mod dome_move;
 mod game;
 mod live;
