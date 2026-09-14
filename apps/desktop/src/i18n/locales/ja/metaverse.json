@@ -1,4 +1,5 @@
 {
+  "fullscreen": { "openTools": "Domeの管理・接続", "closeTools": "管理・接続を閉じる" },
   "title": "メタバースルーム",
   "rooms": {
     "summary_one": "このトピックに{{count}}件のルーム",

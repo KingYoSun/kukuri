@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 
@@ -9,10 +9,12 @@ let fullscreenElement: Element | null = null;
 afterEach(() => {
   fullscreenElement = null;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('a fullscreen-capable column enters and exits fullscreen from its menu', async () => {
   const user = userEvent.setup();
+  vi.stubGlobal('innerWidth', 1024);
   Object.defineProperty(document, 'fullscreenElement', {
     configurable: true,
     get: () => fullscreenElement,
@@ -31,11 +33,13 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
     value: vi.fn(async () => {
       fullscreenElement = null;
       document.dispatchEvent(new Event('fullscreenchange'));
+      vi.stubGlobal('innerWidth', 1024);
+      window.dispatchEvent(new Event('resize'));
     }),
   });
 
   render(
-    <div className='shell-phase1'>
+    <div className='shell-phase1 shell-column-canvas'>
       <ColumnSurface
         active
         columnId='stream-1'
@@ -53,9 +57,16 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   );
 
   const column = screen.getByRole('region', { name: /Stream Column/ });
+  const body = column.querySelector('.shell-column-body')!;
+  const canvas = column.parentElement!;
+  body.scrollTop = 230;
+  canvas.scrollLeft = 3200;
   requestFullscreen.mockImplementation(async () => {
+    vi.stubGlobal('innerWidth', 1920);
     fullscreenElement = column;
     document.dispatchEvent(new Event('fullscreenchange'));
+    body.scrollTop = 0;
+    canvas.scrollLeft = 600;
   });
   await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
   await user.click(screen.getByRole('menuitem', { name: 'Enter Stream fullscreen' }));
@@ -64,6 +75,18 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
   await user.click(screen.getByRole('menuitem', { name: 'Exit Stream fullscreen' }));
   await waitFor(() => expect(document.fullscreenElement).toBeNull());
+  await waitFor(() => expect(column).toHaveFocus());
+  expect(body.scrollTop).toBe(230);
+  expect(canvas.scrollLeft).toBe(3200);
+  // WebView2 can issue more than one native size while leaving fullscreen.
+  body.scrollTop = 474;
+  fireEvent(window, new Event('resize'));
+  await waitFor(() => expect(body.scrollTop).toBe(230));
+  fireEvent.wheel(document.body);
+  body.scrollTop = 100;
+  fireEvent(window, new Event('resize'));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(body.scrollTop).toBe(100);
 });
 
 test('an unavailable fullscreen API reports a visible assistive failure', async () => {
@@ -95,4 +118,40 @@ test('an unavailable fullscreen API reports a visible assistive failure', async 
   await user.click(screen.getByRole('menuitem', { name: 'Enter Stream fullscreen' }));
 
   expect(await screen.findByText('Could not change Stream fullscreen mode.')).toBeVisible();
+});
+
+test('request and exit rejection preserve real fullscreen state and allow retry', async () => {
+  const user = userEvent.setup();
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fullscreenElement });
+  Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true });
+  const request = vi.fn().mockRejectedValueOnce(new Error('denied'));
+  const exit = vi.fn().mockRejectedValueOnce(new Error('busy'));
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, value: request });
+  Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit });
+  render(<ColumnSurface active pinned fullscreenable columnId='room' position={1} total={1} span={3} title='Metaverse' scopeLabel='Demo'>
+    <input aria-label='Draft' defaultValue='Keep me' />
+  </ColumnSurface>);
+  const column = screen.getByRole('region', { name: /Metaverse Column/ });
+  request.mockImplementationOnce(async () => {
+    fullscreenElement = column;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  exit.mockImplementationOnce(async () => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  const toggle = async (name: string) => {
+    await user.click(screen.getByRole('button', { name: 'Open Metaverse menu' }));
+    await user.click(screen.getByRole('menuitem', { name }));
+  };
+  await toggle('Enter Metaverse fullscreen');
+  expect(await screen.findByText('Could not change Metaverse fullscreen mode.')).toBeVisible();
+  expect(fullscreenElement).toBeNull();
+  await toggle('Enter Metaverse fullscreen');
+  expect(fullscreenElement).toBe(column);
+  await toggle('Exit Metaverse fullscreen');
+  expect(fullscreenElement).toBe(column);
+  await toggle('Exit Metaverse fullscreen');
+  expect(fullscreenElement).toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveValue('Keep me');
 });

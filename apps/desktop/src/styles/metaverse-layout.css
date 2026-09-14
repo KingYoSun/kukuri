@@ -1,4 +1,68 @@
 /* #1022: content sizing belongs to the Column, not the desktop viewport. */
+.metaverse-auxiliary { display: contents; }
+.metaverse-auxiliary[hidden] { display: none; }
+
+/* Fullscreen keeps the existing scene and form subtrees mounted. */
+.shell-column-surface:fullscreen .shell-column-body:has(.metaverse-panel[data-immersive]) {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+.shell-column-surface:fullscreen .shell-column-body:has(.metaverse-panel[data-immersive]) > .shell-main-stack {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+}
+.metaverse-panel[data-immersive] {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.metaverse-panel[data-immersive] > .metaverse-aux-toggle {
+  justify-self: start;
+  grid-area: 1 / 1;
+}
+.metaverse-panel[data-immersive] > .metaverse-room-view {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  grid-area: 2 / 1 / 4;
+}
+.metaverse-panel[data-immersive][data-tools-open] {
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+}
+.metaverse-panel[data-immersive]:not([data-tools-open]) > .metaverse-room-view {
+  grid-row: 2;
+}
+.metaverse-panel[data-immersive] :where(.metaverse-room-stage, .metaverse-viewport-shell) {
+  min-height: 0;
+  height: 100%;
+}
+.metaverse-panel[data-immersive] .metaverse-room-hud {
+  min-height: 0;
+  max-height: min(28rem, 100%);
+}
+.metaverse-panel[data-immersive] > .metaverse-auxiliary:not([hidden]) {
+  grid-area: 2 / 1;
+  justify-self: end;
+  min-height: 0;
+  z-index: 5;
+  display: grid;
+  align-content: start;
+  gap: var(--space-sm);
+  width: min(42rem, 100%);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel-solid);
+}
+.metaverse-panel[data-immersive] > .metaverse-aux-after:not([hidden]) { grid-row: 3; }
+
 .metaverse-panel,
 .metaverse-discovery-card {
   min-width: 0;
@@ -21,6 +85,7 @@
 
 .metaverse-create-form,
 .metaverse-panel > .panel-subsection,
+.metaverse-auxiliary > .panel-subsection,
 .metaverse-panel .metaverse-management-panel,
 .metaverse-panel .composer-compact {
   width: 100%;

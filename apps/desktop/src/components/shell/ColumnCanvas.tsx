@@ -208,6 +208,8 @@ export function ColumnCanvas({
       headerWasVisible = Boolean(header && header.left >= viewport.left && header.right <= viewport.right);
     };
     const resize = () => {
+      // Fullscreen changes the top-layer geometry, not the workspace span.
+      if (document.fullscreenElement) return;
       const column = activeColumn();
       if (!column) return;
       const nextColumnWidth = column.getBoundingClientRect().width;
@@ -274,18 +276,21 @@ export function ColumnCanvas({
     const canvas = canvasRef.current;
     if (!canvas || !onVisibleColumnIdsChange) return;
     const columns = Array.from(canvas.querySelectorAll<HTMLElement>('[data-column-id]'));
-    if (typeof IntersectionObserver === 'undefined') {
-      onVisibleColumnIdsChange(columns.map((column) => column.dataset.columnId!).filter(Boolean));
-      return;
-    }
-    const visible = new Set<string>();
+    const canObserve = typeof IntersectionObserver !== 'undefined';
+    const visible = new Set<string>(canObserve ? [] : columns.map((column) => column.dataset.columnId!));
     const publish = () => onVisibleColumnIdsChange(
       columns.flatMap((column) => {
         const id = column.dataset.columnId;
-        return id && visible.has(id) ? [id] : [];
+        // Top-layer fullscreen is outside the Canvas intersection root. Late
+        // observer callbacks must not suspend its owner or expose covered columns.
+        const fullscreen = document.fullscreenElement;
+        const shown = fullscreen
+          ? column.contains(fullscreen) || fullscreen.contains(column)
+          : visible.has(id!);
+        return id && shown ? [id] : [];
       })
     );
-    const observer = new IntersectionObserver((entries) => {
+    const observer = canObserve ? new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const id = (entry.target as HTMLElement).dataset.columnId;
         if (!id) continue;
@@ -293,9 +298,14 @@ export function ColumnCanvas({
         else visible.delete(id);
       }
       publish();
-    }, { root: canvas, threshold: [0, 0.01, 0.5, 1] });
-    columns.forEach((column) => observer.observe(column));
-    return () => observer.disconnect();
+    }, { root: canvas, threshold: [0, 0.01, 0.5, 1] }) : null;
+    columns.forEach((column) => observer?.observe(column));
+    document.addEventListener('fullscreenchange', publish);
+    if (!canObserve || document.fullscreenElement) publish();
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener('fullscreenchange', publish);
+    };
   }, [columnCount, columnIdsKey, onVisibleColumnIdsChange]);
 
   const settleMobileScroll = () => {

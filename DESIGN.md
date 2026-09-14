@@ -214,6 +214,7 @@ WCAG 2.2 AAを基準とする。自動検査の満点だけを適合の証明に
 - overlay、Control Center、Composer、fullscreen controlはsafe areaと互いのhit areaを塞がない。
 - Mobileの下部操作は、Column footerの投稿ボタン（primary action）を右寄せ、アバター・Control Center・フィードバックのclusterを左下に固定し、4つのボタンの高さ（44px）と下辺を揃える。Composer入力中はclusterの各ボタンを隠す。
 - Tauri／WebView依存surfaceはbrowserだけで完了とせず、影響するOS／WebViewでinput ownership、fullscreen、resource縮退を確認する。
+- 入室済みMetaverseの全画面ではheaderと補助面の開閉操作を除いた高さを3Dへ割り当てる。Domeの管理・接続・hostingは開閉式の補助面にまとめ、閉じた内容へfocusを入れない。同じscene、camera、chat draft、フォーム入力を保持し、退出後は元のColumnと本文scroll、focusへ戻る。未入室時はdiscoveryと入室導線を維持する。
 
 ## 8. Component設計
 
