@@ -41,6 +41,10 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
+  const hostingWidth = await metaverse.locator('.metaverse-aux-after > .panel-subsection').evaluate(
+    (element) => element.getBoundingClientRect().width / Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+  );
+  expect(hostingWidth).toBeLessThanOrEqual(40);
   const draft = metaverse.locator('.metaverse-chat-form input');
   await draft.fill('Unsent fullscreen draft 1023');
   const originalCanvas = await stage.locator('canvas').elementHandle();

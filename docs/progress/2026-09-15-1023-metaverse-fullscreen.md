@@ -5,7 +5,7 @@
 - Scope revision: `2026-09-14-r1`
 - 基準: `cbe24475c232b2e4793e5e6dd6158b7f6613b0a9`
 - 区分B。共有render可視判定を変更するため独立監査を行う。
-- 状態: 最終検証・監査中。CI／mergeは未完了。
+- 本書は実装時の検証記録。最終CI・監査・merge判定は[PR #1029](https://github.com/KingYoSun/kukuri/pull/1029)とIssueのCurrent statusで追跡する。
 
 ## 再現と修正
 
@@ -21,6 +21,7 @@ Windowsの実Tauriでも通常描画→メニューから全画面のsequenceで
 - DOM fullscreenから派生する表示contextだけを追加。workspace永続化やURL、sessionへfullscreen状態を保存しない。
 - 全画面中のresizeを通常span変更と誤認しない。入場前の本文／Canvas scrollを保持し、退出後のlayout確定後に復元、元Columnへfocusを戻す。
 - 同一DOMにdiscovery/管理→scene→接続/hostingを保持。全画面入室中は補助内容をhiddenにし、明示操作で右側の上下2つのscroll領域を開く。sceneは同じgrid領域・同じCanvasのまま。通常時のTab/読み上げ順を維持する。
+- 補助wrapper追加で通常hostingカードの直下selectorが外れるRegressionも、40rem上限のbrowser assertion（変更前82.375remで失敗）で固定し、同じ上限をwrapper直下へ適用するselectorを補った。
 - surfaceからstageへ有限の高さを伝え、headerと開閉操作以外を3Dに割り当てる。HUDの内容高が親gridを拡張しないよう制約し、chatの送信欄を画面内へ残す。
 
 camera方式、Dome管理・hosting・接続のdomain action、network/権限/保存形式、通常カラムの幅契約は変更しない。
@@ -96,6 +97,6 @@ Windowsはローカル、Ubuntu24は`ssh local2`で準備しRemote DesktopをCom
 
 ## 独立監査
 
-初回対象`79f8df3e`はFAIL、P2 Regression 1件: 補助面をまとめたDOMが通常時にsceneより先に接続/hostingへTab移動させていた。`cc8547f6`でDOM順を戻し、Tab順testとAPI拒否/session副作用testを追加。最終delta監査結果は追記する。未分類0、backend/domainの新しいsinkはなし。
+初回対象`79f8df3e`はFAIL、P2 Regression 1件: 補助面をまとめたDOMが通常時にsceneより先に接続/hostingへTab移動させていた。`cc8547f6`でDOM順を戻し、Tab順testとAPI拒否/session副作用testを追加。`47411e51`の独立監査はPASS（inventory4件適合、不適合0、未分類0、blocker0）。物体/非既定cameraとresize復元の証拠も照合済み。続くhosting幅selectorの差分監査はPRへ固定headとともに記録する。backend/domainの新しいsinkはなし。
 
 未確認: 実screen reader、物理touch、GPUメモリ定量測定、Linuxの実network session。対象外のnetwork修正や全体UI再設計へ拡張しない。
