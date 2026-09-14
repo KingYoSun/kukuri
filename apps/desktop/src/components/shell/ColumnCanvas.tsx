@@ -191,41 +191,75 @@ export function ColumnCanvas({
       `[data-column-id="${CSS.escape(activeColumnId)}"]`
     );
     let width = canvas.clientWidth;
+    const measuredColumn = activeColumn();
+    let columnWidth = measuredColumn?.getBoundingClientRect().width ?? 0;
     let wasVisible = false;
+    let headerWasVisible = false;
     const rememberVisibility = () => {
       // Scroll snap can move the old page before the resize callback runs.
       // Keep the last geometry from the old width until we handle that resize.
-      if (canvas.clientWidth !== width) return;
       const column = activeColumn();
       if (!column) return;
       const bounds = column.getBoundingClientRect();
+      if (canvas.clientWidth !== width || bounds.width !== columnWidth) return;
       const viewport = canvas.getBoundingClientRect();
       wasVisible = bounds.left >= viewport.left - 1 && bounds.right <= viewport.right + 1;
+      const header = column.querySelector('.shell-column-header-actions')?.getBoundingClientRect();
+      headerWasVisible = Boolean(header && header.left >= viewport.left && header.right <= viewport.right);
     };
     const resize = () => {
-      if (canvas.clientWidth === width) return;
-      width = canvas.clientWidth;
       const column = activeColumn();
+      if (!column) return;
+      const nextColumnWidth = column.getBoundingClientRect().width;
+      const canvasChanged = canvas.clientWidth !== width;
+      const columnChanged = nextColumnWidth !== columnWidth;
+      if (!canvasChanged && !columnChanged) return;
+      width = canvas.clientWidth;
+      columnWidth = nextColumnWidth;
       // Preserve a visible reading/editing context, but do not pull someone
       // back after they deliberately scrolled away from the active Column.
-      if (wasVisible && column) {
+      if (!pointerDragRef.current && (wasVisible || (!canvasChanged && headerWasVisible))) {
         if (scrollSettleTimeoutRef.current !== null) {
           window.clearTimeout(scrollSettleTimeoutRef.current);
           scrollSettleTimeoutRef.current = null;
         }
         const mobile = isMobileViewport();
         programmaticScrollTargetRef.current = mobile ? activeColumnId : null;
-        column.scrollIntoView({ block: 'nearest', inline: mobile ? 'center' : 'nearest', behavior: 'instant' });
+        if (canvasChanged || mobile) {
+          column.scrollIntoView({ block: 'nearest', inline: mobile ? 'center' : 'nearest', behavior: 'instant' });
+        } else {
+          // Span changes must not scroll the body vertically or steal focus.
+          const viewport = canvas.getBoundingClientRect();
+          const bounds = column.getBoundingClientRect();
+          const target = bounds.width <= canvas.clientWidth
+            ? bounds
+            : column.querySelector('.shell-column-header-actions')?.getBoundingClientRect() ?? bounds;
+          const delta = target.right > viewport.right ? target.right - viewport.right
+            : target.left < viewport.left ? target.left - viewport.left : 0;
+          canvas.scrollLeft += delta;
+        }
       }
       rememberVisibility();
     };
+    const interruptPendingResize = () => {
+      const nextWidth = activeColumn()?.getBoundingClientRect().width ?? 0;
+      if (canvas.clientWidth !== width || nextWidth !== columnWidth) {
+        wasVisible = false;
+        headerWasVisible = false;
+      }
+    };
     rememberVisibility();
     canvas.addEventListener('scroll', rememberVisibility, { passive: true });
+    canvas.addEventListener('wheel', interruptPendingResize, { passive: true });
+    canvas.addEventListener('pointerdown', interruptPendingResize);
     window.addEventListener('resize', resize);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
     observer?.observe(canvas);
+    if (measuredColumn) observer?.observe(measuredColumn);
     return () => {
       canvas.removeEventListener('scroll', rememberVisibility);
+      canvas.removeEventListener('wheel', interruptPendingResize);
+      canvas.removeEventListener('pointerdown', interruptPendingResize);
       window.removeEventListener('resize', resize);
       observer?.disconnect();
     };

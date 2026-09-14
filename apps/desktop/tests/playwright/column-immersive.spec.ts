@@ -161,7 +161,12 @@ test.describe('mobile touch ownership', () => {
     // stage 上の右スワイプ(前の Column へ戻る方向)は Column paging を起こさない。
     const client = await page.context().newCDPSession(page);
     const stageBox = (await stage.boundingBox())!;
-    await swipe(client, stageBox.x + 40, stageBox.y + stageBox.height / 2, 300, 0);
+    const bodyBox = (await metaverse.locator('.shell-column-body').boundingBox())!;
+    // Responsive HUD/chat can make the stage taller than the visible body.
+    // Start inside its visible intersection, not on the fixed page indicator below it.
+    const touchY = (Math.max(stageBox.y, bodyBox.y) + Math.min(stageBox.y + stageBox.height, bodyBox.y + bodyBox.height - 80)) / 2;
+    expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-column-gesture-owner="metaverse"]')), { x: stageBox.x + 40, y: touchY })).toBe(true);
+    await swipe(client, stageBox.x + 40, touchY, 300, 0);
     await page.waitForTimeout(400);
     expect(await canvas.evaluate((element) => element.scrollLeft)).toBe(startScrollLeft);
     await expect(activeColumn(page, 'Metaverse')).toBeVisible();

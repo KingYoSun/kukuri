@@ -79,7 +79,7 @@ export function DomeManagementPanel({ room, actions, endpointId, locale, admitte
     else onDeleted();
     await actions.refresh();
   }
-  return <div ref={surface} tabIndex={-1}><Card className='panel-subsection' aria-label={t('management.open')} aria-busy={pending !== null}>
+  return <div ref={surface} tabIndex={-1}><Card className='panel-subsection metaverse-management-panel' aria-label={t('management.open')} aria-busy={pending !== null}>
     <h3>{room.title} — {t('management.open')}</h3>
     <p role='status'>{pending === 'start' ? t('management.starting') : pending === 'enter' ? t('entry.admitting')
       : admitted ? t('management.entered') : hosting ? t(`hosting.states.${hosting.state.kind}`) : t('management.checking')}</p>

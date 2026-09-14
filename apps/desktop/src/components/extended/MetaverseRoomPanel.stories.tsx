@@ -94,7 +94,7 @@ const syncStatus: SyncStatus = {
 
 function StoryFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ width: '100%', maxWidth: 1180, margin: '0 auto', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 1180, margin: '0 auto', padding: 24, containerType: 'inline-size' }}>
       <div className='shell-main-stack'>{children}</div>
     </div>
   );
@@ -257,6 +257,10 @@ export const ChannelEntrySelection: Story = {
 
 export const SelectedHudAndChat: Story = {
   render: () => selectedRoom(),
+};
+
+export const NarrowHudAndChat: Story = {
+  render: () => <div style={{ width: 360 }}>{selectedRoom()}</div>,
 };
 
 export const SelectedCollapsed: Story = {
