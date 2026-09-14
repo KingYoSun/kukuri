@@ -108,6 +108,9 @@ pub enum ScenarioStep {
         label: String,
         score: i64,
     },
+    DeleteMetaverseDome {
+        title: String,
+    },
     CreateMetaverseDome {
         title: String,
         description: String,

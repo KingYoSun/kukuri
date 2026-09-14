@@ -22,7 +22,7 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
     (
         "community_node/dome_hosting/transfer_contract.rs",
         "CommunityNodeServer",
-        5,
+        7,
     ),
     ("community_node/index_query.rs", "CommunityNodeServer", 14),
     (
@@ -119,8 +119,8 @@ fn lock_acquisitions_match_declared_classification() {
     );
     let total: usize = expected.values().sum();
     assert_eq!(
-        total, 134,
-        "classification total drifted from the Q7 T6 baseline(#711 で index_query 試験を 1 件、\
+        total, 136,
+        "classification total drifted from the Q7 T6 baseline(#1020 で Dome delete・stale input 試験を各 1 件追加、#711 で index_query 試験を 1 件、\
          #802 で tester_feedback_submission 試験を 3 件、#862 で config 永続化試験を 2 件、\
          #855 で device_backup 試験を 7 件、recovery 試験を 13 件へ拡充、\
          #857 で report consent gate 試験を 3 件、\

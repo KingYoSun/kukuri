@@ -81,6 +81,7 @@ import type {
   CreateRepostRequest,
   DelegateDomeHostingRequest,
   DeleteDirectMessageMessageRequest,
+  DeleteDomeInput,
   DirectMessageRequest,
   ExportChannelAccessTokenRequest,
   ExportFriendOnlyGrantRequest,
@@ -601,6 +602,8 @@ export const runtimeApi: DesktopApi = {
       } satisfies UpdateGameRoomRequest,
     });
   }),
+  listPendingDomeDeletions: command('listPendingDomeDeletions', async (spatialContext) => invokeDesktop('list_pending_dome_deletions', { spatialContext })),
+  deleteDome: command('deleteDome', async (spatialContext, instanceId, generation, operationId) => invokeDesktop<{ deleted: boolean; cleanup_pending: boolean }>('delete_dome', { request: { spatial_context: spatialContext, instance_id: instanceId, expected_generation: generation, operation_id: operationId } satisfies DeleteDomeInput })),
   updateMetaverseRoom: command('updateMetaverseRoom', async (
     topic,
     roomId,
@@ -628,7 +631,8 @@ export const runtimeApi: DesktopApi = {
     spatialContext,
     instanceId,
     endpointId,
-    leaseDurationMillis
+    leaseDurationMillis,
+    expectedGeneration
   ) => {
     return invokeDesktop<DomeHostingView>('start_owner_dome_hosting', {
       request: {
@@ -636,6 +640,7 @@ export const runtimeApi: DesktopApi = {
         instance_id: instanceId,
         endpoint_id: endpointId,
         lease_duration_millis: leaseDurationMillis,
+        expected_generation: expectedGeneration,
       } satisfies StartOwnerDomeHostingRequest,
     });
   }),
@@ -644,7 +649,8 @@ export const runtimeApi: DesktopApi = {
     instanceId,
     nodeId,
     baseUrl,
-    leaseDurationMillis
+    leaseDurationMillis,
+    expectedGeneration
   ) => {
     return invokeDesktop<DomeHostingView>('delegate_dome_hosting', {
       request: {
@@ -653,14 +659,16 @@ export const runtimeApi: DesktopApi = {
         node_id: nodeId,
         base_url: baseUrl,
         lease_duration_millis: leaseDurationMillis,
+        expected_generation: expectedGeneration,
       } satisfies DelegateDomeHostingRequest,
     });
   }),
-  closeDomeHosting: command('closeDomeHosting', async (spatialContext, instanceId) => {
+  closeDomeHosting: command('closeDomeHosting', async (spatialContext, instanceId, expectedGeneration) => {
     return invokeDesktop<DomeHostingView>('close_dome_hosting', {
       request: {
         spatial_context: spatialContext,
         instance_id: instanceId,
+        expected_generation: expectedGeneration,
       } satisfies CloseDomeHostingRequest,
     });
   }),
@@ -668,7 +676,8 @@ export const runtimeApi: DesktopApi = {
     spatialContext,
     instanceId,
     sequence,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ) => {
     return invokeDesktop<DomePhysicsSnapshotV1>('submit_dome_session_input', {
       request: {
@@ -676,6 +685,7 @@ export const runtimeApi: DesktopApi = {
         instance_id: instanceId,
         sequence,
         input,
+        expected_generation: expectedGeneration,
       } satisfies SubmitDomeSessionInputRequest,
     });
   }),

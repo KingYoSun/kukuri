@@ -351,6 +351,7 @@ pub struct ServiceHandles {
     pub(crate) blob_service: Arc<dyn BlobService>,
     pub(crate) keys: Arc<KukuriKeys>,
     pub(crate) game_room_projections: Arc<GameRoomProjectionLocks>,
+    pub(crate) dome_mutations: Arc<Mutex<()>>,
 }
 
 impl ServiceHandles {
@@ -372,6 +373,7 @@ impl ServiceHandles {
             blob_service,
             keys: Arc::new(keys),
             game_room_projections: Arc::default(),
+            dome_mutations: Arc::default(),
         }
     }
 }

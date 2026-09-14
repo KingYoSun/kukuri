@@ -114,3 +114,6 @@ pub use requests::{
     WithdrawalReasonVisibilityRequest,
 };
 pub use runtime::{DesktopRuntime, RuntimeEvent};
+
+/// Generation-bound owner deletion request.
+pub use kukuri_app_api::DeleteDomeInput as DeleteDomeRequest;

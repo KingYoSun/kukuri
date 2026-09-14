@@ -64,6 +64,8 @@ function emptyTopology(): DomeConnectionTopologyView {
 
 function actions(topology = emptyTopology()) {
   return {
+    listPendingDeletions: vi.fn().mockResolvedValue([]),
+    deleteRoom: vi.fn().mockResolvedValue({ deleted: true, cleanup_pending: false }),
     createRoom: vi.fn(),
     publishRoomEvent: vi.fn(),
     listRoomEvents: vi.fn(),

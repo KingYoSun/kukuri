@@ -50,6 +50,20 @@ function renderDiscovery(
 }
 
 describe('MetaverseRoomDiscovery', () => {
+  test('does not report an unknown catalog as empty or allow creating into an unknown owner slot', () => {
+    renderDiscovery({ rooms: [], catalogReady: false });
+    expect(screen.getByText('Checking the Dome list…')).toBeInTheDocument();
+    expect(screen.queryByText('No metaverse rooms in this topic.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create metaverse room' })).not.toBeInTheDocument();
+  });
+  test('keeps owner management reachable while hosting is stopped without joining', async () => {
+    const user = userEvent.setup();
+    const { props } = renderDiscovery({ rooms: [{ ...room, dome_hosting: { kind: 'closed' } }] });
+    await user.click(screen.getByRole('button', { name: 'Manage Dome' }));
+    expect(props.onJoinRoom).not.toHaveBeenCalled();
+    expect(screen.getByText('You already own a Dome in this space. Manage it to restart or delete it.')).toBeInTheDocument();
+  });
+
   test.each([
     ['en', 'Metaverse Rooms', 'Create metaverse room', 'Atrium', 'Join Room'],
     ['ja', 'メタバースルーム', 'メタバースルームを作成', 'アトリウム', 'ルームに参加'],
@@ -109,7 +123,7 @@ describe('MetaverseRoomDiscovery', () => {
     expect(maxPeersInput).toHaveValue('8');
   });
 
-  test('preserves room card host fallback, selected/joined state, and Join callback', async () => {
+  test('preserves room card identity and disables redundant Join after admission', async () => {
     const user = userEvent.setup();
     const onJoinRoom = vi.fn();
     renderDiscovery({
@@ -125,8 +139,9 @@ describe('MetaverseRoomDiscovery', () => {
     expect(screen.getByText('Joined')).toBeInTheDocument();
     expect(screen.getByText(room.title).closest('article')).toHaveClass('metaverse-room-card-active');
 
-    await user.click(screen.getByRole('button', { name: 'Join Room' }));
-    expect(onJoinRoom).toHaveBeenCalledWith(room.room_id);
+    expect(screen.getByRole('button', { name: 'In Dome' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'In Dome' }));
+    expect(onJoinRoom).not.toHaveBeenCalled();
   });
 
   test('copies complete room identifiers from pointer and keyboard context menus', async () => {

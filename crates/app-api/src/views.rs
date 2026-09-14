@@ -522,6 +522,7 @@ pub struct MoveDomeInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StartOwnerDomeHostingInput {
+    pub expected_generation: Option<u64>,
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,
     pub endpoint_id: String,
@@ -530,6 +531,7 @@ pub struct StartOwnerDomeHostingInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrepareCommunityNodeDomeHostingInput {
+    pub expected_generation: Option<u64>,
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,
     pub node_id: String,
@@ -546,6 +548,7 @@ pub struct ActivateCommunityNodeDomeHostingInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CloseDomeHostingInput {
+    pub expected_generation: Option<u64>,
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,
 }
@@ -561,7 +564,7 @@ pub struct DomeHostingView {
     pub signed_activation_json: Option<String>,
     pub signed_close_json: Option<String>,
     pub instance_manifest_json: String,
-    pub preset_manifest_json: String,
+    pub preset_manifest_json: Option<String>,
     pub participants: u32,
     pub sleeping: bool,
     pub resource_budget: MetaverseResourceBudgetConfig,
@@ -570,6 +573,8 @@ pub struct DomeHostingView {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubmitDomeSessionInput {
+    #[serde(default)]
+    pub expected_generation: Option<u64>,
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,
     pub sequence: u64,

@@ -117,7 +117,7 @@ function presenceJoinEvent(peerId: string, seq: number): MetaverseRoomEventView 
 
 function physicsSnapshot(animations: Array<[string, string | null]>): DomePhysicsSnapshotV1 {
   return {
-    instance_id: room.room_id,
+    instance_id: room.metaverse!.instance_id,
     instance_generation: 1,
     lease_epoch: 1,
     session_id: room.room_id,
@@ -247,6 +247,15 @@ function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
 }
 
 describe('MetaverseRoomPanel animation sharing', () => {
+  test('requires a new authoritative admission when the same room id has a new generation', async () => {
+    const api = createDesktopMockApi();
+    const input = vi.spyOn(api, 'submitDomeSessionInput');
+    const view = renderPanel(api);
+    await screen.findByLabelText('Metaverse room viewport');
+    input.mockImplementation(() => new Promise(() => undefined));
+    view.rerender(panelElement(api, { rooms: [{ ...room, metaverse: { ...room.metaverse!, instance_generation: 2 } }] }));
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+  });
   test('does not render a room before authoritative admission completes', async () => {
     const baseApi = createDesktopMockApi();
     const publishMetaverseRoomEvent = vi.fn(baseApi.publishMetaverseRoomEvent);
@@ -492,7 +501,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     expect(await screen.findByText(expectedMessage)).toBeInTheDocument();
   });
 
-  test('opens the created room after refreshed rooms include it', async () => {
+  test('opens management after creation and waits for explicit hosting before admission', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
     const createdRoom = {
@@ -522,6 +531,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.type(screen.getByPlaceholderText('Atrium'), 'Created room');
     await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
 
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+    expect(api.publishMetaverseRoomEvent).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Start hosting and enter' }));
     await waitFor(() => {
       expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     });
@@ -615,7 +627,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
           position: [10, 0, 20],
           rotation: [0, 90, 0],
           animation: 'sprint',
-        }
+        },
+        room.metaverse!.instance_generation
       );
     });
   });
@@ -791,7 +804,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api, { syncStatus: offlineStatus });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
-    expect(screen.getByText('Offline')).toBeInTheDocument();
+    expect(screen.getByText('External peers unavailable')).toBeInTheDocument();
     expect(screen.getByText('Scene connection: offline')).toBeInTheDocument();
   });
 

@@ -330,6 +330,17 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     });
                     assertion.await.context("assertion timeout")??;
                 }
+                ScenarioStep::DeleteMetaverseDome { title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let room = runtime.app()?.list_game_rooms(&topic).await?.into_iter().find(|r| &r.title == title).context("Dome to delete not found")?;
+                    let dome = room.metaverse.context("Dome state missing")?;
+                    let deleted = runtime.app()?.delete_dome(kukuri_app_api::DeleteDomeInput {
+                        spatial_context: dome.spatial_context, instance_id: dome.instance_id,
+                        expected_generation: dome.instance_generation, operation_id: format!("scenario-delete-{}", dome.instance_generation),
+                    }).await?;
+                    anyhow::ensure!(deleted.deleted);
+                    anyhow::ensure!(runtime.app()?.list_game_rooms(&topic).await?.iter().all(|r| &r.title != title));
+                }
                 ScenarioStep::CreateMetaverseDome {
                     title,
                     description,
@@ -568,7 +579,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let metaverse = room.metaverse.context("entry Dome metaverse state")?;
                     runtime
                         .app()?
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: room.room_id.clone(),
                             endpoint_id: "harness-entry-owner".into(),
@@ -578,6 +589,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let first = runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: room.room_id.clone(),
                             sequence: 1,
@@ -597,6 +609,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: room.room_id.clone(),
                             sequence: 2,
@@ -606,6 +619,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     let evacuated = runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context,
                             instance_id: room.room_id,
                             sequence: 3,
@@ -769,7 +783,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         .await?;
                     runtime
                         .app()?
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             endpoint_id: "harness-transition-source".into(),
@@ -777,7 +791,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                         })
                         .await?;
                     target_host
-                        .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                        .start_owner_dome_hosting(StartOwnerDomeHostingInput { expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: target_instance_id.clone(),
                             endpoint_id: "harness-transition-target".into(),
@@ -787,6 +801,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             sequence: 1,
@@ -796,6 +811,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             sequence: 2,
@@ -840,6 +856,7 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     runtime
                         .app()?
                         .submit_dome_session_input(SubmitDomeSessionInput {
+                            expected_generation: None,
                             spatial_context: context.clone(),
                             instance_id: source.room_id.clone(),
                             sequence: 3,

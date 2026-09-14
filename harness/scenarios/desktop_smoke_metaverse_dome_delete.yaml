@@ -1,0 +1,27 @@
+name: desktop_smoke_metaverse_dome_delete
+fixtures:
+  seed: 1020
+  topic: kukuri:topic:metaverse-dome-delete
+steps:
+  - action: launch_desktop
+  - action: select_topic
+    topic: kukuri:topic:metaverse-dome-delete
+  - action: create_metaverse_dome
+    title: delete-dome
+    description: owner deletion and recreation
+    max_peers: 8
+  - action: delete_metaverse_dome
+    title: delete-dome
+  - action: restart_desktop
+  - action: create_metaverse_dome
+    title: recreated-dome
+    description: same owner slot with a new generation
+    max_peers: 8
+  - action: exercise_dome_entry
+    local_title: recreated-dome
+artifacts:
+  dump_logs: true
+  metrics_snapshot: true
+timeouts:
+  overall_ms: 120000
+  step_ms: 15000

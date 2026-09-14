@@ -72,9 +72,9 @@ function renderControls(
 
 describe('MetaverseRoomControls', () => {
   test.each([
-    ['en', 'Live', 'Leave room', 'ROOM Chat'],
-    ['ja', '接続中', 'ルームから退出', 'ルームチャット'],
-    ['zh-CN', '在线', '离开房间', '房间聊天'],
+    ['en', 'External peers connected', 'Leave room', 'ROOM Chat'],
+    ['ja', '外部ピアに接続中', 'ルームから退出', 'ルームチャット'],
+    ['zh-CN', '已连接外部节点', '离开房间', '房间聊天'],
   ] as const)('renders the main HUD/chat surface in %s', async (locale, state, leave, chat) => {
     await i18n.changeLanguage(locale);
     renderControls({ locale });
@@ -85,10 +85,10 @@ describe('MetaverseRoomControls', () => {
   });
 
   test.each([
-    ['live', 'Live', 'Room events are flowing'],
-    ['recovering', 'Recovering', 'Refreshing room connectivity'],
-    ['stale', 'Stale', 'No room activity recently'],
-    ['offline', 'Offline', 'Peer connectivity is unavailable'],
+    ['live', 'External peers connected', 'Room events are flowing'],
+    ['recovering', 'Refreshing peer connection', 'Refreshing room connectivity'],
+    ['stale', 'Peer updates delayed', 'No room activity recently'],
+    ['offline', 'External peers unavailable', 'Peer connectivity is unavailable'],
   ] as const)('renders %s connection status and detail', (connectionState, label, detail) => {
     renderControls({ connectionState, hudOpen: false, chatOpen: false });
 

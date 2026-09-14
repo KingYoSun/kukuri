@@ -21,7 +21,15 @@ owner が online に戻っても自動 reclaim はしない。「この端末で
 - participant が 0 の間も assignment は lease expiry/close まで残り、physics だけ sleep する。
 - desktop の「Hostingを終了」は owner-signed close を canonical replica に追記してから Node の `/release` を呼ぶ。Node に到達できなくても canonical close と expiry が authority を失効させる。
 
-## Prop とレイアウト保存
+## 所有Domeの管理・削除（#1020）
+
+停止中でも一覧の「Domeを管理」から再開できる。管理を開いただけでは入室やhost切替をしない。「この端末で稼働を開始して入室」は明示操作で新epochを発行し、authoritative admission後に空間へ移る。稼働済みなら入室だけを行う。
+
+「稼働を終了」はDomeを保持する。「Domeを削除」は確認後にInstanceを失効させ、同じContextで再作成できるようにする。失敗時は同じoperation IDとgenerationで再試行する。再起動後は一覧上部の未完了操作から再試行できる。CN cleanup pendingはlocal削除済みと区別し、旧leaseへ署名したreleaseを既存auth/consent経路で再送する。別Nodeへの切替や同意の迂回は行わない。
+
+履歴・共有Preset/素材のretentionはADR 0036/0040に従う。他peer上のcopyや全assetの即時消去を保証する操作ではない。確認用scenarioは`cargo xtask scenario desktop_smoke_metaverse_dome_delete`。
+
+## Prop とレイアウト保存（操作）
 
 - persistent prop の追加・削除は owner だけが active session に送信できる。session 中の位置・回転は一時状態であり、「現在のレイアウトを保存」を実行するまで manifest は変わらない。
 - guest prop は参加者が追加でき、5分の wall-clock TTL または session 終了で消える。layout candidate と durable manifest には含めない。

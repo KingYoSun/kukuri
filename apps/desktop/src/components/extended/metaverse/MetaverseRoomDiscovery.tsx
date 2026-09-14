@@ -30,6 +30,8 @@ export type CreateMetaverseRoomInput = {
 
 type MetaverseRoomDiscoveryProps = {
   rooms: GameRoomView[];
+  catalogReady?: boolean;
+  onRetry?: () => Promise<void>;
   selectedRoomId: string | null;
   joinedRoomIds: ReadonlySet<string>;
   pending: boolean;
@@ -41,6 +43,7 @@ type MetaverseRoomDiscoveryProps = {
   mediaObjectUrls: Record<string, string | null>;
   onCreateRoom: (input: CreateMetaverseRoomInput) => Promise<boolean>;
   onJoinRoom: (roomId: string) => void;
+  onManageRoom?: (roomId: string) => void;
   admissionStatus?: 'resolving' | 'admitting' | 'joined' | 'selection';
   activeChannelId?: string | null;
   configuredEntryInstanceId?: string | null;
@@ -51,6 +54,8 @@ type MetaverseRoomDiscoveryProps = {
 
 export function MetaverseRoomDiscovery({
   rooms,
+  catalogReady = true,
+  onRetry,
   selectedRoomId,
   joinedRoomIds,
   pending,
@@ -62,6 +67,7 @@ export function MetaverseRoomDiscovery({
   mediaObjectUrls,
   onCreateRoom,
   onJoinRoom,
+  onManageRoom,
   admissionStatus = 'selection',
   activeChannelId = null,
   configuredEntryInstanceId = null,
@@ -179,6 +185,8 @@ export function MetaverseRoomDiscovery({
           <small>{t('rooms.summary', { count: rooms.length })}</small>
         </div>
       </div>
+      {!catalogReady && !error ? <Notice>{t('management.loadingRooms')}</Notice> : null}
+      {!catalogReady && onRetry ? <Button variant='secondary' disabled={pending} onClick={() => void onRetry()}>{t('management.refresh')}</Button> : null}
       {validationError || error ? (
         <Notice tone='destructive'>{validationError ? t('create.titleRequired') : error}</Notice>
       ) : null}
@@ -212,7 +220,7 @@ export function MetaverseRoomDiscovery({
           ) : <small>{t('entry.ownerOnly')}</small>}
         </section>
       ) : null}
-      {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? (
+      {!rooms.some((room) => room.host_pubkey === localAuthorPubkey) && catalogReady ? (
       <section className='shell-nav-accordion metaverse-create-accordion' data-open={createOpen}>
         <button
           className='shell-nav-accordion-trigger'
@@ -249,8 +257,8 @@ export function MetaverseRoomDiscovery({
           </form>
         ) : null}
       </section>
-      ) : null}
-      {rooms.length === 0 ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
+      ) : rooms.some((room) => room.host_pubkey === localAuthorPubkey) ? <Notice>{t('management.ownerLimit')}</Notice> : null}
+      {rooms.length === 0 && catalogReady ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
           <li key={room.room_id}>
@@ -271,8 +279,8 @@ export function MetaverseRoomDiscovery({
             >
               <div className='post-meta'>
                 <span>{room.title}</span>
-                <span>{room.status}</span>
-                <span className='reply-chip'>{room.audience_label}</span>
+                <span>{t(`hosting.states.${room.dome_hosting?.kind ?? 'closed'}`)}</span>
+                <span className='reply-chip'>{t(room.channel_id ? 'management.private' : 'management.public')}</span>
               </div>
               <p>{room.description || t('rooms.noDescription')}</p>
               <div className='metaverse-room-host'>
@@ -286,14 +294,19 @@ export function MetaverseRoomDiscovery({
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>{t('room.world', { version: room.metaverse?.world_version ?? 1 })}</span>
               </div>
+              {room.host_pubkey === localAuthorPubkey ? (
+                <Button type='button' variant='secondary' disabled={pending} onClick={() => onManageRoom?.(room.room_id)}>
+                  {t('management.open')}
+                </Button>
+              ) : null}
               <Button
                 variant='secondary'
                 type='button'
-                disabled={pending || admissionStatus === 'admitting' || !domeHasActiveHost(room)}
+                disabled={pending || joinedRoomIds.has(room.room_id) || admissionStatus === 'admitting' || !domeHasActiveHost(room)}
                 onClick={() => onJoinRoom(room.room_id)}
               >
                 <Play className='size-4' aria-hidden='true' />
-                {t(domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
+                {t(joinedRoomIds.has(room.room_id) ? 'management.entered' : room.phase_label === 'management_only' ? 'management.scenePending' : domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
               </Button>
               {onMoveRoom && room.host_pubkey === localAuthorPubkey ? (
                 <>

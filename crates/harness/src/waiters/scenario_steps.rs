@@ -20,6 +20,7 @@ pub(crate) fn step_name(step: &ScenarioStep) -> &'static str {
         ScenarioStep::CreateGameRoom { .. } => "create_game_room",
         ScenarioStep::UpdateGameRoom { .. } => "update_game_room",
         ScenarioStep::AssertGameScore { .. } => "assert_game_score",
+        ScenarioStep::DeleteMetaverseDome { .. } => "delete_metaverse_dome",
         ScenarioStep::CreateMetaverseDome { .. } => "create_metaverse_dome",
         ScenarioStep::CustomizeMetaverseDome { .. } => "customize_metaverse_dome",
         ScenarioStep::AssertMetaverseDome { .. } => "assert_metaverse_dome",

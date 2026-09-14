@@ -45,6 +45,14 @@ impl AppService {
         &self,
         input: StartOwnerDomeHostingInput,
     ) -> Result<DomeHostingView> {
+        let _guard = self.services.dome_mutations.lock().await;
+        self.start_owner_dome_hosting_unlocked(input).await
+    }
+
+    async fn start_owner_dome_hosting_unlocked(
+        &self,
+        input: StartOwnerDomeHostingInput,
+    ) -> Result<DomeHostingView> {
         if input.endpoint_id.trim().is_empty() {
             anyhow::bail!("owner device endpoint id is required");
         }
@@ -53,7 +61,19 @@ impl AppService {
             .hosting_instance(&replica, &input.instance_id)
             .await?
             .context("Dome instance was not found")?;
+        if input
+            .expected_generation
+            .is_some_and(|generation| generation != instance.generation)
+        {
+            anyhow::bail!("DOME_HOSTING_STALE_INSTANCE");
+        }
         self.ensure_dome_hosting_owner(&instance)?;
+        self.ensure_dome_not_deleting(
+            &instance.spatial_context,
+            &instance.instance_id,
+            instance.generation,
+        )
+        .await?;
         let preset = self
             .fetch_dome_preset_manifest(&instance.preset_ref)
             .await?
@@ -129,12 +149,33 @@ impl AppService {
         &self,
         input: PrepareCommunityNodeDomeHostingInput,
     ) -> Result<DomeHostingView> {
+        let _guard = self.services.dome_mutations.lock().await;
+        self.prepare_community_node_dome_hosting_unlocked(input)
+            .await
+    }
+
+    async fn prepare_community_node_dome_hosting_unlocked(
+        &self,
+        input: PrepareCommunityNodeDomeHostingInput,
+    ) -> Result<DomeHostingView> {
         let replica = self.hosting_context_replica(&input.spatial_context).await?;
         let instance = self
             .hosting_instance(&replica, &input.instance_id)
             .await?
             .context("Dome instance was not found")?;
+        if input
+            .expected_generation
+            .is_some_and(|generation| generation != instance.generation)
+        {
+            anyhow::bail!("DOME_HOSTING_STALE_INSTANCE");
+        }
         self.ensure_dome_hosting_owner(&instance)?;
+        self.ensure_dome_not_deleting(
+            &instance.spatial_context,
+            &instance.instance_id,
+            instance.generation,
+        )
+        .await?;
         let mut records = self
             .list_dome_hosting_records(&replica, &input.instance_id)
             .await?;
@@ -180,12 +221,19 @@ impl AppService {
         &self,
         input: ActivateCommunityNodeDomeHostingInput,
     ) -> Result<DomeHostingView> {
+        let _guard = self.services.dome_mutations.lock().await;
         let replica = self.hosting_context_replica(&input.spatial_context).await?;
         let instance = self
             .hosting_instance(&replica, &input.instance_id)
             .await?
             .context("Dome instance was not found")?;
         self.ensure_dome_hosting_owner(&instance)?;
+        self.ensure_dome_not_deleting(
+            &instance.spatial_context,
+            &instance.instance_id,
+            instance.generation,
+        )
+        .await?;
         let mut records = self
             .list_dome_hosting_records(&replica, &input.instance_id)
             .await?;
@@ -221,16 +269,36 @@ impl AppService {
         &self,
         input: CloseDomeHostingInput,
     ) -> Result<DomeHostingView> {
+        let _guard = self.services.dome_mutations.lock().await;
+        let context = input.spatial_context.clone();
+        let id = input.instance_id.clone();
+        self.close_dome_hosting_unlocked(input).await?;
+        self.get_dome_hosting(context, &id).await
+    }
+
+    pub(crate) async fn close_dome_hosting_unlocked(
+        &self,
+        input: CloseDomeHostingInput,
+    ) -> Result<DomeHostingView> {
         let replica = self.hosting_context_replica(&input.spatial_context).await?;
         let instance = self
             .hosting_instance(&replica, &input.instance_id)
             .await?
             .context("Dome instance was not found")?;
+        if input
+            .expected_generation
+            .is_some_and(|generation| generation != instance.generation)
+        {
+            anyhow::bail!("DOME_HOSTING_STALE_INSTANCE");
+        }
         self.ensure_dome_hosting_owner(&instance)?;
         let mut records = self
             .list_dome_hosting_records(&replica, &input.instance_id)
             .await?;
         let lease = current_unique_lease(&records)?.context("no Hosting Lease to close")?;
+        if lease.lease.instance_generation != instance.generation {
+            anyhow::bail!("no current-generation Hosting Lease to close");
+        }
         let now = Utc::now().timestamp_millis();
         let record = DomeHostingRecordV1::LeaseClosed(close_dome_hosting_lease(
             self.services.keys.as_ref(),
@@ -246,22 +314,32 @@ impl AppService {
             .remove(&instance.instance_id);
         self.publish_dome_hosting_hint(&instance.spatial_context, &instance.instance_id, "closed")
             .await?;
-        self.hosting_view(&instance, &records, now).await
+        self.hosting_authority_view(&instance, &records, now).await
     }
 
     pub async fn submit_dome_session_input(
         &self,
         input: SubmitDomeSessionInput,
     ) -> Result<SignedDomePhysicsSnapshotV1> {
+        let replica = self.hosting_context_replica(&input.spatial_context).await?;
+        let instance = self
+            .hosting_instance(&replica, &input.instance_id)
+            .await?
+            .context("Dome instance was not found")?;
+        if input
+            .expected_generation
+            .is_some_and(|generation| generation != instance.generation)
+        {
+            anyhow::bail!("DOME_SESSION_STALE_INSTANCE");
+        }
+        if instance.status != DomeInstanceStatusV1::Active || instance.relationship_detach.is_some()
+        {
+            anyhow::bail!("DOME_SESSION_STALE_INSTANCE");
+        }
         if matches!(
             &input.input,
             DomeSessionInputKindV1::Join { .. } | DomeSessionInputKindV1::KeepAlive
         ) {
-            let replica = self.hosting_context_replica(&input.spatial_context).await?;
-            let instance = self
-                .hosting_instance(&replica, &input.instance_id)
-                .await?
-                .context("Dome instance was not found")?;
             match self
                 .evaluate_dome_room_access(
                     &input.spatial_context,
@@ -281,7 +359,9 @@ impl AppService {
         let runtime = sessions
             .get_mut(&input.instance_id)
             .context("this device is not the active Dome host")?;
-        if runtime.lease().spatial_context != input.spatial_context {
+        if runtime.lease().spatial_context != input.spatial_context
+            || runtime.lease().instance_generation != instance.generation
+        {
             anyhow::bail!("Dome session input SpatialContext mismatch");
         }
         let signed = build_signed_dome_session_input(
@@ -464,6 +544,7 @@ impl AppService {
         &self,
         input: CommitDomeLayoutInput,
     ) -> Result<DomeLayoutCommitView> {
+        let _guard = self.services.dome_mutations.lock().await;
         if input.operation_id.trim().is_empty() {
             anyhow::bail!("Dome layout commit operation id is required");
         }
@@ -473,6 +554,12 @@ impl AppService {
             .await?
             .context("Dome instance was not found")?;
         self.ensure_dome_hosting_owner(&instance)?;
+        self.ensure_dome_not_deleting(
+            &instance.spatial_context,
+            &instance.instance_id,
+            instance.generation,
+        )
+        .await?;
 
         if let Some(existing) = self
             .find_dome_layout_commit(&replica, &input.instance_id, &input.operation_id)
@@ -565,7 +652,7 @@ impl AppService {
 
         let mut customization = current.dome.customization.clone();
         customization.persistent_props = candidate.candidate.persistent_props.clone();
-        self.update_metaverse_room(
+        self.update_metaverse_room_unlocked(
             &topic_id,
             &input.instance_id,
             UpdateMetaverseRoomInput {
@@ -604,7 +691,8 @@ impl AppService {
         let remaining_lease_millis = lease.lease.expires_at.saturating_sub(now).max(1);
         let hosting = match lease.lease.host.clone() {
             DomeHostTargetV1::OwnerDevice { endpoint_id, .. } => {
-                self.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                self.start_owner_dome_hosting_unlocked(StartOwnerDomeHostingInput {
+                    expected_generation: None,
                     spatial_context: input.spatial_context,
                     instance_id: input.instance_id.clone(),
                     endpoint_id,
@@ -616,13 +704,16 @@ impl AppService {
                 node_id,
                 api_base_url,
             } => {
-                self.prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
-                    spatial_context: input.spatial_context,
-                    instance_id: input.instance_id.clone(),
-                    node_id: node_id.as_str().to_string(),
-                    api_base_url,
-                    lease_duration_millis: remaining_lease_millis,
-                })
+                self.prepare_community_node_dome_hosting_unlocked(
+                    PrepareCommunityNodeDomeHostingInput {
+                        expected_generation: None,
+                        spatial_context: input.spatial_context,
+                        instance_id: input.instance_id.clone(),
+                        node_id: node_id.as_str().to_string(),
+                        api_base_url,
+                        lease_duration_millis: remaining_lease_millis,
+                    },
+                )
                 .await?
             }
         };
@@ -690,7 +781,7 @@ impl AppService {
         Ok(None)
     }
 
-    async fn list_dome_hosting_records(
+    pub(crate) async fn list_dome_hosting_records(
         &self,
         replica: &ReplicaId,
         instance_id: &str,
@@ -807,6 +898,40 @@ impl AppService {
         records: &[DomeHostingRecordV1],
         now: i64,
     ) -> Result<DomeHostingView> {
+        let mut view = self.hosting_authority_view(instance, records, now).await?;
+        view.preset_manifest_json = self
+            .fetch_dome_preset_manifest(&instance.preset_ref)
+            .await?
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+        Ok(view)
+    }
+
+    pub(crate) async fn hosting_authority_view(
+        &self,
+        instance: &DomeInstanceManifestV1,
+        records: &[DomeHostingRecordV1],
+        now: i64,
+    ) -> Result<DomeHostingView> {
+        resolve_dome_hosting_state(instance, records, now, Some(now))?;
+        let current_epochs = records
+            .iter()
+            .filter_map(|record| match record {
+                DomeHostingRecordV1::LeaseIssued(signed)
+                    if signed.lease.instance_generation == instance.generation =>
+                {
+                    Some(signed.lease.epoch)
+                }
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        let generation_records = records
+            .iter()
+            .filter(|record| current_epochs.contains(&hosting_record_identity(record).0))
+            .cloned()
+            .collect::<Vec<_>>();
+        let records = generation_records.as_slice();
         let (local_heartbeat, mut participants, mut sleeping, resource_metrics) = {
             let mut sessions = self.dome_host_sessions.lock().await;
             match sessions.get_mut(&instance.instance_id) {
@@ -908,10 +1033,6 @@ impl AppService {
                 _ => None,
             })
         });
-        let preset = self
-            .fetch_dome_preset_manifest(&instance.preset_ref)
-            .await?
-            .ok_or(DomeReadUnavailable::Preset)?;
         Ok(DomeHostingView {
             instance_id: instance.instance_id.clone(),
             state,
@@ -920,7 +1041,7 @@ impl AppService {
             signed_activation_json: activation.map(serde_json::to_string).transpose()?,
             signed_close_json: close.map(serde_json::to_string).transpose()?,
             instance_manifest_json: serde_json::to_string(instance)?,
-            preset_manifest_json: serde_json::to_string(&preset)?,
+            preset_manifest_json: None,
             participants,
             sleeping,
             resource_budget: self.metaverse_resource_budget.clone(),

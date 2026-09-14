@@ -367,3 +367,15 @@ pub async fn import_metaverse_room_asset(
         .await
         .map_err(map_error)
 }
+
+#[tauri::command]
+pub async fn delete_dome(state: tauri::State<'_, DesktopState>, request: kukuri_desktop_runtime::DeleteDomeRequest)
+    -> Result<kukuri_app_api::DeleteDomeView, CommandError> {
+    state.runtime().delete_dome(request).await.map_err(map_error)
+}
+
+#[tauri::command]
+pub async fn list_pending_dome_deletions(state: tauri::State<'_, DesktopState>, spatial_context: kukuri_core::SpatialContextV1)
+    -> Result<Vec<kukuri_app_api::PendingDomeDeletionView>, CommandError> {
+    state.runtime().list_pending_dome_deletions(spatial_context).await.map_err(map_error)
+}

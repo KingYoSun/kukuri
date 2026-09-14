@@ -81,6 +81,8 @@ function node(hasLocalConsent: boolean): CommunityNodeEntryView {
 
 function actions(delegateHosting = vi.fn().mockResolvedValue(undefined)) {
   return {
+    listPendingDeletions: vi.fn().mockResolvedValue([]),
+    deleteRoom: vi.fn().mockResolvedValue({ deleted: true, cleanup_pending: false }),
     createRoom: vi.fn(),
     publishRoomEvent: vi.fn(),
     listRoomEvents: vi.fn(),
@@ -159,7 +161,8 @@ describe('DomeHostingPanel Community Node consent', () => {
         room.metaverse!.spatial_context,
         room.metaverse!.instance_id,
         'f'.repeat(64),
-        'https://node.example'
+        'https://node.example',
+        room.metaverse!.instance_generation
       )
     );
     expect(onFetch).not.toHaveBeenCalled();
@@ -191,7 +194,8 @@ describe('DomeHostingPanel Community Node consent', () => {
       room.metaverse!.spatial_context,
       room.metaverse!.instance_id,
       'f'.repeat(64),
-      'https://node.example'
+      'https://node.example',
+      room.metaverse!.instance_generation
     );
   });
 

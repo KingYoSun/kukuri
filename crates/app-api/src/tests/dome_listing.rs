@@ -31,6 +31,113 @@ impl BlobService for DelayedPresetBlob {
 
 const TOPIC: &str = "kukuri:topic:pending-dome-preset";
 
+#[tokio::test]
+async fn owner_can_manage_and_delete_without_preset_bytes() {
+    let f = fixture().await;
+    *f.blobs.held_hash.lock().await = Some(BlobHash::new(f.preset.manifest_blob_hash.clone()));
+    let rooms = f.app.list_game_rooms(TOPIC).await.unwrap();
+    assert!(
+        rooms.iter().any(|r| r.room_id == f.dome_id),
+        "owner management must not depend on Preset delivery"
+    );
+    f.app
+        .delete_dome(crate::DeleteDomeInput {
+            spatial_context: kukuri_core::SpatialContextV1::Topic {
+                topic_id: TopicId::new(TOPIC),
+            },
+            instance_id: f.dome_id.clone(),
+            expected_generation: 1,
+            operation_id: "missing-preset".into(),
+        })
+        .await
+        .unwrap();
+    assert!(
+        f.app
+            .list_game_rooms(TOPIC)
+            .await
+            .unwrap()
+            .iter()
+            .all(|r| r.room_id != f.dome_id)
+    );
+}
+
+#[tokio::test]
+async fn owner_can_delete_without_derived_game_manifest() {
+    let f = fixture().await;
+    let row = f
+        .store
+        .list_topic_game_rooms(TOPIC)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.room_id == f.dome_id)
+        .unwrap();
+    *f.blobs.held_hash.lock().await = Some(row.manifest_blob_hash);
+    let mut handles = f.app.services.clone();
+    let fresh_store = Arc::new(MemoryStore::default());
+    handles.store = fresh_store.clone();
+    handles.projection_store = fresh_store;
+    let reader = AppService::from_handles(handles);
+    let rooms = reader.list_game_rooms(TOPIC).await.unwrap();
+    assert!(
+        rooms.iter().any(|r| r.room_id == f.dome_id),
+        "canonical owner metadata survives a missing derived game blob/cache"
+    );
+
+    f.app
+        .delete_dome(crate::DeleteDomeInput {
+            spatial_context: kukuri_core::SpatialContextV1::Topic {
+                topic_id: TopicId::new(TOPIC),
+            },
+            instance_id: f.dome_id,
+            expected_generation: 1,
+            operation_id: "missing-projection".into(),
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn missing_other_instance_keeps_owner_management_topology_available() {
+    let f = fixture().await;
+    let instance = f
+        .app
+        .fetch_dome_instance_manifest(&topic_replica_id(TOPIC), &f.app.keys().public_key())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut other_handles = f.app.services.clone();
+    other_handles.keys = Arc::new(generate_keys());
+    let other = AppService::from_handles(other_handles);
+    let owned = other
+        .create_metaverse_room(
+            TOPIC,
+            CreateMetaverseRoomInput {
+                title: "Available owner".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .unwrap();
+    *f.blobs.held_hash.lock().await = Some(instance.0.current_manifest.hash);
+    let context = kukuri_core::SpatialContextV1::Topic {
+        topic_id: TopicId::new(TOPIC),
+    };
+    let topology = other
+        .list_dome_connection_topology(context)
+        .await
+        .expect("missing remote manifest must not block owner management");
+    assert!(
+        topology
+            .resolution
+            .topology
+            .components
+            .iter()
+            .any(|component| component.instance_ids.contains(&owned))
+    );
+}
+
 struct Fixture {
     app: AppService,
     docs: Arc<MemoryDocsSync>,
@@ -111,13 +218,12 @@ async fn assert_pending_then_available(f: &Fixture) {
         .list_game_rooms(TOPIC)
         .await
         .expect("pending preset must not fail room listing");
-    assert_eq!(
-        rooms
-            .iter()
-            .map(|room| room.room_id.as_str())
-            .collect::<Vec<_>>(),
-        vec![f.game_id.as_str()]
-    );
+    assert!(rooms.iter().any(|r| r.room_id == f.game_id));
+    let owned = rooms
+        .iter()
+        .find(|r| r.room_id == f.dome_id)
+        .expect("owner management remains available");
+    assert_eq!(owned.phase_label.as_deref(), Some("management_only"));
     // Pending is a read result, not removal of the canonical/projection record.
     assert_eq!(
         f.store

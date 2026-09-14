@@ -29,6 +29,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
         .await?;
     let owner = app
         .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: instance_id.clone(),
             endpoint_id: "harness-owner-device".into(),
@@ -40,6 +41,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
 
     let started = Instant::now();
     app.submit_dome_session_input(SubmitDomeSessionInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: instance_id.clone(),
         sequence: 1,
@@ -65,6 +67,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
         .context("default persistent prop")?;
     prop.position[0] += 250;
     app.submit_dome_session_input(SubmitDomeSessionInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: instance_id.clone(),
         sequence: 2,
@@ -88,6 +91,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
     let node = KukuriKeys::generate();
     let transferring = app
         .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: instance_id.clone(),
             node_id: node.public_key_hex(),
@@ -125,6 +129,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
     let started = Instant::now();
     let closed = app
         .close_dome_hosting(CloseDomeHostingInput {
+            expected_generation: None,
             spatial_context: context,
             instance_id,
         })

@@ -431,6 +431,8 @@ pub fn run() {
             commands::live_game::start_owner_dome_hosting,
             commands::live_game::delegate_dome_hosting,
             commands::live_game::close_dome_hosting,
+            commands::live_game::delete_dome,
+            commands::live_game::list_pending_dome_deletions,
             commands::live_game::submit_dome_session_input,
             commands::live_game::prepare_dome_transition,
             commands::live_game::preview_dome_transition_access,

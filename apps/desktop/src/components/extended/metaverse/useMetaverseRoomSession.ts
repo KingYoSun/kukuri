@@ -53,6 +53,7 @@ import { useDomeTransitionAttempt } from './useDomeTransitionAttempt';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
+  managementActive?: boolean;
   activeTopic: string;
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
@@ -89,6 +90,7 @@ const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
 
 export function useMetaverseRoomSession({
   actions,
+  managementActive = false,
   activeTopic,
   rooms,
   syncStatus,
@@ -103,8 +105,11 @@ export function useMetaverseRoomSession({
   onError,
 }: UseMetaverseRoomSessionArgs) {
   const { t } = useTranslation('metaverse', { lng: locale });
+  const admissionAttempt = useRef(0);
+  useEffect(() => () => { ++admissionAttempt.current; }, [activeTopic, activeChannelId, syncStatus.local_author_pubkey, managementActive]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialSelectedRoomId);
-  const [admissionConfirmed, setAdmissionConfirmed] = useState(false);
+  const [admissionClaimed, setAdmissionConfirmed] = useState(false);
+  const [admittedIdentity, setAdmittedIdentity] = useState<string | null>(null);
   const [admissionStatus, setAdmissionStatus] = useState<'resolving' | 'admitting' | 'joined' | 'selection'>('resolving');
   const [joinedRoomIds, setJoinedRoomIds] = useState<Set<string>>(() => new Set());
   const [remoteTransforms, setRemoteTransforms] = useState<Record<string, AvatarTransform>>({});
@@ -121,6 +126,16 @@ export function useMetaverseRoomSession({
   >(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const lastPhysicsSnapshotSequenceRef = useRef(0);
+  const physicsTargetRef = useRef<{ id: string; generation: number } | null>(null);
+  const physicsEpochRef = useRef(0);
+  const bindPhysicsTarget = useCallback((room: GameRoomView) => {
+    if (!room.metaverse) return;
+    const target = { id: room.metaverse.instance_id, generation: room.metaverse.instance_generation };
+    if (physicsTargetRef.current?.id !== target.id || physicsTargetRef.current.generation !== target.generation) {
+      lastPhysicsSnapshotSequenceRef.current = 0; physicsEpochRef.current = 0;
+    }
+    physicsTargetRef.current = target;
+  }, []);
   const lastRecoveryAtRef = useRef(0);
   const pendingCreatedRoomIdRef = useRef<string | null>(null);
   const sharedObjectRef = useRef<SharedRoomObjectV1>(DEFAULT_SHARED_OBJECT);
@@ -151,7 +166,14 @@ export function useMetaverseRoomSession({
   const selectedRoom = selectedRoomId
     ? rooms.find((room) => room.room_id === selectedRoomId) ?? null
     : null;
+  const selectedGeneration = selectedRoom?.metaverse?.instance_generation;
+  const selectedInstanceId = selectedRoom?.metaverse?.instance_id;
+  const selectedIdentity = selectedRoom ? JSON.stringify([syncStatus.local_author_pubkey, activeTopic, activeChannelId, selectedRoom.room_id, selectedRoom.metaverse?.instance_generation]) : null;
+  const admissionConfirmed = admissionClaimed && admittedIdentity === selectedIdentity && selectedRoom?.phase_label !== 'management_only';
   const admittedRoom = admissionConfirmed ? selectedRoom : null;
+  useEffect(() => {
+    if (admissionClaimed && !admissionConfirmed) { setAdmissionConfirmed(false); setAdmittedIdentity(null); setJoinedRoomIds(new Set()); setAdmissionStatus('selection'); entryAttemptKeyRef.current = null; }
+  }, [admissionClaimed, admissionConfirmed]);
   const entryContext = useMemo<SpatialContextV1>(() => activeChannelId
     ? { kind: 'channel', topic_id: activeTopic, channel_id: activeChannelId }
     : { kind: 'topic', topic_id: activeTopic }, [activeChannelId, activeTopic]);
@@ -263,7 +285,8 @@ export function useMetaverseRoomSession({
       room.metaverse.spatial_context,
       room.metaverse.instance_id,
       nextSessionSequence(room.metaverse.instance_id, suggestedSequence),
-      input
+      input,
+      room.metaverse.instance_generation
     );
   }, [actions, nextSessionSequence]);
 
@@ -315,6 +338,8 @@ export function useMetaverseRoomSession({
   }, [setLatestChatByPeer]);
 
   useEffect(() => {
+    physicsTargetRef.current = selectedInstanceId && selectedGeneration !== undefined ? { id: selectedInstanceId, generation: selectedGeneration } : null;
+    physicsEpochRef.current = 0;
     sharedObjectRef.current = DEFAULT_SHARED_OBJECT;
     setSharedObject(DEFAULT_SHARED_OBJECT);
     setSessionProps([]);
@@ -328,6 +353,8 @@ export function useMetaverseRoomSession({
   }, [
     resetBackendEventCursor,
     selectedRoom?.room_id,
+    selectedInstanceId,
+    selectedGeneration,
     setLatestChatByPeer,
     setMessages,
     setPeerPresence,
@@ -417,6 +444,9 @@ export function useMetaverseRoomSession({
   }
 
   const applyPhysicsSnapshot = useCallback((snapshot: DomePhysicsSnapshotV1) => {
+    if (snapshot.instance_id !== physicsTargetRef.current?.id || snapshot.instance_generation !== physicsTargetRef.current.generation) return;
+    if (snapshot.lease_epoch < physicsEpochRef.current) return;
+    if (snapshot.lease_epoch > physicsEpochRef.current) { physicsEpochRef.current = snapshot.lease_epoch; lastPhysicsSnapshotSequenceRef.current = 0; }
     if (snapshot.sequence <= lastPhysicsSnapshotSequenceRef.current) return;
     lastPhysicsSnapshotSequenceRef.current = snapshot.sequence;
     const remote: Record<string, AvatarTransform> = {};
@@ -594,6 +624,7 @@ export function useMetaverseRoomSession({
   const applyTransitionHandoff = useCallback((
     sourceRoom: GameRoomView, targetRoom: GameRoomView, targetTransform: AvatarTransform
   ) => {
+    bindPhysicsTarget(targetRoom);
     setHandoffTransform(targetTransform);
     lastSentTransformRef.current = targetTransform;
     setLastSentSeq(0);
@@ -603,8 +634,9 @@ export function useMetaverseRoomSession({
       next.add(targetRoom.room_id);
       return next;
     });
+    setAdmittedIdentity(JSON.stringify([syncStatus.local_author_pubkey, activeTopic, activeChannelId, targetRoom.room_id, targetRoom.metaverse?.instance_generation]));
     setSelectedRoomId(targetRoom.room_id);
-  }, []);
+  }, [bindPhysicsTarget, activeTopic, activeChannelId, syncStatus.local_author_pubkey]);
 
   const { transitionPreparingDirections, requestTransitionAbort, handleTransitionTransform } = useDomeTransitionAttempt({
     actions, admittedRoom, localAuthorPubkey: syncStatus.local_author_pubkey, localPeerId,
@@ -629,10 +661,12 @@ export function useMetaverseRoomSession({
     reportError = true,
     preserveCurrent = false
   ): Promise<boolean> => {
+    const attempt = ++admissionAttempt.current;
     const room = rooms.find((candidate) => candidate.room_id === roomId);
     if (!room?.metaverse) return false;
     requestTransitionAbort();
     if (!preserveCurrent) {
+      bindPhysicsTarget(room);
       setHandoffTransform(null);
       setSelectedRoomId(roomId);
       setAdmissionConfirmed(false);
@@ -640,10 +674,13 @@ export function useMetaverseRoomSession({
     setAdmissionStatus('admitting');
     try {
       const avatarCollider = await resolveLocalAvatarCollider();
+      if (attempt !== admissionAttempt.current) return false;
       const snapshot = await submitInputForRoom(room, {
         type: 'join',
         avatar_collider: avatarCollider,
       });
+      if (attempt !== admissionAttempt.current) return false;
+      if (snapshot.instance_id !== room.metaverse.instance_id || snapshot.instance_generation !== room.metaverse.instance_generation) throw new Error('DOME_ENTRY_STALE_INSTANCE');
       const body = snapshot.bodies.find(
         (candidate) => candidate.entity_id === `avatar:${syncStatus.local_author_pubkey}`
       );
@@ -659,8 +696,10 @@ export function useMetaverseRoomSession({
       };
       lastSentTransformRef.current = initialTransform;
       setHandoffTransform(initialTransform);
+      bindPhysicsTarget(room);
       applyPhysicsSnapshot(snapshot);
       setJoinedRoomIds((current) => new Set(current).add(roomId));
+      setAdmittedIdentity(JSON.stringify([syncStatus.local_author_pubkey, activeTopic, activeChannelId, room.room_id, room.metaverse.instance_generation]));
       setAdmissionConfirmed(true);
       setSelectedRoomId(roomId);
       setAdmissionStatus('joined');
@@ -672,6 +711,7 @@ export function useMetaverseRoomSession({
       onError(null);
       return true;
     } catch (entryError) {
+      if (attempt !== admissionAttempt.current) return false;
       if (!preserveCurrent) {
         setAdmissionConfirmed(false);
         setAdmissionStatus('selection');
@@ -684,6 +724,9 @@ export function useMetaverseRoomSession({
       return false;
     }
   }, [
+    activeTopic,
+    activeChannelId,
+    bindPhysicsTarget,
     requestTransitionAbort,
     applyPhysicsSnapshot,
     localPeerId,
@@ -815,8 +858,8 @@ export function useMetaverseRoomSession({
       setAdmissionConfirmed(false);
       setSelectedRoomId(null);
     }
-    if (admissionConfirmed || entryAutoDisabledRef.current) return;
-    const attemptKey = `${contextKey}:${entryCandidates.map((room) => room.room_id).join(',')}`;
+    if (managementActive || admissionConfirmed || entryAutoDisabledRef.current) return;
+    const attemptKey = `${contextKey}:${entryCandidates.map((room) => `${room.room_id}:${room.metaverse?.instance_generation}`).join(',')}`;
     if (entryAttemptKeyRef.current === attemptKey) return;
     entryAttemptKeyRef.current = attemptKey;
     if (entryCandidates.length === 0) {
@@ -838,7 +881,7 @@ export function useMetaverseRoomSession({
     return () => {
       cancelled = true;
     };
-  }, [admissionConfirmed, entryCandidates, entryContext, joinRoom, onError, t]);
+  }, [managementActive, admissionConfirmed, entryCandidates, entryContext, joinRoom, onError, t]);
 
   function selectCreatedRoom(roomId: string) {
     pendingCreatedRoomIdRef.current = roomId;
@@ -996,7 +1039,8 @@ export function useMetaverseRoomSession({
       admittedRoom.metaverse.spatial_context,
       admittedRoom.metaverse.instance_id,
       Date.now(),
-      input
+      input,
+      admittedRoom.metaverse.instance_generation
     );
     applyPhysicsSnapshot(snapshot);
   }, [actions, admittedRoom, applyPhysicsSnapshot, t]);

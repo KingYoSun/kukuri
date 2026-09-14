@@ -3,6 +3,41 @@ use super::*;
 // capability registry の永続化はラッパー側の手動 persist ではなく、AppService へ注入した
 // write-through callback(registry 変異時に発火)が担う(WP-C2 boundary)。
 impl DesktopRuntime {
+    pub async fn list_pending_dome_deletions(
+        &self,
+        context: kukuri_core::SpatialContextV1,
+    ) -> Result<Vec<kukuri_app_api::PendingDomeDeletionView>> {
+        self.app_service.list_pending_dome_deletions(context).await
+    }
+
+    pub async fn delete_dome(
+        &self,
+        request: crate::DeleteDomeRequest,
+    ) -> Result<kukuri_app_api::DeleteDomeView> {
+        let mut result = self.app_service.delete_dome(request.clone()).await?;
+        if let Some((url, signed_close_json)) =
+            self.app_service.dome_deletion_release(&request).await?
+        {
+            let signed_close = serde_json::from_str(&signed_close_json)?;
+            result.cleanup_pending = self
+                .release_dome_hosting_on_community_node(
+                    &url,
+                    &DomeHostingReleaseRequest {
+                        instance_id: request.instance_id.clone(),
+                        signed_close,
+                    },
+                )
+                .await
+                .is_err();
+        }
+        if !result.cleanup_pending {
+            self.app_service
+                .finish_dome_deletion_release(&request)
+                .await?;
+        }
+        Ok(result)
+    }
+
     pub async fn preview_dome_transition_access(
         &self,
         request: PrepareDomeTransitionRequest,
@@ -323,6 +358,7 @@ impl DesktopRuntime {
     ) -> Result<DomeHostingView> {
         self.app_service
             .start_owner_dome_hosting(StartOwnerDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context,
                 instance_id: request.instance_id,
                 endpoint_id: request.endpoint_id,
@@ -338,6 +374,7 @@ impl DesktopRuntime {
         let prepared = self
             .app_service
             .prepare_community_node_dome_hosting(PrepareCommunityNodeDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context.clone(),
                 instance_id: request.instance_id.clone(),
                 node_id: request.node_id,
@@ -369,6 +406,7 @@ impl DesktopRuntime {
         let closed = self
             .app_service
             .close_dome_hosting(CloseDomeHostingInput {
+                expected_generation: request.expected_generation,
                 spatial_context: request.spatial_context,
                 instance_id: request.instance_id.clone(),
             })
@@ -405,6 +443,12 @@ impl DesktopRuntime {
             })
             .await?;
         let lease = hosting.lease.context("Dome is not currently hosted")?;
+        if request
+            .expected_generation
+            .is_some_and(|generation| generation != lease.instance_generation)
+        {
+            anyhow::bail!("DOME_SESSION_STALE_INSTANCE");
+        }
         let session_id = hosting
             .state
             .session_id
@@ -416,6 +460,7 @@ impl DesktopRuntime {
             {
                 self.app_service
                     .submit_dome_session_input(SubmitDomeSessionInput {
+                        expected_generation: Some(lease.instance_generation),
                         spatial_context: request.spatial_context,
                         instance_id: request.instance_id,
                         sequence: request.sequence,
@@ -769,7 +814,10 @@ impl DesktopRuntime {
                     .build_dome_hosting_assignment_request(
                         signed_lease,
                         &prepared.instance_manifest_json,
-                        &prepared.preset_manifest_json,
+                        prepared
+                            .preset_manifest_json
+                            .as_deref()
+                            .context("Dome preset manifest is unavailable")?,
                     )
                     .await?,
             )

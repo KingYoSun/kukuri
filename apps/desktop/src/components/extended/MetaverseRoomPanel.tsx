@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FetchCommunityNodePolicyView, AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 
@@ -14,6 +14,8 @@ import type {
 } from '@/lib/api';
 import type { SupportedLocale } from '@/i18n';
 import type { CommunityNodePanelView } from '@/components/settings/types';
+import { Notice } from '@/components/ui/notice';
+import { Button } from '@/components/ui/button';
 import { blobToBase64 } from '@/lib/attachments';
 import {
   MetaverseRoomDiscovery,
@@ -21,6 +23,8 @@ import {
 } from './metaverse/MetaverseRoomDiscovery';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { DomeConnectionPanel } from './metaverse/DomeConnectionPanel';
+import { PendingDomeDeletions } from './metaverse/PendingDomeDeletions';
+import { DomeManagementPanel } from './metaverse/DomeManagementPanel';
 import { DomeHostingPanel } from './metaverse/DomeHostingPanel';
 import { useMetaverseRoomSession } from './metaverse/useMetaverseRoomSession';
 import type { MetaverseRoomActions } from './metaverse/MetaverseRoomActions';
@@ -31,6 +35,8 @@ import {
 } from './MetaverseSceneModel';
 
 type MetaverseRoomPanelProps = {
+  loadError?: string | null;
+  catalogReady?: boolean;
   actions: MetaverseRoomActions;
   activeTopic: string;
   rooms: GameRoomView[];
@@ -50,6 +56,8 @@ type MetaverseRoomPanelProps = {
 const EMPTY_KNOWN_AUTHORS_BY_PUBKEY: Record<string, AuthorSocialView> = {};
 
 export function MetaverseRoomPanel({
+  loadError = null,
+  catalogReady = true,
   actions,
   activeTopic,
   rooms,
@@ -66,6 +74,25 @@ export function MetaverseRoomPanel({
   onOpenCommunityNodeSettings,
 }: MetaverseRoomPanelProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
+  const managementContext = useMemo<SpatialContextV1>(() => activeChannel ? { kind: 'channel', topic_id: activeTopic, channel_id: activeChannel.channel_id } : { kind: 'topic', topic_id: activeTopic }, [activeTopic, activeChannel]);
+  const [managedId, setManagedId] = useState<string | null>(null);
+  const [managedSnapshot, setManagedSnapshot] = useState<GameRoomView | null>(null);
+  const [managedScope, setManagedScope] = useState('');
+  const scope = `${syncStatus.local_author_pubkey}:${activeTopic}:${activeChannel?.channel_id ?? ''}`;
+  const refreshedManaged = rooms.find((r) => r.room_id === managedId && r.host_pubkey === syncStatus.local_author_pubkey
+    && (!managedSnapshot || r.metaverse?.instance_generation === managedSnapshot.metaverse?.instance_generation));
+  const managementSuperseded = managedScope === scope && managedSnapshot !== null && rooms.some((r) => r.room_id === managedId && r.metaverse?.instance_generation !== managedSnapshot.metaverse?.instance_generation);
+  const managedRoom = managedScope === scope && managedId && !managementSuperseded ? refreshedManaged ?? managedSnapshot : null;
+  useEffect(() => { if (refreshedManaged) setManagedSnapshot(refreshedManaged); }, [refreshedManaged]);
+  const focusIdentity = (roomId: string) => JSON.stringify([scope, roomId, rooms.find((room) => room.room_id === roomId)?.metaverse?.instance_generation]);
+  const [focusRoomId, setFocusRoomId] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const managementOrigin = useRef<HTMLElement | null>(null);
+  function manageRoom(roomId: string) {
+    managementOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setManagedSnapshot(rooms.find((r) => r.room_id === roomId) ?? null);
+    setManagedScope(scope); setManagedId(roomId);
+  }
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [avatarAssetStatus, setAvatarAssetStatus] = useState<AvatarAssetStatus>('loading');
@@ -83,6 +110,7 @@ export function MetaverseRoomPanel({
   ), [knownAuthorsByPubkey]);
   const session = useMetaverseRoomSession({
     actions,
+    managementActive: managedScope === scope && managedId !== null,
     activeTopic,
     rooms,
     syncStatus,
@@ -120,12 +148,24 @@ export function MetaverseRoomPanel({
     };
   }, [actions, session.selectedRoom]);
 
+  const admittedFocus = session.admittedRoom ? JSON.stringify([scope, session.admittedRoom.room_id, session.admittedRoom.metaverse?.instance_generation]) : null;
+  useEffect(() => {
+    if (!focusRoomId || admittedFocus !== focusRoomId) return;
+    const frame = requestAnimationFrame(() => {
+      const stage = panelRef.current?.querySelector<HTMLElement>('.metaverse-room-stage');
+      stage?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      stage?.focus({ preventScroll: true });
+      setFocusRoomId(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusRoomId, admittedFocus]);
+
   async function handleCreateRoom(input: CreateMetaverseRoomInput) {
     setPending(true);
     try {
       const roomId = await actions.createRoom(input);
       setError(null);
-      session.selectCreatedRoom(roomId);
+      manageRoom(roomId);
       await actions.refresh();
       return true;
     } catch (createError) {
@@ -222,20 +262,24 @@ export function MetaverseRoomPanel({
   }
 
   return (
-    <div className='metaverse-panel'>
+    <div className='metaverse-panel' ref={panelRef}>
+      <PendingDomeDeletions key={scope} actions={actions} context={managementContext} locale={locale} />
       <MetaverseRoomDiscovery
         rooms={rooms}
+        catalogReady={catalogReady}
+        onRetry={() => actions.refresh().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : t('management.pendingReadFailed')))}
         selectedRoomId={session.selectedRoomId}
         joinedRoomIds={session.joinedRoomIds}
         pending={pending}
-        error={error}
+        error={error ?? loadError}
         locale={locale}
         localAuthorPubkey={syncStatus.local_author_pubkey}
         localProfile={localProfile}
         knownAuthorsByPubkey={knownAuthorsByPubkey}
         mediaObjectUrls={mediaObjectUrls}
         onCreateRoom={handleCreateRoom}
-        onJoinRoom={session.joinRoom}
+        onManageRoom={manageRoom}
+        onJoinRoom={async (roomId) => { if (await session.joinRoom(roomId)) setFocusRoomId(focusIdentity(roomId)); }}
         admissionStatus={session.admissionStatus}
         activeChannelId={activeChannel?.channel_id ?? null}
         configuredEntryInstanceId={activeChannel?.entry_dome_instance_id ?? null}
@@ -254,6 +298,21 @@ export function MetaverseRoomPanel({
         } : undefined}
         onMoveRoom={handleMoveRoom}
       />
+
+      {managementSuperseded ? <Notice>{t('management.staleTarget')}<Button variant='secondary' onClick={() => setManagedId(null)}>{t('management.close')}</Button></Notice> : null}
+      {managedRoom?.metaverse ? <DomeManagementPanel
+        key={`${scope}:${managedRoom.room_id}:${managedRoom.metaverse.instance_generation}`}
+        room={managedRoom} actions={actions} endpointId={syncStatus.discovery.local_endpoint_id} locale={locale}
+        admitted={session.admittedRoom?.room_id === managedRoom.room_id}
+        onEnter={async (roomId) => {
+          const joined = await session.joinRoom(roomId);
+          if (joined) { setFocusRoomId(focusIdentity(roomId)); setManagedId(null); }
+          return joined;
+        }}
+        onStopped={() => { if (session.admittedRoom?.room_id === managedRoom.room_id) session.leaveRoom(); }}
+        onDeleted={() => { if (session.admittedRoom?.room_id === managedRoom.room_id) session.leaveRoom(); setManagedId(null); }}
+        onClose={() => { setManagedId(null); managementOrigin.current?.focus(); }}
+      /> : null}
 
       <MetaverseRoomView
         room={session.admittedRoom}
@@ -301,14 +360,15 @@ export function MetaverseRoomPanel({
       />
       <DomeConnectionPanel
         actions={actions}
-        room={session.selectedRoom}
+        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
         rooms={rooms}
         localAuthorPubkey={syncStatus.local_author_pubkey}
         locale={locale}
       />
       <DomeHostingPanel
+        key={`hosting:${scope}:${(managedRoom ?? session.selectedRoom)?.room_id}:${(managedRoom ?? session.selectedRoom)?.metaverse?.instance_generation}`}
         actions={actions}
-        room={session.selectedRoom}
+        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
         localAuthorPubkey={syncStatus.local_author_pubkey}
         localEndpointId={syncStatus.discovery.local_endpoint_id}
         locale={locale}

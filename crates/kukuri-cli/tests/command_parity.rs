@@ -165,8 +165,11 @@ fn baseline_inventory_is_classified_once() {
         manifest.baseline,
         "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a"
     );
-    assert_eq!(manifest.scope_revision, "2026-09-13-1005-account-menu-v3");
-    assert_eq!(manifest.entries.len(), 151);
+    assert_eq!(
+        manifest.scope_revision,
+        "2026-09-14-1020-dome-management-v1"
+    );
+    assert_eq!(manifest.entries.len(), 153);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
 

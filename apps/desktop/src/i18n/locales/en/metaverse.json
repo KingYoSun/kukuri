@@ -46,10 +46,10 @@
   },
   "connection": {
     "states": {
-      "live": "Live",
-      "recovering": "Recovering",
-      "stale": "Stale",
-      "offline": "Offline"
+      "live": "External peers connected",
+      "recovering": "Refreshing peer connection",
+      "stale": "Peer updates delayed",
+      "offline": "External peers unavailable"
     },
     "details": {
       "live": "Room events are flowing",
@@ -66,12 +66,27 @@
     "movingTo": "Confirming a safe spawn in {{target}}…",
     "moved": "Moved safely to {{target}}.",
     "noCandidate": "No safe Dome is available. Returned to Dome selection.",
-    "states": { "offline": "Host offline", "evacuating": "Evacuating", "closed": "Dome closed", "no_candidate": "No safe destination" },
-    "details": { "evacuating": "Checking destinations without discarding the current scene.", "closed": "The grace period expired.", "no_candidate": "Choose a hosted Dome to continue." }
+    "states": {
+      "offline": "Host offline",
+      "evacuating": "Evacuating",
+      "closed": "Dome closed",
+      "no_candidate": "No safe destination"
+    },
+    "details": {
+      "evacuating": "Checking destinations without discarding the current scene.",
+      "closed": "The grace period expired.",
+      "no_candidate": "Choose a hosted Dome to continue."
+    }
   },
   "hosting": {
     "title": "Dome Hosting",
-    "states": { "closed": "Closed", "owner_hosted": "Hosted on owner device", "community_node_hosted": "Hosted on Community Node", "grace_period": "Grace period", "transferring": "Transferring" },
+    "states": {
+      "closed": "Closed",
+      "owner_hosted": "Hosted on owner device",
+      "community_node_hosted": "Hosted on Community Node",
+      "grace_period": "Grace period",
+      "transferring": "Transferring"
+    },
     "epoch": "Lease epoch: {{value}}",
     "session": "Session: {{value}}",
     "expiry": "Expires: {{value}}",
@@ -83,7 +98,10 @@
     "rejectedResources": "Resource rejections: {{value}}",
     "snapshotBytes": "Snapshot bytes generated: {{value}}",
     "resourceRejected": "The host rejected this operation for resource safety ({{code}}).",
-    "sleep": { "sleeping": "Physics: sleeping", "awake": "Physics: active" },
+    "sleep": {
+      "sleeping": "Physics: sleeping",
+      "awake": "Physics: active"
+    },
     "none": "none",
     "ownerHost": "Host on this device",
     "communityNode": "Destination Community Node",
@@ -98,7 +116,10 @@
     "spawnGuestProp": "Add guest prop for 5 minutes",
     "addPersistentProp": "Add persistent prop",
     "deletePersistentProp": "Delete last persistent prop",
-    "layout": { "committed": "Saved layout revision {{revision}}", "no_op": "The layout has no changes" },
+    "layout": {
+      "committed": "Saved layout revision {{revision}}",
+      "no_op": "The layout has no changes"
+    },
     "resync": "Resync physics snapshots",
     "resyncResult_one": "Received {{count}} snapshot",
     "resyncResult_other": "Received {{count}} snapshots",
@@ -119,7 +140,12 @@
     "connectedTo": "Connected to {{name}}",
     "topology_one": "Topology {{digest}} · {{count}} active connection",
     "topology_other": "Topology {{digest}} · {{count}} active connections",
-    "directions": { "north": "North", "east": "East", "south": "South", "west": "West" },
+    "directions": {
+      "north": "North",
+      "east": "East",
+      "south": "South",
+      "west": "West"
+    },
     "status": {
       "open": "Open",
       "proposed": "Proposed",
@@ -131,7 +157,10 @@
       "draining": "Disconnecting",
       "revoked": "Revoked"
     },
-    "errors": { "load": "Could not load Dome Connections", "action": "Could not update the Connection" }
+    "errors": {
+      "load": "Could not load Dome Connections",
+      "action": "Could not update the Connection"
+    }
   },
   "hud": {
     "leave": "Leave room",
@@ -184,9 +213,24 @@
     "visualOnly": "Visual only",
     "save": "Save Dome",
     "cancel": "Cancel",
-    "materials": { "concrete": "Concrete", "stone": "Stone", "metal": "Metal", "wood": "Wood" },
-    "interactions": { "grab": "Grab", "throw": "Throw", "push": "Push", "sit": "Sit" },
-    "feedback": { "saving": "Saving…", "saved": "Dome saved", "error": "Could not save Dome", "invalid": "Review values outside the supported range" }
+    "materials": {
+      "concrete": "Concrete",
+      "stone": "Stone",
+      "metal": "Metal",
+      "wood": "Wood"
+    },
+    "interactions": {
+      "grab": "Grab",
+      "throw": "Throw",
+      "push": "Push",
+      "sit": "Sit"
+    },
+    "feedback": {
+      "saving": "Saving…",
+      "saved": "Dome saved",
+      "error": "Could not save Dome",
+      "invalid": "Review values outside the supported range"
+    }
   },
   "object": {
     "title": "Shared object",
@@ -219,5 +263,34 @@
     "customizationFailed": "Failed to save Dome customization",
     "moveFailed": "Failed to move the Dome. The source Dome is still available",
     "roomRequired": "Join a Dome before importing an asset"
+  },
+  "management": {
+    "open": "Manage Dome",
+    "ownerLimit": "You already own a Dome in this space. Manage it to restart or delete it.",
+    "public": "Public",
+    "private": "Private channel",
+    "entered": "In Dome",
+    "startAndEnter": "Start hosting and enter",
+    "starting": "Starting hosting…",
+    "checking": "Checking hosting…",
+    "explanation": "Start hosting on this device before entering. Stopping hosting keeps the Dome; deleting it frees your slot in this space.",
+    "readFailed": "Could not check hosting. Refresh to try again.",
+    "startFailed": "Hosting did not become available.",
+    "entryFailed": "Hosting is running, but entry failed. Retry entering.",
+    "cleanupPending": "Dome deleted. Node cleanup is pending; retry to finish.",
+    "retryDelete": "Retry deletion",
+    "refresh": "Refresh hosting",
+    "delete": "Delete Dome",
+    "close": "Close management",
+    "deleteTitle": "Delete “{{title}}”?",
+    "deleteDescription": "This stops hosting and removes this Dome from the space. Existing copies on other peers cannot be erased. Shared assets follow their retention rules.",
+    "cancel": "Cancel",
+    "confirmDelete": "Confirm deletion",
+    "localRunning": "Running on this device",
+    "pendingReadFailed": "Could not check pending deletions. Refresh this space to retry.",
+    "presetUnavailable": "Scene data is not available yet. You can still manage or delete this Dome. Refresh to check again.",
+    "scenePending": "Scene data unavailable",
+    "loadingRooms": "Checking the Dome list…",
+    "staleTarget": "This Dome has changed. Close management and select it again."
   }
 }

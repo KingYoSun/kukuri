@@ -39,8 +39,8 @@ export function writeLastVisitedDome(
 }
 
 export function domeHasActiveHost(room: GameRoomView): boolean {
-  return room.dome_hosting?.kind === 'owner_hosted'
-    || room.dome_hosting?.kind === 'community_node_hosted';
+  return room.phase_label !== 'management_only' && (room.dome_hosting?.kind === 'owner_hosted'
+    || room.dome_hosting?.kind === 'community_node_hosted');
 }
 
 type ResolveDomeEntryOrderInput = {

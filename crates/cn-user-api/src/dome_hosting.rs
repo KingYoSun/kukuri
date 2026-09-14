@@ -38,8 +38,11 @@ use crate::state::UserApiState;
 
 pub(crate) struct DomeHostingNodeState {
     keys: KukuriKeys,
+    lifecycle: Mutex<()>,
     sessions: Arc<Mutex<HashMap<String, DomeSessionRuntime>>>,
     budget: kukuri_core::MetaverseResourceBudgetConfig,
+    #[cfg(test)]
+    lifecycle_pause: Mutex<Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>>,
 }
 
 impl DomeHostingNodeState {
@@ -51,8 +54,11 @@ impl DomeHostingNodeState {
         budget.validate()?;
         let state = Self {
             keys,
+            lifecycle: Mutex::new(()),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             budget,
+            #[cfg(test)]
+            lifecycle_pause: Mutex::new(None),
         };
         let now = chrono::Utc::now().timestamp_millis();
         for assignment in list_recoverable_dome_hosting_assignments(&pool, now).await? {
@@ -86,6 +92,19 @@ impl DomeHostingNodeState {
     }
 }
 
+async fn lock_hosting_lifecycle(
+    pool: &PgPool,
+    instance_id: &str,
+) -> ApiResult<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut transaction = pool.begin().await.map_err(hosting_internal_error)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1020))")
+        .bind(instance_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(hosting_internal_error)?;
+    Ok(transaction)
+}
+
 pub(crate) async fn assign_dome_hosting(
     State(state): State<UserApiState>,
     headers: HeaderMap,
@@ -94,6 +113,10 @@ pub(crate) async fn assign_dome_hosting(
     let hosting = require_hosting(&state)?;
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    // Keep the assignment, its pins and in-memory session in one lifecycle operation.
+    let _lifecycle = hosting.lifecycle.lock().await;
+    let _database_lifecycle =
+        lock_hosting_lifecycle(&state.pool, &request.signed_lease.lease.instance_id).await?;
     let lease = &request.signed_lease;
     if lease.lease.owner_pubkey.as_str() != identity.pubkey
         || lease.lease.instance_id != request.instance_manifest.instance_id
@@ -253,6 +276,9 @@ pub(crate) async fn activate_dome_hosting(
     let hosting = require_hosting(&state)?;
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    // Keep the assignment, its pins and in-memory session in one lifecycle operation.
+    let _lifecycle = hosting.lifecycle.lock().await;
+    let _database_lifecycle = lock_hosting_lifecycle(&state.pool, &request.instance_id).await?;
     let assignment = get_dome_hosting_assignment(&state.pool, &request.instance_id)
         .await
         .map_err(hosting_internal_error)?
@@ -346,6 +372,9 @@ pub(crate) async fn release_dome_hosting(
     let hosting = require_hosting(&state)?;
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    // Keep the assignment, its pins and in-memory session in one lifecycle operation.
+    let _lifecycle = hosting.lifecycle.lock().await;
+    let _database_lifecycle = lock_hosting_lifecycle(&state.pool, &request.instance_id).await?;
     let assignment = get_dome_hosting_assignment(&state.pool, &request.instance_id)
         .await
         .map_err(hosting_internal_error)?
@@ -407,6 +436,11 @@ pub(crate) async fn release_dome_hosting(
     let preset: DomePresetManifestV1 =
         serde_json::from_value(assignment.preset_manifest_json.clone())
             .map_err(hosting_internal_error)?;
+    #[cfg(test)]
+    if let Some((reached, resume)) = hosting.lifecycle_pause.lock().await.take() {
+        reached.notify_one();
+        resume.notified().await;
+    }
     release_dome_hosting_blob_pins(
         &state.pool,
         &format!("{}:{}", request.instance_id, preset.revision),
@@ -437,6 +471,8 @@ pub(crate) async fn dome_hosting_status(
     let hosting = require_hosting(&state)?;
     let identity = require_bearer_identity(&state.pool, &state.jwt_config, &headers).await?;
     let _ = require_consents(&state.pool, identity.pubkey.as_str()).await?;
+    let _lifecycle = hosting.lifecycle.lock().await;
+    let _database_lifecycle = lock_hosting_lifecycle(&state.pool, &instance_id).await?;
     let assignment = get_dome_hosting_assignment(&state.pool, &instance_id)
         .await
         .map_err(hosting_internal_error)?
@@ -447,6 +483,11 @@ pub(crate) async fn dome_hosting_status(
                 "Dome hosting assignment was not found",
             )
         })?;
+    #[cfg(test)]
+    if let Some((reached, resume)) = hosting.lifecycle_pause.lock().await.take() {
+        reached.notify_one();
+        resume.notified().await;
+    }
     let now = chrono::Utc::now().timestamp_millis();
     let mut sessions = hosting.sessions.lock().await;
     if assignment.expires_at <= now {
@@ -950,3 +991,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "dome_hosting_delete_tests.rs"]
+mod deletion_tests;

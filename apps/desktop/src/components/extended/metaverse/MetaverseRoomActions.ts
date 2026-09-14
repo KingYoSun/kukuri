@@ -25,6 +25,8 @@ export type CreateMetaverseRoomActionInput = {
 };
 
 export type MetaverseRoomActions = {
+  listPendingDeletions: (context: SpatialContextV1) => ReturnType<import('@/lib/api').DesktopApi['listPendingDomeDeletions']>;
+  deleteRoom: (context: SpatialContextV1, instanceId: string, generation: number, operationId: string) => Promise<{ deleted: boolean; cleanup_pending: boolean }>;
   createRoom: (input: CreateMetaverseRoomActionInput) => Promise<string>;
   publishRoomEvent: (
     roomId: string,
@@ -58,15 +60,17 @@ export type MetaverseRoomActions = {
   startOwnerHosting: (
     context: SpatialContextV1,
     instanceId: string,
-    endpointId: string
+    endpointId: string,
+    expectedGeneration?: number
   ) => Promise<DomeHostingView>;
   delegateHosting: (
     context: SpatialContextV1,
     instanceId: string,
     nodeId: string,
-    baseUrl: string
+    baseUrl: string,
+    expectedGeneration?: number
   ) => Promise<DomeHostingView>;
-  closeHosting: (context: SpatialContextV1, instanceId: string) => Promise<DomeHostingView>;
+  closeHosting: (context: SpatialContextV1, instanceId: string, expectedGeneration?: number) => Promise<DomeHostingView>;
   setChannelEntryDome?: (
     topicId: string,
     channelId: string,
@@ -76,7 +80,8 @@ export type MetaverseRoomActions = {
     context: SpatialContextV1,
     instanceId: string,
     sequence: number,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ) => Promise<DomePhysicsSnapshotV1>;
   prepareTransition: (
     request: DomeTransitionAdmissionRequestV1

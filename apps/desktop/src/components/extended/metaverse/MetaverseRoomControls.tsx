@@ -137,6 +137,7 @@ export function MetaverseRoomControls({
         data-state={connectionState}
         title={t(`connection.details.${connectionState}`)}
       >
+        {domeRecovery.state === 'online' ? <span>{t('management.entered')}{room.dome_hosting?.host?.kind === 'owner_device' && localPeerId.startsWith(`${room.dome_hosting.host.endpoint_id}:`) ? ` · ${t('management.localRunning')}` : ''} · </span> : null}
         <ConnectionStateIcon state={connectionState} />
         <span>{t(`connection.states.${connectionState}`)}</span>
       </div>

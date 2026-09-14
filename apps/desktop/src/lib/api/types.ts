@@ -404,6 +404,8 @@ export interface DesktopApi {
     phaseLabel: string | null,
     scores: GameScoreView[]
   ): Promise<void>;
+  listPendingDomeDeletions(context: SpatialContextV1): Promise<Array<{ request: { spatial_context: SpatialContextV1; instance_id: string; expected_generation: number; operation_id: string }; title: string; deleted: boolean }>>;
+  deleteDome(context: SpatialContextV1, instanceId: string, generation: number, operationId: string): Promise<{ deleted: boolean; cleanup_pending: boolean }>;
   updateMetaverseRoom(
     topic: string,
     roomId: string,
@@ -415,21 +417,24 @@ export interface DesktopApi {
     spatialContext: SpatialContextV1,
     instanceId: string,
     endpointId: string,
-    leaseDurationMillis: number
+    leaseDurationMillis: number,
+    expectedGeneration?: number
   ): Promise<DomeHostingView>;
   delegateDomeHosting(
     spatialContext: SpatialContextV1,
     instanceId: string,
     nodeId: string,
     baseUrl: string,
-    leaseDurationMillis: number
+    leaseDurationMillis: number,
+    expectedGeneration?: number
   ): Promise<DomeHostingView>;
-  closeDomeHosting(spatialContext: SpatialContextV1, instanceId: string): Promise<DomeHostingView>;
+  closeDomeHosting(spatialContext: SpatialContextV1, instanceId: string, expectedGeneration?: number): Promise<DomeHostingView>;
   submitDomeSessionInput(
     spatialContext: SpatialContextV1,
     instanceId: string,
     sequence: number,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ): Promise<DomePhysicsSnapshotV1>;
   prepareDomeTransition(
     request: DomeTransitionAdmissionRequestV1
