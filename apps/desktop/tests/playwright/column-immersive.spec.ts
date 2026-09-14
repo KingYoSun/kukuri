@@ -33,6 +33,9 @@ async function addColumn(page: Page, name: 'Add Live Column' | 'Add Metaverse Co
 test('Stream and Metaverse fullscreen return to the same Column workspace state', async ({
   page,
 }) => {
+  // Two fullscreen round trips plus a cold 3D admission exceed the default
+  // 30s on the shared CI runner; assertions and actionability remain unchanged.
+  test.slow();
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
   await addColumn(page, 'Add Live Column');
@@ -98,6 +101,21 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
 });
 
 // Metaverse Column 内で room を作成して stage(data-column-gesture-owner)を表示する。
+test('fullscreen at a small effective viewport keeps chat and tools inside the screen', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+  await addColumn(page, 'Add Metaverse Column');
+  const { metaverse } = await createMetaverseRoom(page);
+  await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
+  await page.getByRole('menuitem', { name: 'Enter Metaverse fullscreen' }).click();
+  await expect(metaverse.getByRole('button', { name: 'Dome tools', exact: true })).toBeVisible();
+  await expect(metaverse.locator('.metaverse-chat-form input')).toBeInViewport();
+  const stage = await metaverse.locator('.metaverse-room-stage').boundingBox();
+  expect(stage!.y + stage!.height).toBeLessThanOrEqual(600);
+  await metaverse.getByRole('button', { name: 'Dome tools', exact: true }).click();
+  await expect(metaverse.locator('.metaverse-aux-before').getByRole('button', { name: 'Close Dome tools' })).toBeInViewport();
+});
+
 async function createMetaverseRoom(page: Page) {
   const metaverse = page.getByRole('region', { name: /^Metaverse Column/ });
   const createTrigger = metaverse.getByRole('button', { name: 'Create metaverse room' }).first();

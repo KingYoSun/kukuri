@@ -87,20 +87,56 @@ export function ColumnSurface({
 
   useEffect(() => {
     let restoreFrame = 0;
+    let releaseAnchor = () => {};
+    let cancelResize = () => {};
     const handleFullscreenChange = () => {
       const nextFullscreen = document.fullscreenElement === surfaceRef.current;
+      cancelResize();
+      cancelAnimationFrame(restoreFrame);
+      releaseAnchor();
       if (wasFullscreenRef.current && !nextFullscreen) {
+        const owner = surfaceRef.current;
+        const body = owner?.querySelector<HTMLElement>('.shell-column-body');
+        if (body && owner) {
+          const anchor = body.style.overflowAnchor;
+          body.style.overflowAnchor = 'none';
+          // Native resize and responsive form reflow can finish after the DOM
+          // fullscreen event. Keep the restored reading position until input.
+          releaseAnchor = (event?: Event) => {
+            if (event instanceof KeyboardEvent && event.key === 'Escape') return;
+            cancelResize();
+            cancelAnimationFrame(restoreFrame);
+            body.style.overflowAnchor = anchor;
+            document.removeEventListener('pointerdown', releaseAnchor, true);
+            document.removeEventListener('wheel', releaseAnchor, true);
+            document.removeEventListener('keydown', releaseAnchor, true);
+          };
+          document.addEventListener('pointerdown', releaseAnchor, { capture: true, once: true });
+          document.addEventListener('wheel', releaseAnchor, { capture: true, once: true });
+          document.addEventListener('keydown', releaseAnchor, true);
+        }
         // Restore after the normal layout has committed; fullscreen temporarily
         // removes this Column's width and browsers clamp the Canvas scrollLeft.
-        restoreFrame = requestAnimationFrame(() => {
-          const surface = surfaceRef.current;
-          if (document.fullscreenElement || !surface) return;
-          surface.focus({ preventScroll: true });
-          const body = surface.querySelector('.shell-column-body');
-          const canvas = surface.closest('.shell-column-canvas');
-          if (body) body.scrollTop = bodyScrollRef.current;
-          if (canvas) canvas.scrollLeft = canvasScrollRef.current;
-        });
+        const restore = () => {
+          cancelAnimationFrame(restoreFrame);
+          restoreFrame = requestAnimationFrame(() => {
+            const surface = surfaceRef.current;
+            if (document.fullscreenElement || !surface) { releaseAnchor(); return; }
+            surface.focus({ preventScroll: true });
+            const body = surface.querySelector('.shell-column-body');
+            const canvas = surface.closest('.shell-column-canvas');
+            if (body) body.scrollTop = bodyScrollRef.current;
+            if (canvas) canvas.scrollLeft = canvasScrollRef.current;
+            restoreFrame = requestAnimationFrame(() => {
+              if (!document.fullscreenElement && body) body.scrollTop = bodyScrollRef.current;
+            });
+          });
+        };
+        // WebView2 emits intermediate native sizes on exit. Keep restoring until
+        // the user's next input, rather than treating the first resize as final.
+        window.addEventListener('resize', restore);
+        cancelResize = () => window.removeEventListener('resize', restore);
+        restore();
       }
       wasFullscreenRef.current = nextFullscreen;
       setFullscreen(nextFullscreen);
@@ -109,6 +145,8 @@ export function ColumnSurface({
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       cancelAnimationFrame(restoreFrame);
+      cancelResize();
+      releaseAnchor();
     };
   }, []);
 

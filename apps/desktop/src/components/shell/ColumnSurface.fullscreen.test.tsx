@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 
@@ -9,10 +9,12 @@ let fullscreenElement: Element | null = null;
 afterEach(() => {
   fullscreenElement = null;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('a fullscreen-capable column enters and exits fullscreen from its menu', async () => {
   const user = userEvent.setup();
+  vi.stubGlobal('innerWidth', 1024);
   Object.defineProperty(document, 'fullscreenElement', {
     configurable: true,
     get: () => fullscreenElement,
@@ -31,6 +33,8 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
     value: vi.fn(async () => {
       fullscreenElement = null;
       document.dispatchEvent(new Event('fullscreenchange'));
+      vi.stubGlobal('innerWidth', 1024);
+      window.dispatchEvent(new Event('resize'));
     }),
   });
 
@@ -58,6 +62,7 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   body.scrollTop = 230;
   canvas.scrollLeft = 3200;
   requestFullscreen.mockImplementation(async () => {
+    vi.stubGlobal('innerWidth', 1920);
     fullscreenElement = column;
     document.dispatchEvent(new Event('fullscreenchange'));
     body.scrollTop = 0;
@@ -73,6 +78,15 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   await waitFor(() => expect(column).toHaveFocus());
   expect(body.scrollTop).toBe(230);
   expect(canvas.scrollLeft).toBe(3200);
+  // WebView2 can issue more than one native size while leaving fullscreen.
+  body.scrollTop = 474;
+  fireEvent(window, new Event('resize'));
+  await waitFor(() => expect(body.scrollTop).toBe(230));
+  fireEvent.wheel(document.body);
+  body.scrollTop = 100;
+  fireEvent(window, new Event('resize'));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(body.scrollTop).toBe(100);
 });
 
 test('an unavailable fullscreen API reports a visible assistive failure', async () => {

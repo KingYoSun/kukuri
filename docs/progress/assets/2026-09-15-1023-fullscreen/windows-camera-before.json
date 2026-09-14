@@ -1,0 +1,34 @@
+{
+  "fullscreen": false,
+  "camera": [
+    -1.1218182675089527,
+    1.5288600421475667,
+    5.316807100133772
+  ],
+  "rotation": [
+    -0.13687687230991777,
+    -0.19264425247720024,
+    -0.027147793119680685,
+    0.9712959956382433
+  ],
+  "props": [
+    {
+      "position": [
+        0,
+        0.75,
+        -2.4
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "draft": "final fullscreen draft 1023",
+  "visible": "true",
+  "stageHeight": 544,
+  "canvasScroll": 3192,
+  "bodyScroll": 806.6666870117188,
+  "focusedColumn": true
+}
