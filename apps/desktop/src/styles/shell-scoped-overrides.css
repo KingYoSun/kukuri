@@ -380,7 +380,7 @@
   height: calc(100vh - (var(--space-lg) * 2) - var(--control-center-reserve));
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0 var(--space-lg);
+  padding: 0 var(--space-lg) var(--space-sm);
   scroll-padding-inline: var(--space-lg);
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
@@ -988,4 +988,9 @@
   .shell-phase1 .shell-control-center {
     animation-duration: 1ms;
   }
+}
+
+.shell-phase1 .shell-control-cluster[data-control-center-open='true'] {
+  visibility: hidden;
+  pointer-events: none;
 }

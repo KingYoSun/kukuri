@@ -35,7 +35,7 @@
   .shell-phase1 .shell-column-canvas {
     height: calc(100dvh - env(safe-area-inset-top));
     gap: 0;
-    padding: env(safe-area-inset-top) 0 0;
+    padding: env(safe-area-inset-top) 0 var(--space-sm);
     scroll-padding-inline: 0;
     scroll-snap-type: x mandatory;
     overscroll-behavior-x: contain;
@@ -80,7 +80,7 @@
 
   /* control cluster は左下(desktop と同じ left)に置き、投稿ボタンと下辺を揃える。 */
   .shell-phase1 .shell-control-cluster {
-    bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+    bottom: calc(max(var(--space-sm), env(safe-area-inset-bottom)) + var(--space-sm));
   }
 
   /* アバターボタンの高さを投稿ボタン・Control Center・フィードバックと同じ 44px にする。 */

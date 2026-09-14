@@ -1,4 +1,5 @@
 import { seedConnectivityDiagnostics } from './connectivity-diagnostics-fixture';
+import { installReplyLayoutFixture } from './reply-layout-fixture';
 import { seedProfileConnections } from './profile-connections-fixture';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
@@ -7,6 +8,21 @@ import { seedFeedback } from './tester-feedback-fixture';
 import { expectIndexContentContained, seedIndexLayout } from './community-index-layout-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
+
+for (const [width, theme] of [[1440, 'dark'], [390, 'light']] as const) {
+  test(`reply parent layout ${width} ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(({ theme }) => {
+      localStorage.setItem('kukuri.desktop.locale', 'ja');
+      localStorage.setItem('kukuri.desktop.theme', theme);
+    }, { theme });
+    await page.addInitScript(installReplyLayoutFixture);
+    await page.goto('/');
+    const group = page.locator('.post-reply-group').first();
+    await expect(group).toContainText('CliPeerA');
+    await expect(group).toHaveScreenshot(`reply-parent-${width}-${theme}.png`);
+  });
+}
 import { DESKTOP_THEME_STORAGE_KEY, type DesktopTheme } from '../../src/lib/theme';
 
 // src/i18n/index.ts の DESKTOP_LOCALE_STORAGE_KEY と一致（実読で確認）。

@@ -263,6 +263,22 @@ test('post card renders a compact reply context distinct from a quote repost', (
   // Reply context is its own block, not the quote/repost source card.
   expect(document.querySelector('.post-reply-context')).not.toBeNull();
   expect(document.querySelector('.repost-source-card')).toBeNull();
+  const parent = screen.getByText('parent body');
+  const replyCard = screen.getByText('hello').closest('article')!;
+  expect(replyCard).not.toContainElement(parent);
+  expect(parent.compareDocumentPosition(replyCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('post timestamp includes the full local date and seconds', () => {
+  const view = createView();
+  view.post.created_at = new Date(2026, 8, 14, 3, 32, 1).getTime() / 1000;
+  const { container } = render(<PostCard view={view} onOpenAuthor={vi.fn()} onOpenThread={vi.fn()} onReply={vi.fn()} />);
+  const time = container.querySelector('time');
+  expect(time).toHaveAttribute('datetime', new Date(view.post.created_at * 1000).toISOString());
+  expect(time).toHaveTextContent('2026');
+  expect(time).toHaveTextContent('09');
+  expect(time).toHaveTextContent('14');
+  expect(time).toHaveTextContent(/3:32:01/);
 });
 
 test('post card hides the reply context in thread/tree context', () => {
@@ -279,6 +295,41 @@ test('post card hides the reply context in thread/tree context', () => {
   expect(document.querySelector('.post-reply-context')).toBeNull();
   // The reply's own content still renders.
   expect(screen.getByText('hello')).toBeInTheDocument();
+});
+
+test('reply context uses the immediate parent and preserves author and reply targets', async () => {
+  const view = createReplyView();
+  view.post.root_id = 'root-ancestor';
+  view.post.reply_preview!.root_id = 'root-ancestor';
+  view.post.reply_preview!.reply_to = 'root-ancestor';
+  const onOpenAuthor = vi.fn();
+  const onReply = vi.fn();
+  render(<PostCard view={view} onOpenAuthor={onOpenAuthor} onOpenThread={vi.fn()} onReply={onReply} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Parent Author' }));
+  expect(onOpenAuthor).toHaveBeenCalledWith('b'.repeat(64));
+  await userEvent.click(screen.getByRole('button', { name: 'Reply', exact: true }));
+  expect(onReply).toHaveBeenCalledWith(view.post);
+  expect(screen.getByText('parent body')).toBeVisible();
+  expect(screen.queryByText('root-ancestor')).not.toBeInTheDocument();
+});
+
+test.each(['missing', 'gated'] as const)('reply context stays hidden when %s', (state) => {
+  const view = createReplyView();
+  if (state === 'missing') view.post.reply_preview = null;
+  else view.adultContentGated = true;
+  const { container } = render(<PostCard view={view} onOpenAuthor={vi.fn()} onOpenThread={vi.fn()} onReply={vi.fn()} />);
+  expect(container.querySelector('.post-reply-context')).toBeNull();
+  expect(screen.queryByText('parent body')).not.toBeInTheDocument();
+});
+
+test('attachment-only parent shows a compact label without loading its media', () => {
+  const view = createReplyView();
+  view.post.reply_preview!.content = '';
+  view.post.reply_preview!.attachments = [{ hash: 'd'.repeat(64), mime: 'video/mp4', bytes: 20, role: 'video_original', status: 'Available' }];
+  const { container } = render(<PostCard view={view} onOpenAuthor={vi.fn()} onOpenThread={vi.fn()} onReply={vi.fn()} />);
+  const context = container.querySelector('.post-reply-context')!;
+  expect(context.querySelector('.post-reply-context-body')).not.toBeEmptyDOMElement();
+  expect(context.querySelector('video, img, audio')).toBeNull();
 });
 
 test('post card promotes the original post for a pure repost', async () => {
