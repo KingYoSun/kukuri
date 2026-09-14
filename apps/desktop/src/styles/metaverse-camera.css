@@ -1,0 +1,28 @@
+.metaverse-ui-layer { display: contents; }
+.metaverse-camera-controls {
+  position: absolute;
+  top: 3.75rem;
+  left: 0.75rem;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-width: min(28rem, calc(100% - 1.5rem));
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  color: var(--foreground);
+  font-size: 0.75rem;
+}
+.metaverse-camera-controls summary { cursor: pointer; min-height: 24px; }
+.metaverse-camera-buttons { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.metaverse-camera-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: white;
+  text-shadow: 0 1px 2px black;
+}

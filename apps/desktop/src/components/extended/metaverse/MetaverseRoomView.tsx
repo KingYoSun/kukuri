@@ -30,6 +30,9 @@ import { MetaverseRoomControls } from './MetaverseRoomControls';
 import { ONLINE_DOME_RECOVERY, type DomeRecoveryStatus } from './useMetaverseRoomSession';
 import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
 import type { DomeNeighborTransitionView } from './DomeTransitionModel';
+import { useMetaverseSceneInput } from './useMetaverseSceneInput';
+import { applyCameraCommand, createAvatarCameraState, type CameraCommand } from './MetaverseCameraModel';
+import { MetaverseCameraControls } from './MetaverseCameraControls';
 
 export type MetaverseRoomViewProps = {
   room: GameRoomView | null;
@@ -141,24 +144,57 @@ export function MetaverseRoomView({
   const messageInputRef = useRef<HTMLInputElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const runtime = useColumnRuntime();
-  const controlsEnabled = runtime.active && runtime.visible && !runtime.suspended && sceneFocused;
+  const eligible = Boolean(room) && runtime.active && runtime.visible && !runtime.suspended;
+  const cameraState = useRef(createAvatarCameraState());
+  const { mode, start, release } = useMetaverseSceneInput(stageRef, eligible, `${room?.room_id ?? ''}:${room?.metaverse?.instance_generation ?? ''}`);
+  const controlsEnabled = eligible && sceneFocused && (mode === 'locked' || mode === 'unavailable');
+  const startScene = () => { setHudOpen(false); setChatOpen(false); start(); };
+  const cameraCommand = (command: CameraCommand) => { if (eligible) applyCameraCommand(cameraState.current, command); };
+  const closeChat = () => {
+    setChatOpen(false);
+    if (!hudOpen) start();
+    else release();
+  };
+  const toggleHud = () => {
+    setHudOpen(!hudOpen);
+    if (hudOpen && !chatOpen) start();
+    else release();
+  };
 
   useEffect(() => {
-    if (!room || !controlsEnabled) {
+    if (!room || !eligible) {
       return;
     }
     let focusFrameId = 0;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter' || isEditableTarget(event.target)) {
+      if (event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === 'Escape' && (sceneFocused || (event.target instanceof Node && stageRef.current?.contains(event.target)))) {
+        release();
+        setChatOpen(false);
+        setHudOpen(false);
+        stageRef.current?.focus({ preventScroll: true });
+        return;
+      }
+      if (!sceneFocused || isEditableTarget(event.target)) return;
+      if (event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        applyCameraCommand(cameraState.current, 'reset');
+        return;
+      }
+      if (event.key !== 'Enter' && event.key !== 'Tab') {
         return;
       }
       event.preventDefault();
-      setChatOpen(true);
+      release();
+      const chat = event.key === 'Enter';
+      setChatOpen(chat);
+      setHudOpen(!chat);
       if (focusFrameId) {
         window.cancelAnimationFrame(focusFrameId);
       }
       focusFrameId = window.requestAnimationFrame(() => {
-        messageInputRef.current?.focus();
+        if (chat) messageInputRef.current?.focus();
+        else stageRef.current?.querySelector<HTMLElement>('.metaverse-room-hud button')?.focus();
       });
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -168,7 +204,7 @@ export function MetaverseRoomView({
         window.cancelAnimationFrame(focusFrameId);
       }
     };
-  }, [controlsEnabled, room]);
+  }, [eligible, release, room, sceneFocused]);
 
   if (!room) {
     return null;
@@ -181,15 +217,21 @@ export function MetaverseRoomView({
         className='metaverse-room-stage'
         data-column-gesture-owner='metaverse'
         data-scene-focused={sceneFocused || undefined}
+        data-input-mode={eligible ? mode : 'inactive'}
         tabIndex={0}
         onFocus={(event) => setSceneFocused(event.target === event.currentTarget)}
-        onBlur={() => setSceneFocused(false)}
+        onBlur={() => { setSceneFocused(false); release(); }}
         onPointerDown={(event) => {
           if (
             event.target instanceof Element &&
-            event.target.closest('button, input, textarea, select, a, [contenteditable="true"]')
+            event.target.closest('[data-metaverse-ui], button, input, textarea, select, a, [contenteditable="true"]')
           ) return;
           stageRef.current?.focus({ preventScroll: true });
+        }}
+        onClick={(event) => {
+          if (event.target instanceof Element &&
+            !event.target.closest('[data-metaverse-ui], button, input, textarea, select, a, [contenteditable="true"]') &&
+            eligible && mode !== 'locked') startScene();
         }}
       >
         <MetaverseScene
@@ -211,8 +253,13 @@ export function MetaverseRoomView({
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
           controlsEnabled={controlsEnabled}
+          cameraState={cameraState}
           suspended={runtime.suspended}
           hud={(
+            <>
+            {mode === 'locked' && <span className='metaverse-camera-reticle' aria-hidden='true'>+</span>}
+            <MetaverseCameraControls locale={locale} mode={mode} enabled={eligible} onStart={startScene} onCommand={cameraCommand} />
+            <div className='metaverse-ui-layer' data-metaverse-ui>
             <MetaverseRoomControls
               room={room}
               activeTopic={activeTopic}
@@ -237,7 +284,7 @@ export function MetaverseRoomView({
               messageInputRef={messageInputRef}
               onLeaveRoom={onLeaveRoom}
               onReturnHome={onReturnHome}
-              onToggleHud={() => setHudOpen((open) => !open)}
+              onToggleHud={toggleHud}
               onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
               onImportAvatar={onImportAvatar}
               onImportDefaultAvatar={onImportDefaultAvatar}
@@ -245,13 +292,15 @@ export function MetaverseRoomView({
               onImportTexture={onImportTexture}
               onMoveSharedObject={onMoveSharedObject}
               onInteractWithProp={onInteractWithProp}
-              onCloseChat={() => setChatOpen(false)}
-              onOpenChat={() => setChatOpen(true)}
+              onCloseChat={closeChat}
+              onOpenChat={() => { release(); setChatOpen(true); }}
               onMessageDraftChange={onMessageDraftChange}
               onSendMessage={onSendMessage}
               microphoneEnabled={microphoneEnabled}
               onToggleMicrophone={onToggleMicrophone}
             />
+            </div>
+            </>
           )}
         />
       </div>

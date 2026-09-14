@@ -1,0 +1,55 @@
+import { render } from '@testing-library/react';
+import { afterEach, expect, test, vi } from 'vitest';
+import * as THREE from 'three';
+import { MetaverseFollowCamera } from './MetaverseFollowCamera';
+import { createAvatarCameraState, FALLBACK_CAMERA_BOUNDS } from './MetaverseCameraModel';
+
+const fiber = vi.hoisted(() => ({ frame: null as null | (() => void), context: {} as unknown }));
+vi.mock('@react-three/fiber', () => ({ useFrame: (fn: () => void) => { fiber.frame = fn; }, useThree: () => fiber.context }));
+afterEach(() => { vi.restoreAllMocks(); });
+
+test('actual camera follows the rendered group and mouse/wheel require this canvas ownership', () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  const canvas = document.createElement('canvas');
+  const camera = new THREE.PerspectiveCamera(54, 2);
+  fiber.context = { camera, gl: { domElement: canvas } };
+  const avatar = { current: new THREE.Group() };
+  const bounds = { current: FALLBACK_CAMERA_BOUNDS };
+  const state = { current: createAvatarCameraState() };
+  let locked: Element | null = null;
+  Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => locked });
+  const view = render(<MetaverseFollowCamera avatar={avatar} bounds={bounds} state={state} enabled />);
+  fiber.frame!();
+  const before = camera.position.clone();
+  avatar.current.position.set(5, 2, -3);
+  fiber.frame!();
+  camera.position.clone().sub(before).toArray().forEach((value, index) => expect(value).toBeCloseTo([5, 2, -3][index]));
+  const mouse = () => {
+    const event = new MouseEvent('mousemove');
+    Object.defineProperties(event, { movementX: { value: 200 }, movementY: { value: 40 } });
+    document.dispatchEvent(event);
+  };
+  const yaw = state.current.yaw;
+  mouse();
+  expect(state.current.yaw).toBe(yaw);
+  locked = canvas;
+  mouse();
+  expect(state.current.yaw).not.toBe(yaw);
+  const wheel = new WheelEvent('wheel', { deltaY: 120, cancelable: true });
+  canvas.dispatchEvent(wheel);
+  expect(wheel.defaultPrevented).toBe(true);
+  expect(state.current.zoom).toBeGreaterThan(1);
+  const nativeZoom = new WheelEvent('wheel', { deltaY: 120, ctrlKey: true, cancelable: true });
+  canvas.dispatchEvent(nativeZoom);
+  expect(nativeZoom.defaultPrevented).toBe(false);
+  view.rerender(<MetaverseFollowCamera avatar={avatar} bounds={bounds} state={state} enabled={false} />);
+  const pausedYaw = state.current.yaw;
+  mouse();
+  expect(state.current.yaw).toBe(pausedYaw);
+  const pausedWheel = new WheelEvent('wheel', { deltaY: 120, cancelable: true });
+  canvas.dispatchEvent(pausedWheel);
+  expect(pausedWheel.defaultPrevented).toBe(false);
+  view.unmount();
+  mouse();
+  expect(state.current.yaw).toBe(pausedYaw);
+});

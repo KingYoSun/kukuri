@@ -2,6 +2,9 @@ import { seedConnectivityDiagnostics } from './connectivity-diagnostics-fixture'
 import { installReplyLayoutFixture } from './reply-layout-fixture';
 import { seedProfileConnections } from './profile-connections-fixture';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import enProfile from '../../src/i18n/locales/en/profile.json' with { type: 'json' };
+import jaProfile from '../../src/i18n/locales/ja/profile.json' with { type: 'json' };
+import zhProfile from '../../src/i18n/locales/zh-CN/profile.json' with { type: 'json' };
 import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
 import { seedFeedback } from './tester-feedback-fixture';
@@ -78,6 +81,9 @@ for (const { width, locale, theme } of [
     const profile = page.locator('.shell-column-surface').filter({ has: page.getByTestId('profile-connection-identifier-target') });
     await expect(profile.getByTestId('profile-connection-identifier-target')).toBeVisible();
     await settleForShot(page, theme);
+    // Rows may be visible while the minimum loading notice is still displayed.
+    const messages = { en: enProfile, ja: jaProfile, 'zh-CN': zhProfile };
+    await expect(profile.getByText(messages[locale].connections.loading, { exact: true })).toHaveCount(0);
     await expect(profile).toHaveScreenshot(`profile-connections-${locale}-${theme}.png`);
   });
 }
