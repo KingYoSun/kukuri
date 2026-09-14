@@ -1,6 +1,27 @@
 # #1020 独立監査
 
-## 現在判定: 0c4ff02b delta監査
+## 現在判定: ade5a5ea delta監査
+
+- 対象commit: `ade5a5ea4ee4ebbea0f39c665c207ccd064368be`（比較元 `0c4ff02b`）、Scope revision `2026-09-14-r1`、区分C。
+- 判定: **PASS（コード・境界の独立監査）**。B-1、所有Dome metadata欠落、B-3は解消。blocker 0。
+- inventory: 8群 / 適合8 / 不適合0 / 未分類0。群6のB-3を適合へ更新。固定AC-1～4、INVAR-1/2、適用TR-1～3は、前回までの確認と今回deltaの根拠に対応している。
+- 必須CI・Windows/Linux最終実機・全体gateの完了判定は親担当の別工程であり、このPASSでは代替しない。
+
+### B-3修正の独立確認
+
+GUI session inputのcallerを再列挙し、`useMetaverseRoomSession`のsubmitInputForRoomとsubmitPropMutationの2入口が表示対象のinstance_generationを送ることを確認した。Actions→runtimeApi→IPC requestのoptional expected_generationが欠落せず伝播する。CLI省略は意図的なcurrent targetモードである。
+
+DesktopRuntimeは取得leaseのgenerationと要求generationを署名・入力HTTPより前に照合する。local分岐も取得済みleaseのgenerationをSomeでAppServiceへ渡すため、runtime read後の世代交代でcurrent targetへ戻らない。AppServiceはcanonical Instanceのgenerationを照合し、その後sessions lock内でruntimeとcanonicalのgeneration一致を確認してから署名/applyする。CN分岐は検証済みの取得leaseに束縛したsigned inputを送るため、後からCN世代が交代しても旧世代の署名入力として既存host検証を受ける。返却snapshotの事後拒否に依存しない。
+
+`stale_session_inputs_cannot_mutate_recreated_dome`はG1のJoin/Prop入力をG2作成・hosting後に送り、拒否とbodies不変・participants=0をassertする。CNの`stale_session_input_never_reaches_recreated_community_node_host`は拒否値だけでなくsession-input HTTP hit=0をassertする。読み取った `.codex/plans/1020-input-cn-red.log` は修正前hit=2/期待0の失敗、`1020-input-cn-green.log` は同test成功。`1020-input-app-green.log` はDome26 tests成功。`1020-input-ui-green.log` は4 files/78 tests成功を記録している。これらは実装担当の実行ログを監査者が読み、test本体と照合した証拠であり、監査者による重複build実行ではない。
+
+### その他deltaと停止条件
+
+GUIの2 readiness testは同じassertを要素準備まで待つ変更で、判定内容を削除していない。Linux registry件数139→141はdelete/list_pendingの2登録に対応する。型・CLI schemaのoptional expected_generationを確認し、追加の未分類callerはない。typecheck/lint成功は親担当から受領した。全CIとnative最終確認は親担当が継続する。
+
+固定範囲の残blockerは0。今回deltaと影響先の確認で監査を終了する。対象surfaceが変更された場合だけdeltaを再監査し、以下の旧FAIL履歴は当時の証拠として保持する。
+
+## 0c4ff02b delta監査（当時の判定を保持）
 
 - 対象commit: `0c4ff02b`（比較元 `9382357a`）、Scope revision `2026-09-14-r1`、区分C。
 - 判定: **FAIL**。B-1と所有Dome metadata欠落の管理問題はコード上解消。旧GUI session inputの世代再束縛B-3が残存する。

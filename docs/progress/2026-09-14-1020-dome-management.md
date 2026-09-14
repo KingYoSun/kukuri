@@ -3,7 +3,7 @@
 - Scope revision: 2026-09-14-r1
 - リスク: C
 - 基準commit: 64a1b4729a197e4131703bf724e574f657716e27
-- 状態: 実装・検証中。独立監査、全必須validation、Linux実機確認は未完了。
+- 状態: 実装・Windows/Ubuntu実機・独立監査PASS。最終CIとmerge後判定はPR #1026 / Issue #1020を正本に追跡する。
 - 承認範囲: 実装、Issue作業、コミット、PR、CI成功後のマージ。区分Cの独立監査PASSも維持する。
 
 ## 修正前の再現
@@ -49,7 +49,7 @@ CodeGraphのcaller一覧にはmacro/文字列IPC/一部method呼出しの欠落�
 - Instanceの公開停止はtombstone、topology失効、hosting closeで行う。PresetはContextから独立したowner資産（ADR 0036）であり、Dome Instance削除をPreset全体の破壊へ拡大しない。Current/rollback等の有効な参照と共有assetを保持する。blobの即時消去や他peerの取得済みcopy消去は保証しない。ADR 0040の参照0・24時間graceを変更しない。
 - UI専用の管理対象・確認状態をnetwork sessionから分離。managed targetはaccount/Context/Instance/generationで識別し、旧async結果を現在の対象へ適用しない。
 
-## 検証経過
+## 検証経過（当時の未確認事項を含む履歴）
 
 Ubuntuでの既存Dome確認から、Preset未取得でownerまで一覧から消え、deleteもPreset/派生game blobを要求する残存経路を確認した。`owner_can_manage_and_delete_without_preset_bytes`と`owner_can_delete_without_derived_game_manifest`をred→greenにし、署名済みInstanceだけから管理メタデータ・削除投影を作るよう分離した。後者は空のprojection storeからの管理復元も確認する。入室準備とhostingの状態理由を混同せず、未取得の入室データはnullableなPreset情報とmetadata-only viewで表す。
 
@@ -75,3 +75,21 @@ CI初回の失敗は新scenarioの台帳件数・lane登録、大型ファイル
 - `stale_session_input_never_reaches_recreated_community_node_host`: 同sequenceでCNへのHTTP hitが修正前2、修正後0。PASS。
 - CIで一覧読込み完了前にcreateボタンを同期取得していたshell testを、実際の読込み完了待機へ同期。Linux専用CLI registry件数も追加2command分を139→141へ同期。
 - CI視覚差分のprofile-connectionsは変更対象外の読込み中表示の一時capture。expected/actualを確認し、baselineを変更せず最終headで再実行する。
+
+## 最終確認の対応
+
+製品コードの検証対象は `ade5a5ea`。以後の差分は本作業記録・独立監査記録・UI review・証跡のみ。
+
+| 対象 | 結果・根拠 |
+| --- | --- |
+| AC-1 / TR-2 | 両OSのprocess終了・再起動後にowner管理→再開→authoritative入室を確認。Ubuntuの既存owner一覧欠落も解消 |
+| AC-2 / TR-2/3 | 両OSで削除取消→対象保持、確認削除→空一覧/作成枠復帰→同Context再作成→入室成功。docs各writeの部分失敗/restart/retryはapp-api test |
+| AC-3 / TR-1 | 作成直後に主操作提示、成功時にsceneへfocus/scroll。start失敗とadmission失敗のretry分離はcomponent test |
+| AC-4 | 両OSで「入室済み・この端末で稼働中・外部ピア未接続」を同時表示。所有枠説明/停止/開始中/復帰状態はcomponent fixture |
+| INVAR-1/2 | 独立監査8群適合・未分類0・blocker0、`ade5a5ea` PASS。stale docs/runtime不変、CN入力HTTP0、旧release/status競合、owner/Context境界、safe spawn回帰 |
+| Rust | 最終targeted Dome26 tests / CN input禁止HTTP contract PASS。CN check/testは実DB競合3tests込みでPASS。全non-CN regressionはPRのlinux-rust-tests、compile/staticはlinux-rust-static/windows-fast |
+| Frontend | 最終delta4 files/78 tests、typecheck/lint PASS。全VitestはPR linux-desktop-ui。Storybook/browser/visualはlinux-desktop-browser。旧visual失敗はprofile読込み中captureで、baseline不変 |
+| Scenario | `desktop_smoke_metaverse_dome_delete`の7 steps（create/delete/restart/recreate/entry）PASS。e2e-smokeとCN connectivityはPR linux-smoke/linux-community-node |
+| 実機 | [UI review](../ui-reviews/2026-09-14-1020-dome-management.md)にviewport/OS/WebView/locale、操作と画像、未確認事項を記録 |
+
+local全suiteの途中失敗は消していない。旧CLI台帳/件数とreadiness待機は修正後の対象testおよび最終CIへ対応。負荷中に発生した無関係なshell timeoutは単体rerunとCIで確認する。単体成功を全suite成功へ読み替えない。PR最終headの必須CI成功、監査対象とmerge tree一致、Issue本文更新を満たしてからCompleteとする。
