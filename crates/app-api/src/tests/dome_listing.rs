@@ -31,6 +31,47 @@ impl BlobService for DelayedPresetBlob {
 
 const TOPIC: &str = "kukuri:topic:pending-dome-preset";
 
+#[tokio::test]
+async fn missing_other_instance_keeps_owner_management_topology_available() {
+    let f = fixture().await;
+    let instance = f
+        .app
+        .fetch_dome_instance_manifest(&topic_replica_id(TOPIC), &f.app.keys().public_key())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut other_handles = f.app.services.clone();
+    other_handles.keys = Arc::new(generate_keys());
+    let other = AppService::from_handles(other_handles);
+    let owned = other
+        .create_metaverse_room(
+            TOPIC,
+            CreateMetaverseRoomInput {
+                title: "Available owner".into(),
+                description: String::new(),
+                max_peers: Some(8),
+            },
+        )
+        .await
+        .unwrap();
+    *f.blobs.held_hash.lock().await = Some(instance.0.current_manifest.hash);
+    let context = kukuri_core::SpatialContextV1::Topic {
+        topic_id: TopicId::new(TOPIC),
+    };
+    let topology = other
+        .list_dome_connection_topology(context)
+        .await
+        .expect("missing remote manifest must not block owner management");
+    assert!(
+        topology
+            .resolution
+            .topology
+            .components
+            .iter()
+            .any(|component| component.instance_ids.contains(&owned))
+    );
+}
+
 struct Fixture {
     app: AppService,
     docs: Arc<MemoryDocsSync>,

@@ -535,6 +535,23 @@ pub fn resolve_dome_hosting_state(
         BTreeMap::new();
     for record in records {
         if let DomeHostingRecordV1::LeaseIssued(signed) = record {
+            // A tombstoned owner slot is reused with a higher generation. Keep
+            // authenticated history for monotonic epochs, never as authority.
+            if signed.lease.instance_generation < instance.generation {
+                if signed.lease.instance_id != instance.instance_id
+                    || signed.lease.owner_pubkey != instance.owner_pubkey
+                    || signed.lease.spatial_context != instance.spatial_context
+                {
+                    bail!("historical Dome lease identity mismatch");
+                }
+                verify_envelope_content(
+                    &signed.envelope,
+                    LEASE_KIND,
+                    &signed.lease.owner_pubkey,
+                    &signed.lease,
+                )?;
+                continue;
+            }
             if signed.lease.manifest_version < instance.preset_ref.revision {
                 if signed.lease.instance_id != instance.instance_id
                     || signed.lease.instance_generation != instance.generation

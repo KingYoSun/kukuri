@@ -46,10 +46,10 @@
   },
   "connection": {
     "states": {
-      "live": "在线",
-      "recovering": "恢复中",
-      "stale": "停滞",
-      "offline": "离线"
+      "live": "已连接外部节点",
+      "recovering": "正在更新节点连接",
+      "stale": "节点更新延迟",
+      "offline": "未连接外部节点"
     },
     "details": {
       "live": "正在接收房间事件",
@@ -66,12 +66,27 @@
     "movingTo": "正在确认 {{target}} 的安全出生点…",
     "moved": "已安全移动到 {{target}}。",
     "noCandidate": "没有安全的 Dome。已返回 Dome 选择。",
-    "states": { "offline": "主机离线", "evacuating": "撤离中", "closed": "Dome 已关闭", "no_candidate": "没有安全目的地" },
-    "details": { "evacuating": "保留当前场景并检查目的地。", "closed": "宽限期已结束。", "no_candidate": "请选择正在托管的 Dome。" }
+    "states": {
+      "offline": "主机离线",
+      "evacuating": "撤离中",
+      "closed": "Dome 已关闭",
+      "no_candidate": "没有安全目的地"
+    },
+    "details": {
+      "evacuating": "保留当前场景并检查目的地。",
+      "closed": "宽限期已结束。",
+      "no_candidate": "请选择正在托管的 Dome。"
+    }
   },
   "hosting": {
     "title": "Dome 托管",
-    "states": { "closed": "已停止", "owner_hosted": "由所有者设备托管", "community_node_hosted": "由社区节点托管", "grace_period": "宽限期", "transferring": "迁移中" },
+    "states": {
+      "closed": "已停止",
+      "owner_hosted": "由所有者设备托管",
+      "community_node_hosted": "由社区节点托管",
+      "grace_period": "宽限期",
+      "transferring": "迁移中"
+    },
     "epoch": "租约 epoch：{{value}}",
     "session": "会话：{{value}}",
     "expiry": "到期：{{value}}",
@@ -83,7 +98,10 @@
     "rejectedResources": "资源拒绝次数：{{value}}",
     "snapshotBytes": "快照生成量：{{value}}",
     "resourceRejected": "主机因资源安全限制拒绝了此操作（{{code}}）。",
-    "sleep": { "sleeping": "物理：休眠", "awake": "物理：活动" },
+    "sleep": {
+      "sleeping": "物理：休眠",
+      "awake": "物理：活动"
+    },
     "none": "无",
     "ownerHost": "在此设备上启动托管",
     "communityNode": "目标社区节点",
@@ -98,7 +116,10 @@
     "spawnGuestProp": "添加5分钟访客道具",
     "addPersistentProp": "添加持久道具",
     "deletePersistentProp": "删除最后一个持久道具",
-    "layout": { "committed": "已保存布局修订 {{revision}}", "no_op": "布局没有变化" },
+    "layout": {
+      "committed": "已保存布局修订 {{revision}}",
+      "no_op": "布局没有变化"
+    },
     "resync": "重新同步物理快照",
     "resyncResult_one": "已获取 {{count}} 个快照",
     "resyncResult_other": "已获取 {{count}} 个快照",
@@ -119,7 +140,12 @@
     "connectedTo": "已连接到 {{name}}",
     "topology_one": "拓扑 {{digest}} · {{count}} 个活动连接",
     "topology_other": "拓扑 {{digest}} · {{count}} 个活动连接",
-    "directions": { "north": "北", "east": "东", "south": "南", "west": "西" },
+    "directions": {
+      "north": "北",
+      "east": "东",
+      "south": "南",
+      "west": "西"
+    },
     "status": {
       "open": "空闲",
       "proposed": "已提案",
@@ -131,7 +157,10 @@
       "draining": "正在断开",
       "revoked": "已撤销"
     },
-    "errors": { "load": "无法加载穹顶连接", "action": "无法更新连接" }
+    "errors": {
+      "load": "无法加载穹顶连接",
+      "action": "无法更新连接"
+    }
   },
   "hud": {
     "leave": "离开房间",
@@ -184,9 +213,24 @@
     "visualOnly": "仅显示",
     "save": "保存 Dome",
     "cancel": "取消",
-    "materials": { "concrete": "混凝土", "stone": "石材", "metal": "金属", "wood": "木材" },
-    "interactions": { "grab": "抓取", "throw": "投掷", "push": "推动", "sit": "坐下" },
-    "feedback": { "saving": "保存中…", "saved": "Dome 已保存", "error": "无法保存 Dome", "invalid": "请检查超出支持范围的数值" }
+    "materials": {
+      "concrete": "混凝土",
+      "stone": "石材",
+      "metal": "金属",
+      "wood": "木材"
+    },
+    "interactions": {
+      "grab": "抓取",
+      "throw": "投掷",
+      "push": "推动",
+      "sit": "坐下"
+    },
+    "feedback": {
+      "saving": "保存中…",
+      "saved": "Dome 已保存",
+      "error": "无法保存 Dome",
+      "invalid": "请检查超出支持范围的数值"
+    }
   },
   "object": {
     "title": "共享对象",
@@ -219,5 +263,30 @@
     "customizationFailed": "无法保存 Dome 自定义",
     "moveFailed": "无法迁移 Dome。原 Dome 仍然保留",
     "roomRequired": "导入资源前请先加入 Dome"
+  },
+  "management": {
+    "open": "管理Dome",
+    "ownerLimit": "您在此空间已拥有Dome。可通过管理重新启动或删除。",
+    "public": "公开",
+    "private": "私密频道",
+    "entered": "已进入",
+    "startAndEnter": "在此设备启动并进入",
+    "starting": "正在启动…",
+    "checking": "正在检查运行状态…",
+    "explanation": "请先在此设备启动运行。停止运行会保留Dome；删除后可在此空间重新创建。",
+    "readFailed": "无法获取运行状态。请刷新重试。",
+    "startFailed": "无法确认运行已启动。",
+    "entryFailed": "已运行，但进入失败。请重试进入。",
+    "cleanupPending": "Dome已删除，节点清理尚未完成，请重试。",
+    "retryDelete": "重试删除",
+    "refresh": "刷新运行状态",
+    "delete": "删除Dome",
+    "close": "关闭管理",
+    "deleteTitle": "删除“{{title}}”？",
+    "deleteDescription": "这将停止运行并从空间移除此Dome。无法清除其他节点已取得的副本。共享素材遵循现有保留规则。",
+    "cancel": "取消",
+    "confirmDelete": "确认删除",
+    "localRunning": "正在此设备运行",
+    "pendingReadFailed": "无法检查未完成的删除。请刷新此空间重试。"
   }
 }

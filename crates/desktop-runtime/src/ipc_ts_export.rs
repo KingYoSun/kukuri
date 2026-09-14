@@ -127,6 +127,9 @@ fn export_ipc_types() {
     }
 
     emit_all!(
+        kukuri_app_api::DeleteDomeInput,
+        kukuri_app_api::PendingDomeDeletionView,
+        kukuri_app_api::DeleteDomeView,
         TimelineCursor,
         ChannelAudienceKind,
         ChannelSharingState,

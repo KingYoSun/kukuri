@@ -81,6 +81,7 @@ import type {
   CreateRepostRequest,
   DelegateDomeHostingRequest,
   DeleteDirectMessageMessageRequest,
+  DeleteDomeInput,
   DirectMessageRequest,
   ExportChannelAccessTokenRequest,
   ExportFriendOnlyGrantRequest,
@@ -601,6 +602,8 @@ export const runtimeApi: DesktopApi = {
       } satisfies UpdateGameRoomRequest,
     });
   }),
+  listPendingDomeDeletions: command('listPendingDomeDeletions', async (spatialContext) => invokeDesktop('list_pending_dome_deletions', { spatialContext })),
+  deleteDome: command('deleteDome', async (spatialContext, instanceId, generation, operationId) => invokeDesktop<{ deleted: boolean; cleanup_pending: boolean }>('delete_dome', { request: { spatial_context: spatialContext, instance_id: instanceId, expected_generation: generation, operation_id: operationId } satisfies DeleteDomeInput })),
   updateMetaverseRoom: command('updateMetaverseRoom', async (
     topic,
     roomId,

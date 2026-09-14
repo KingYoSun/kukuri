@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Debug)]
 pub(crate) enum DomeReadUnavailable {
+    Instance,
     Preset,
     Envelope,
 }
@@ -9,6 +10,7 @@ pub(crate) enum DomeReadUnavailable {
 impl std::fmt::Display for DomeReadUnavailable {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
+            Self::Instance => "Dome instance manifest is unavailable",
             Self::Preset => "Dome preset manifest is unavailable",
             Self::Envelope => "signed Dome envelope is unavailable",
         })
@@ -326,7 +328,7 @@ impl AppService {
             &state.current_manifest,
         )
         .await?
-        .ok_or_else(|| anyhow::anyhow!("Dome Instance manifest is unavailable"))?;
+        .ok_or(DomeReadUnavailable::Instance)?;
         kukuri_core::validate_dome_instance_manifest(&manifest)?;
         if state.instance_id != manifest.instance_id
             || state.owner_pubkey != manifest.owner_pubkey

@@ -15,6 +15,8 @@ export function createMetaverseRoomActions({
   onRefresh,
 }: CreateMetaverseRoomActionsArgs): MetaverseRoomActions {
   return {
+    listPendingDeletions: (context) => api.listPendingDomeDeletions(context),
+    deleteRoom: (context, instanceId, generation, operationId) => api.deleteDome(context, instanceId, generation, operationId),
     createRoom: (input) =>
       api.createMetaverseRoom(
         activeTopic,

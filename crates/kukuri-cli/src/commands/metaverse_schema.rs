@@ -87,6 +87,9 @@ pub(super) fn input(name: &str) -> Value {
             json!({"topic": string(), "room_id": string(), "status": game_views::status(), "customization": game_views::customization()}),
         ),
         "get_dome_hosting" | "close_dome_hosting" => view(common),
+        "delete_dome" => view(
+            json!({"spatial_context": spatial_context(), "instance_id": string(), "expected_generation": unsigned(), "operation_id": string()}),
+        ),
         "start_owner_dome_hosting" => view(
             json!({"spatial_context": spatial_context(), "instance_id": string(), "endpoint_id": string(), "lease_duration_millis": integer()}),
         ),
@@ -139,6 +142,9 @@ pub(super) fn input(name: &str) -> Value {
 pub(super) fn output(name: &str) -> Value {
     match name {
         "create_metaverse_room" => string(),
+        "delete_dome" => view(
+            json!({"instance_id": string(), "generation": unsigned(), "deleted": {"type":"boolean"}, "cleanup_pending": {"type":"boolean"}}),
+        ),
         "update_metaverse_room" | "commit_dome_transition" | "abort_dome_transition" => {
             json!({"type": "null"})
         }

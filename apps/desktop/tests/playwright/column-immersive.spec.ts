@@ -81,11 +81,32 @@ async function createMetaverseRoom(page: Page) {
   await metaverse.getByRole('button', { name: 'Create metaverse room' }).first().click();
   await metaverse.getByPlaceholder('Atrium').fill('Gesture lab');
   await metaverse.getByRole('button', { name: 'Create metaverse room' }).last().click();
-  await metaverse.getByRole('button', { name: 'Host on this device' }).click();
+  await metaverse.getByRole('button', { name: 'Start hosting and enter' }).click();
   const stage = metaverse.locator('[data-column-gesture-owner="metaverse"]');
   await expect(stage).toBeVisible();
   return { metaverse, stage };
 }
+
+test('owner management separates stopping, cancellation and deletion, then permits recreation', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 840 });
+  await page.goto('/#/timeline?topic=kukuri%3Atopic%3Ageneral');
+  await addColumn(page, 'Add Metaverse Column');
+  const { metaverse, stage } = await createMetaverseRoom(page);
+  await expect(stage).toBeFocused();
+  await metaverse.getByRole('button', { name: 'Manage Dome', exact: true }).click();
+  const management = metaverse.locator('[aria-label="Manage Dome"]');
+  await management.getByRole('button', { name: 'Close hosting' }).click();
+  await expect(stage).toHaveCount(0);
+  await expect(management.getByRole('button', { name: 'Start hosting and enter' })).toBeEnabled();
+  await management.getByRole('button', { name: 'Delete Dome', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(management).toBeVisible();
+  await management.getByRole('button', { name: 'Delete Dome', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm deletion', exact: true }).click();
+  await expect(metaverse.getByRole('button', { name: 'Manage Dome', exact: true })).toHaveCount(0);
+  const recreated = await createMetaverseRoom(page);
+  await expect(recreated.stage).toBeFocused();
+});
 
 test('desktop Metaverse stage keeps pointer ownership and does not steal Column activation', async ({
   page,

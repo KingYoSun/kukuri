@@ -11,6 +11,7 @@ impl AppService {
         source_topic_id: &str,
         input: MoveDomeInput,
     ) -> Result<DomeMoveView> {
+        let _guard = self.services.dome_mutations.lock().await;
         self.ensure_topic_subscription(source_topic_id).await?;
         let actor = Pubkey::from(self.current_author_pubkey());
         if input.move_id.trim().is_empty() {
@@ -55,6 +56,12 @@ impl AppService {
             {
                 anyhow::bail!("source Dome projection does not match its canonical instance");
             }
+            self.ensure_dome_not_deleting(
+                &source.spatial_context,
+                &source.instance_id,
+                source.instance_generation,
+            )
+            .await?;
             if source.spatial_context == input.target_context {
                 anyhow::bail!("Dome move target must be a different Spatial Context");
             }

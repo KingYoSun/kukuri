@@ -492,7 +492,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     expect(await screen.findByText(expectedMessage)).toBeInTheDocument();
   });
 
-  test('opens the created room after refreshed rooms include it', async () => {
+  test('opens management after creation and waits for explicit hosting before admission', async () => {
     const user = userEvent.setup();
     const baseApi = createDesktopMockApi();
     const createdRoom = {
@@ -522,6 +522,9 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.type(screen.getByPlaceholderText('Atrium'), 'Created room');
     await user.click(screen.getAllByRole('button', { name: 'Create metaverse room' })[1]);
 
+    expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
+    expect(api.publishMetaverseRoomEvent).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Start hosting and enter' }));
     await waitFor(() => {
       expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     });
@@ -791,7 +794,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api, { syncStatus: offlineStatus });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
-    expect(screen.getByText('Offline')).toBeInTheDocument();
+    expect(screen.getByText('External peers unavailable')).toBeInTheDocument();
     expect(screen.getByText('Scene connection: offline')).toBeInTheDocument();
   });
 

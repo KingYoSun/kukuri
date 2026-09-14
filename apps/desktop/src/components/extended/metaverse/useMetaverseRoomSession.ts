@@ -53,6 +53,7 @@ import { useDomeTransitionAttempt } from './useDomeTransitionAttempt';
 
 type UseMetaverseRoomSessionArgs = {
   actions: MetaverseRoomActions;
+  managementActive?: boolean;
   activeTopic: string;
   rooms: GameRoomView[];
   syncStatus: SyncStatus;
@@ -89,6 +90,7 @@ const EMPTY_ROOM_CHAT_HISTORY: NonNullable<
 
 export function useMetaverseRoomSession({
   actions,
+  managementActive = false,
   activeTopic,
   rooms,
   syncStatus,
@@ -103,6 +105,8 @@ export function useMetaverseRoomSession({
   onError,
 }: UseMetaverseRoomSessionArgs) {
   const { t } = useTranslation('metaverse', { lng: locale });
+  const admissionAttempt = useRef(0);
+  useEffect(() => () => { ++admissionAttempt.current; }, [activeTopic, activeChannelId, syncStatus.local_author_pubkey, managementActive]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(initialSelectedRoomId);
   const [admissionConfirmed, setAdmissionConfirmed] = useState(false);
   const [admissionStatus, setAdmissionStatus] = useState<'resolving' | 'admitting' | 'joined' | 'selection'>('resolving');
@@ -629,6 +633,7 @@ export function useMetaverseRoomSession({
     reportError = true,
     preserveCurrent = false
   ): Promise<boolean> => {
+    const attempt = ++admissionAttempt.current;
     const room = rooms.find((candidate) => candidate.room_id === roomId);
     if (!room?.metaverse) return false;
     requestTransitionAbort();
@@ -640,10 +645,12 @@ export function useMetaverseRoomSession({
     setAdmissionStatus('admitting');
     try {
       const avatarCollider = await resolveLocalAvatarCollider();
+      if (attempt !== admissionAttempt.current) return false;
       const snapshot = await submitInputForRoom(room, {
         type: 'join',
         avatar_collider: avatarCollider,
       });
+      if (attempt !== admissionAttempt.current) return false;
       const body = snapshot.bodies.find(
         (candidate) => candidate.entity_id === `avatar:${syncStatus.local_author_pubkey}`
       );
@@ -672,6 +679,7 @@ export function useMetaverseRoomSession({
       onError(null);
       return true;
     } catch (entryError) {
+      if (attempt !== admissionAttempt.current) return false;
       if (!preserveCurrent) {
         setAdmissionConfirmed(false);
         setAdmissionStatus('selection');
@@ -815,7 +823,7 @@ export function useMetaverseRoomSession({
       setAdmissionConfirmed(false);
       setSelectedRoomId(null);
     }
-    if (admissionConfirmed || entryAutoDisabledRef.current) return;
+    if (managementActive || admissionConfirmed || entryAutoDisabledRef.current) return;
     const attemptKey = `${contextKey}:${entryCandidates.map((room) => room.room_id).join(',')}`;
     if (entryAttemptKeyRef.current === attemptKey) return;
     entryAttemptKeyRef.current = attemptKey;
@@ -838,7 +846,7 @@ export function useMetaverseRoomSession({
     return () => {
       cancelled = true;
     };
-  }, [admissionConfirmed, entryCandidates, entryContext, joinRoom, onError, t]);
+  }, [managementActive, admissionConfirmed, entryCandidates, entryContext, joinRoom, onError, t]);
 
   function selectCreatedRoom(roomId: string) {
     pendingCreatedRoomIdRef.current = roomId;

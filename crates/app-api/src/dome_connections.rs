@@ -23,7 +23,29 @@ impl AppService {
             .iter()
             .map(|state| state.record.clone())
             .collect::<Vec<_>>();
-        let resolution = resolve_dome_topology_candidates(&instances, &connections)?;
+        let resolution =
+            if instances.is_empty() {
+                let digest = blake3::hash(&serde_json::to_vec(&serde_json::json!({
+                "spatial_context": spatial_context, "components": [], "active_connection_ids": [],
+            }))?).to_hex().to_string();
+                kukuri_core::DomeTopologyResolutionV1 {
+                    topology: kukuri_core::DomeTopologyV1 {
+                        spatial_context: spatial_context.clone(),
+                        components: vec![],
+                        active_connection_ids: vec![],
+                        topology_digest: digest,
+                    },
+                    rejected_connections: connections
+                        .iter()
+                        .map(|record| kukuri_core::DomeRejectedConnectionV1 {
+                            connection_id: record.agreement.connection_id.clone(),
+                            reason: "instance unavailable".into(),
+                        })
+                        .collect(),
+                }
+            } else {
+                resolve_dome_topology_candidates(&instances, &connections)?
+            };
         let active_ids = resolution
             .topology
             .active_connection_ids
@@ -529,9 +551,15 @@ impl AppService {
                 continue;
             }
             let state: DomeInstanceStateDocV1 = serde_json::from_slice(&record.value)?;
-            if let Some((_, manifest)) = self
+            let resolved = match self
                 .fetch_dome_instance_manifest(replica, &state.owner_pubkey)
-                .await?
+                .await
+            {
+                Ok(value) => value,
+                Err(error) if error.downcast_ref::<DomeReadUnavailable>().is_some() => continue,
+                Err(error) => return Err(error),
+            };
+            if let Some((_, manifest)) = resolved
                 && manifest.status == kukuri_core::DomeInstanceStatusV1::Active
                 && manifest.relationship_detach.is_none()
             {

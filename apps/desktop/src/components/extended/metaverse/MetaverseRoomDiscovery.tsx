@@ -41,6 +41,7 @@ type MetaverseRoomDiscoveryProps = {
   mediaObjectUrls: Record<string, string | null>;
   onCreateRoom: (input: CreateMetaverseRoomInput) => Promise<boolean>;
   onJoinRoom: (roomId: string) => void;
+  onManageRoom?: (roomId: string) => void;
   admissionStatus?: 'resolving' | 'admitting' | 'joined' | 'selection';
   activeChannelId?: string | null;
   configuredEntryInstanceId?: string | null;
@@ -62,6 +63,7 @@ export function MetaverseRoomDiscovery({
   mediaObjectUrls,
   onCreateRoom,
   onJoinRoom,
+  onManageRoom,
   admissionStatus = 'selection',
   activeChannelId = null,
   configuredEntryInstanceId = null,
@@ -249,7 +251,7 @@ export function MetaverseRoomDiscovery({
           </form>
         ) : null}
       </section>
-      ) : null}
+      ) : <Notice>{t('management.ownerLimit')}</Notice>}
       {rooms.length === 0 ? <p className='empty-state'>{t('rooms.empty')}</p> : null}
       <ul className='metaverse-room-grid'>
         {rooms.map((room) => (
@@ -271,8 +273,8 @@ export function MetaverseRoomDiscovery({
             >
               <div className='post-meta'>
                 <span>{room.title}</span>
-                <span>{room.status}</span>
-                <span className='reply-chip'>{room.audience_label}</span>
+                <span>{t(`hosting.states.${room.dome_hosting?.kind ?? 'closed'}`)}</span>
+                <span className='reply-chip'>{t(room.channel_id ? 'management.private' : 'management.public')}</span>
               </div>
               <p>{room.description || t('rooms.noDescription')}</p>
               <div className='metaverse-room-host'>
@@ -286,14 +288,19 @@ export function MetaverseRoomDiscovery({
               <div className='topic-diagnostic topic-diagnostic-secondary'>
                 <span>{t('room.world', { version: room.metaverse?.world_version ?? 1 })}</span>
               </div>
+              {room.host_pubkey === localAuthorPubkey ? (
+                <Button type='button' variant='secondary' disabled={pending} onClick={() => onManageRoom?.(room.room_id)}>
+                  {t('management.open')}
+                </Button>
+              ) : null}
               <Button
                 variant='secondary'
                 type='button'
-                disabled={pending || admissionStatus === 'admitting' || !domeHasActiveHost(room)}
+                disabled={pending || joinedRoomIds.has(room.room_id) || admissionStatus === 'admitting' || !domeHasActiveHost(room)}
                 onClick={() => onJoinRoom(room.room_id)}
               >
                 <Play className='size-4' aria-hidden='true' />
-                {t(domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
+                {t(joinedRoomIds.has(room.room_id) ? 'management.entered' : domeHasActiveHost(room) ? 'room.join' : 'entry.hostUnavailable')}
               </Button>
               {onMoveRoom && room.host_pubkey === localAuthorPubkey ? (
                 <>

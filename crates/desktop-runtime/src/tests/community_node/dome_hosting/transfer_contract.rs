@@ -22,6 +22,7 @@ struct TransferNode {
     acceptances: Mutex<Vec<kukuri_core::SignedDomeHostingAcceptanceV1>>,
     activations: Mutex<Vec<DomeHostingActivationRequest>>,
     candidates: AtomicUsize,
+    releases: Mutex<Vec<kukuri_cn_protocol::DomeHostingReleaseRequest>>,
     policy_update_after_assignment: Mutex<Option<Arc<MockManagedCommunityNodeState>>>,
 }
 
@@ -35,6 +36,7 @@ impl TransferNode {
             acceptances: Mutex::new(Vec::new()),
             activations: Mutex::new(Vec::new()),
             candidates: AtomicUsize::new(0),
+            releases: Mutex::new(Vec::new()),
             policy_update_after_assignment: Mutex::new(None),
         })
     }
@@ -42,6 +44,7 @@ impl TransferNode {
         Router::new()
             .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign))
             .route(DOME_HOSTING_ACTIVATE_PATH, post(activate))
+            .route(kukuri_cn_protocol::DOME_HOSTING_RELEASE_PATH, post(release))
             .route(DOME_HOSTING_LAYOUT_CANDIDATE_PATH, post(candidate))
             .with_state(self.clone())
     }
@@ -627,4 +630,93 @@ async fn public_transfer_entries_cannot_bypass_current_consent_or_configured_nod
             server.abort();
         }
     }
+}
+
+async fn release(
+    State(node): State<Arc<TransferNode>>,
+    Json(request): Json<kukuri_cn_protocol::DomeHostingReleaseRequest>,
+) -> Result<Json<DomeHostingStatusResponse>, StatusCode> {
+    request
+        .signed_close
+        .envelope
+        .verify()
+        .expect("signed close");
+    let epoch = request.signed_close.close.lease_epoch;
+    node.releases.lock().await.push(request.clone());
+    if node.failure.load(Ordering::SeqCst) == 4 {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    Ok(Json(DomeHostingStatusResponse {
+        instance_id: request.instance_id,
+        state: DomeHostingStateKindV1::Closed,
+        lease_epoch: epoch,
+        session_id: None,
+        participants: 0,
+        sleeping: true,
+        signed_heartbeat: None,
+        expires_at: 0,
+        resource_budget: Default::default(),
+        resource_metrics: Default::default(),
+    }))
+}
+
+#[tokio::test]
+async fn deletion_preserves_canonical_close_and_retries_the_same_node_release() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let node = TransferNode::new();
+    let (runtime, url, _, server, _dir) = dome_runtime_with_routes(node.routes()).await;
+    seed_local_community_node_consents(&runtime, &url, 1);
+    let (context, instance) = create_owner(&runtime).await;
+    runtime
+        .delegate_dome_hosting(delegate_request(&node, &url, &context, &instance))
+        .await
+        .unwrap();
+    let input = crate::DeleteDomeRequest {
+        spatial_context: context.clone(),
+        instance_id: instance.clone(),
+        expected_generation: 1,
+        operation_id: "delete-cn".into(),
+    };
+    let mut stale = input.clone();
+    stale.expected_generation = 2;
+    assert!(runtime.delete_dome(stale).await.is_err());
+    assert!(node.releases.lock().await.is_empty());
+    node.failure.store(4, Ordering::SeqCst);
+    let result = runtime.delete_dome(input.clone()).await.unwrap();
+    assert!(result.deleted && result.cleanup_pending);
+    assert!(
+        runtime
+            .app_service
+            .list_game_rooms(context.topic_id().as_str())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        runtime
+            .list_pending_dome_deletions(context.clone())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    node.failure.store(0, Ordering::SeqCst);
+    assert!(!runtime.delete_dome(input).await.unwrap().cleanup_pending);
+    assert!(
+        runtime
+            .list_pending_dome_deletions(context)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let releases = node.releases.lock().await;
+    assert!(releases.len() >= 2);
+    assert!(
+        releases
+            .iter()
+            .all(|r| r.signed_close == releases[0].signed_close)
+    );
+    drop(releases);
+    runtime.shutdown().await;
+    server.abort();
 }

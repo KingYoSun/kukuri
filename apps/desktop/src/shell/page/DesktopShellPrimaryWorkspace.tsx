@@ -736,6 +736,7 @@ export function DesktopShellPrimarySurface({
           />
         ) : activeSurfaceSection === 'game' ? (
           <MetaverseRoomPanel
+            loadError={surfaceGamePanelState.error}
             actions={metaverseActions}
             activeTopic={surfaceTopic}
             rooms={metaverseRooms}

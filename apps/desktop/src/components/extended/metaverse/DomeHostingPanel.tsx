@@ -81,10 +81,13 @@ export function DomeHostingPanel({
       setHosting(null);
       return;
     }
+    let cancelled = false;
+    setHosting(null);
     void actions
       .getHosting(room.metaverse.spatial_context, room.metaverse.instance_id)
-      .then(setHosting)
-      .catch(() => setHosting(null));
+      .then((value) => { if (!cancelled) setHosting(value); })
+      .catch(() => { if (!cancelled) setHosting(null); });
+    return () => { cancelled = true; };
   }, [actions, room?.metaverse]);
   if (!room?.metaverse) return null;
 

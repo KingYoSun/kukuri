@@ -330,6 +330,17 @@ pub(crate) async fn run_desktop_smoke_scenario(
                     });
                     assertion.await.context("assertion timeout")??;
                 }
+                ScenarioStep::DeleteMetaverseDome { title } => {
+                    let topic = runtime.topic_or_default(&scenario.fixtures.topic);
+                    let room = runtime.app()?.list_game_rooms(&topic).await?.into_iter().find(|r| &r.title == title).context("Dome to delete not found")?;
+                    let dome = room.metaverse.context("Dome state missing")?;
+                    let deleted = runtime.app()?.delete_dome(kukuri_app_api::DeleteDomeInput {
+                        spatial_context: dome.spatial_context, instance_id: dome.instance_id,
+                        expected_generation: dome.instance_generation, operation_id: format!("scenario-delete-{}", dome.instance_generation),
+                    }).await?;
+                    anyhow::ensure!(deleted.deleted);
+                    anyhow::ensure!(runtime.app()?.list_game_rooms(&topic).await?.iter().all(|r| &r.title != title));
+                }
                 ScenarioStep::CreateMetaverseDome {
                     title,
                     description,

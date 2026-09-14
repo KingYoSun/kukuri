@@ -59,6 +59,23 @@ impl AppService {
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let dome_hosting = if let Some(metaverse) = row.metaverse.as_ref() {
+                let replica = self
+                    .hosting_context_replica(&metaverse.spatial_context)
+                    .await?;
+                let instance = match self
+                    .hosting_instance(&replica, &metaverse.instance_id)
+                    .await
+                {
+                    Ok(Some(instance)) => instance,
+                    Ok(None) => continue,
+                    Err(error) if error.downcast_ref::<DomeReadUnavailable>().is_some() => continue,
+                    Err(error) => return Err(error),
+                };
+                if instance.status != DomeInstanceStatusV1::Active
+                    || instance.generation != metaverse.instance_generation
+                {
+                    continue;
+                }
                 // Resolve readiness from the canonical Instance, not the cached ref.
                 // A pending Preset keeps its row for refresh; invalid data still fails.
                 match self
@@ -69,7 +86,11 @@ impl AppService {
                     Err(error)
                         if matches!(
                             error.downcast_ref::<DomeReadUnavailable>(),
-                            Some(DomeReadUnavailable::Preset)
+                            Some(
+                                DomeReadUnavailable::Preset
+                                    | DomeReadUnavailable::Instance
+                                    | DomeReadUnavailable::Envelope
+                            )
                         ) =>
                     {
                         continue;
@@ -239,6 +260,7 @@ impl AppService {
         channel_ref: ChannelRef,
         input: CreateMetaverseRoomInput,
     ) -> Result<String> {
+        let _guard = self.services.dome_mutations.lock().await;
         self.ensure_topic_subscription(topic_id).await?;
         let private_state = match channel_ref {
             ChannelRef::Public => None,
@@ -280,7 +302,11 @@ impl AppService {
             Some((_, existing)) if existing.status != DomeInstanceStatusV1::Tombstoned => {
                 anyhow::bail!("the owner already has a Dome in this Spatial Context");
             }
-            Some((_, existing)) => existing.generation.saturating_add(1),
+            Some((_, existing)) => {
+                self.ensure_dome_deletion_finished(&spatial_context, &room_id, existing.generation)
+                    .await?;
+                existing.generation.saturating_add(1)
+            }
             None => 1,
         };
         let preset_id = format!(
@@ -466,6 +492,17 @@ impl AppService {
         room_id: &str,
         input: UpdateMetaverseRoomInput,
     ) -> Result<()> {
+        let _guard = self.services.dome_mutations.lock().await;
+        self.update_metaverse_room_unlocked(topic_id, room_id, input)
+            .await
+    }
+
+    pub(crate) async fn update_metaverse_room_unlocked(
+        &self,
+        topic_id: &str,
+        room_id: &str,
+        input: UpdateMetaverseRoomInput,
+    ) -> Result<()> {
         self.ensure_topic_subscription(topic_id).await?;
         let (source_replica_id, state, mut manifest) = self
             .fetch_game_room_state_and_manifest(topic_id, room_id)
@@ -479,6 +516,14 @@ impl AppService {
             anyhow::bail!("only the metaverse room owner can update Dome customization");
         }
         validate_game_room_transition(&manifest.status, &input.status)?;
+        if let Some(m) = manifest.metaverse.as_ref() {
+            self.ensure_dome_not_deleting(
+                &m.spatial_context,
+                &m.instance_id,
+                m.instance_generation,
+            )
+            .await?;
+        }
         validate_dome_customization(&input.customization)?;
         let now = Utc::now().timestamp_millis();
         let current_metaverse = manifest
@@ -713,6 +758,7 @@ impl AppService {
         topic_id: &str,
         input: ImportMetaverseRoomAssetInput,
     ) -> Result<MetaverseAssetRefView> {
+        let _guard = self.services.dome_mutations.lock().await;
         self.ensure_topic_subscription(topic_id).await?;
         let (source_replica_id, state, mut manifest) = self
             .fetch_game_room_state_and_manifest(topic_id, input.room_id.as_str())
@@ -765,6 +811,12 @@ impl AppService {
         {
             anyhow::bail!("only an active attached Dome instance can import Preset assets");
         }
+        self.ensure_dome_not_deleting(
+            &current.spatial_context,
+            &current.instance_id,
+            current.instance_generation,
+        )
+        .await?;
         let prospective_hash = blake3::hash(&input.bytes).to_hex().to_string();
         if let Some(existing) = current
             .asset_refs

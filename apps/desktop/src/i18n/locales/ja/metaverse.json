@@ -46,10 +46,10 @@
   },
   "connection": {
     "states": {
-      "live": "接続中",
-      "recovering": "復旧中",
-      "stale": "停滞",
-      "offline": "オフライン"
+      "live": "外部ピアに接続中",
+      "recovering": "外部ピア接続を更新中",
+      "stale": "外部ピアの更新が遅延",
+      "offline": "外部ピア未接続"
     },
     "details": {
       "live": "ルームイベントを受信しています",
@@ -66,12 +66,27 @@
     "movingTo": "{{target}}の安全な出現位置を確認しています…",
     "moved": "{{target}}へ安全に移動しました。",
     "noCandidate": "安全なDomeがありません。Dome選択へ戻りました。",
-    "states": { "offline": "ホストがオフライン", "evacuating": "退避中", "closed": "Dome停止", "no_candidate": "安全な移動先なし" },
-    "details": { "evacuating": "現在のシーンを保持したまま移動先を確認しています。", "closed": "猶予期間が終了しました。", "no_candidate": "稼働中のDomeを選択してください。" }
+    "states": {
+      "offline": "ホストがオフライン",
+      "evacuating": "退避中",
+      "closed": "Dome停止",
+      "no_candidate": "安全な移動先なし"
+    },
+    "details": {
+      "evacuating": "現在のシーンを保持したまま移動先を確認しています。",
+      "closed": "猶予期間が終了しました。",
+      "no_candidate": "稼働中のDomeを選択してください。"
+    }
   },
   "hosting": {
     "title": "Domeホスティング",
-    "states": { "closed": "停止中", "owner_hosted": "所有者の端末で稼働中", "community_node_hosted": "コミュニティノードで稼働中", "grace_period": "猶予期間", "transferring": "移管中" },
+    "states": {
+      "closed": "停止中",
+      "owner_hosted": "所有者の端末で稼働中",
+      "community_node_hosted": "コミュニティノードで稼働中",
+      "grace_period": "猶予期間",
+      "transferring": "移管中"
+    },
     "epoch": "リース世代: {{value}}",
     "session": "セッション: {{value}}",
     "expiry": "有効期限: {{value}}",
@@ -83,7 +98,10 @@
     "rejectedResources": "素材の拒否回数: {{value}}",
     "snapshotBytes": "同期データ生成量: {{value}}",
     "resourceRejected": "リソース安全上限によりホストが操作を拒否しました（{{code}}）。",
-    "sleep": { "sleeping": "物理演算: スリープ", "awake": "物理演算: 稼働中" },
+    "sleep": {
+      "sleeping": "物理演算: スリープ",
+      "awake": "物理演算: 稼働中"
+    },
     "none": "なし",
     "ownerHost": "この端末で稼働を開始",
     "communityNode": "移管先コミュニティノード",
@@ -98,7 +116,10 @@
     "spawnGuestProp": "一時オブジェクトを5分間追加",
     "addPersistentProp": "永続オブジェクトを追加",
     "deletePersistentProp": "最後の永続オブジェクトを削除",
-    "layout": { "committed": "レイアウト更新 {{revision}}を保存しました", "no_op": "レイアウトに変更はありません" },
+    "layout": {
+      "committed": "レイアウト更新 {{revision}}を保存しました",
+      "no_op": "レイアウトに変更はありません"
+    },
     "resync": "物理演算の状態を再同期",
     "resyncResult_one": "同期データを{{count}}件取得しました",
     "resyncResult_other": "同期データを{{count}}件取得しました",
@@ -119,7 +140,12 @@
     "connectedTo": "{{name}}に接続中",
     "topology_one": "接続構成 {{digest}}・有効な接続 {{count}}件",
     "topology_other": "接続構成 {{digest}}・有効な接続 {{count}}件",
-    "directions": { "north": "北", "east": "東", "south": "南", "west": "西" },
+    "directions": {
+      "north": "北",
+      "east": "東",
+      "south": "南",
+      "west": "西"
+    },
     "status": {
       "open": "空き",
       "proposed": "提案中",
@@ -131,7 +157,10 @@
       "draining": "解除中",
       "revoked": "解除済み"
     },
-    "errors": { "load": "Domeの接続を取得できませんでした", "action": "接続を更新できませんでした" }
+    "errors": {
+      "load": "Domeの接続を取得できませんでした",
+      "action": "接続を更新できませんでした"
+    }
   },
   "hud": {
     "leave": "ルームから退出",
@@ -184,9 +213,24 @@
     "visualOnly": "表示のみ",
     "save": "Domeを保存",
     "cancel": "キャンセル",
-    "materials": { "concrete": "コンクリート", "stone": "石", "metal": "金属", "wood": "木" },
-    "interactions": { "grab": "掴む", "throw": "投げる", "push": "押す", "sit": "座る" },
-    "feedback": { "saving": "保存中…", "saved": "Domeを保存しました", "error": "Domeを保存できませんでした", "invalid": "対応範囲外の値を確認してください" }
+    "materials": {
+      "concrete": "コンクリート",
+      "stone": "石",
+      "metal": "金属",
+      "wood": "木"
+    },
+    "interactions": {
+      "grab": "掴む",
+      "throw": "投げる",
+      "push": "押す",
+      "sit": "座る"
+    },
+    "feedback": {
+      "saving": "保存中…",
+      "saved": "Domeを保存しました",
+      "error": "Domeを保存できませんでした",
+      "invalid": "対応範囲外の値を確認してください"
+    }
   },
   "object": {
     "title": "共有オブジェクト",
@@ -219,5 +263,30 @@
     "customizationFailed": "Domeカスタマイズを保存できませんでした",
     "moveFailed": "Domeを引っ越せませんでした。元のDomeは維持されています",
     "roomRequired": "アセットを読み込む前にDomeへ参加してください"
+  },
+  "management": {
+    "open": "Domeを管理",
+    "ownerLimit": "この空間には所有するDomeがあります。管理から再開・削除できます。",
+    "public": "公開",
+    "private": "プライベートチャンネル",
+    "entered": "入室済み",
+    "startAndEnter": "この端末で稼働を開始して入室",
+    "starting": "稼働を開始中…",
+    "checking": "稼働状態を確認中…",
+    "explanation": "入室するにはこの端末で稼働を開始してください。稼働終了ではDomeを保持し、削除するとこの空間で作り直せます。",
+    "readFailed": "稼働状態を取得できませんでした。更新して再試行してください。",
+    "startFailed": "稼働開始を確認できませんでした。",
+    "entryFailed": "稼働中ですが入室に失敗しました。入室を再試行してください。",
+    "cleanupPending": "Domeは削除済みです。ノード側の終了処理が残っています。再試行してください。",
+    "retryDelete": "削除処理を再試行",
+    "refresh": "稼働状態を更新",
+    "delete": "Domeを削除",
+    "close": "管理を閉じる",
+    "deleteTitle": "「{{title}}」を削除しますか？",
+    "deleteDescription": "稼働を終了し、この空間からDomeを削除します。他のピアが取得済みのコピーは消去できません。共有素材は既存の保持規則に従います。",
+    "cancel": "キャンセル",
+    "confirmDelete": "削除を確定",
+    "localRunning": "この端末で稼働中",
+    "pendingReadFailed": "未完了の削除処理を取得できませんでした。この空間を更新して再試行してください。"
   }
 }

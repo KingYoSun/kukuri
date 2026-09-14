@@ -71,6 +71,14 @@ impl CommandHandler for Handler {
                     .await
                     .map_err(command_error)?,
             ),
+            "delete_dome" => encode(
+                runtime
+                    .delete_dome(decode::<kukuri_desktop_runtime::DeleteDomeRequest>(
+                        payload,
+                    )?)
+                    .await
+                    .map_err(command_error)?,
+            ),
             "close_dome_hosting" => encode(
                 runtime
                     .close_dome_hosting(decode::<CloseDomeHostingRequest>(payload)?)
@@ -213,6 +221,7 @@ pub(super) fn registrations() -> Vec<CommandRegistration> {
         ("start_owner_dome_hosting", Write),
         ("delegate_dome_hosting", Write),
         ("close_dome_hosting", Destructive),
+        ("delete_dome", Destructive),
         ("submit_dome_session_input", Write),
         ("prepare_dome_transition", Write),
         ("preview_dome_transition_access", Read),

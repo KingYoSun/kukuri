@@ -32,6 +32,8 @@ type LiveGameMock = Pick<
   | 'createGameRoom'
   | 'createMetaverseRoom'
   | 'updateGameRoom'
+  | 'listPendingDomeDeletions'
+  | 'deleteDome'
   | 'updateMetaverseRoom'
   | 'getDomeHosting'
   | 'startOwnerDomeHosting'
@@ -306,6 +308,16 @@ export function createLiveGameMock(runtime: MockRuntime): LiveGameMock {
             }
           : room
       );
+    },
+    async listPendingDomeDeletions() { return []; },
+    async deleteDome(context, instanceId, generation) {
+      const rooms = gameRoomsByTopic[context.topic_id] ?? [];
+      const room = rooms.find((r) => r.room_id === instanceId);
+      if (!room?.metaverse || room.host_pubkey !== syncStatus.local_author_pubkey || room.metaverse.instance_generation !== generation
+        || JSON.stringify(room.metaverse.spatial_context) !== JSON.stringify(context)) throw new Error('DOME_DELETE_STALE_INSTANCE');
+      gameRoomsByTopic[context.topic_id] = rooms.filter((r) => r !== room);
+      hostingViews.delete(instanceId);
+      return { deleted: true, cleanup_pending: false };
     },
     async updateMetaverseRoom(
       topic,

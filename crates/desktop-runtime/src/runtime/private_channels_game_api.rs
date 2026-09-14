@@ -3,6 +3,41 @@ use super::*;
 // capability registry の永続化はラッパー側の手動 persist ではなく、AppService へ注入した
 // write-through callback(registry 変異時に発火)が担う(WP-C2 boundary)。
 impl DesktopRuntime {
+    pub async fn list_pending_dome_deletions(
+        &self,
+        context: kukuri_core::SpatialContextV1,
+    ) -> Result<Vec<kukuri_app_api::PendingDomeDeletionView>> {
+        self.app_service.list_pending_dome_deletions(context).await
+    }
+
+    pub async fn delete_dome(
+        &self,
+        request: crate::DeleteDomeRequest,
+    ) -> Result<kukuri_app_api::DeleteDomeView> {
+        let mut result = self.app_service.delete_dome(request.clone()).await?;
+        if let Some((url, signed_close_json)) =
+            self.app_service.dome_deletion_release(&request).await?
+        {
+            let signed_close = serde_json::from_str(&signed_close_json)?;
+            result.cleanup_pending = self
+                .release_dome_hosting_on_community_node(
+                    &url,
+                    &DomeHostingReleaseRequest {
+                        instance_id: request.instance_id.clone(),
+                        signed_close,
+                    },
+                )
+                .await
+                .is_err();
+        }
+        if !result.cleanup_pending {
+            self.app_service
+                .finish_dome_deletion_release(&request)
+                .await?;
+        }
+        Ok(result)
+    }
+
     pub async fn preview_dome_transition_access(
         &self,
         request: PrepareDomeTransitionRequest,

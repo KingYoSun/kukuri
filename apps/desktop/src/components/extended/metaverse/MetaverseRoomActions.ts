@@ -25,6 +25,8 @@ export type CreateMetaverseRoomActionInput = {
 };
 
 export type MetaverseRoomActions = {
+  listPendingDeletions: (context: SpatialContextV1) => ReturnType<import('@/lib/api').DesktopApi['listPendingDomeDeletions']>;
+  deleteRoom: (context: SpatialContextV1, instanceId: string, generation: number, operationId: string) => Promise<{ deleted: boolean; cleanup_pending: boolean }>;
   createRoom: (input: CreateMetaverseRoomActionInput) => Promise<string>;
   publishRoomEvent: (
     roomId: string,
