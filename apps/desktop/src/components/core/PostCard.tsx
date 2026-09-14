@@ -414,7 +414,19 @@ export function PostCard({
               {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
             </button>
             {replyPreview.content.trim().length > 0 ? (
-              <div className='post-reply-context-body post-copy-wrap'>
+              <div
+                className='post-reply-context-body post-copy-wrap'
+                role={!readOnly && canOpenThread ? 'button' : undefined}
+                tabIndex={!readOnly && canOpenThread ? 0 : undefined}
+                onClick={!readOnly && canOpenThread ? openPrimaryTarget : undefined}
+                onKeyDown={(event) => {
+                  if (readOnly || !canOpenThread || event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openPrimaryTarget();
+                  }
+                }}
+              >
                 <SmartReferenceText
                   text={replyPreview.content}
                   className='post-copy-wrap'

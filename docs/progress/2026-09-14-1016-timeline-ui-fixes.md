@@ -27,7 +27,7 @@ CodeGraphからPostCardのcallerを確認: TimelineFeed、CommunityIndexWorkspac
 - mobile bottom barの既存2件、account-menu、column-resize-contextはtargeted runで確認。
 - 最初の`cargo xtask desktop-ui-check`: lint/typecheck成功後、unit/shell計1658件中1655件成功・3件失敗。トピックとリポストの5秒timeout、および後続testの状態混入。Rust build等と同時実行した際の結果で、topics全10件の単独再実行は成功。残る再実行とgate構成要素の結果は以下へ追記する。
 - `cargo xtask check`: Rust clippy/Tauri check成功、追加したtestのTesting Libraryに非対応の`exact` optionでtypecheck失敗。正規表現の名前一致へ修正済み。最終desktop-lintの結果を追記する。
-- `cargo xtask test`、Storybook build、全browser/visual、最終CI: 実行中。
+- `cargo xtask test`、Storybook build、全browser/visualの結果は追記節を参照。PR headの最終CIはchecksへ集約。
 - Linux visual baseline: workflow run `34794515269`成功。追加のExplore変更後も同workflowで再生成する。
 
 必須検証を省略して成功とみなさない。既存suiteのtimeoutは閾値を緩めず対象再実行で切り分け、AC/INVARの対象差分がない成功項目を理由なく繰り返さない。
@@ -43,3 +43,7 @@ CodeGraphからPostCardのcallerを確認: TimelineFeed、CommunityIndexWorkspac
 - Browser testが既存`docs/progress/assets/992/`の2画像を再生成したため、それらの無関係な生成差分は復元して本PRに含めない。
 
 この記録は各確認時点の証拠であり、PR headの最終CI・merge commit・IssueのComplete判定はPR/Issueの現在判定を参照する。手順や必須検証の免除は行わない。
+
+- 最終差分確認で親本文の既存スレッド遷移が外出しにより失われるRegressionを検出。失敗testを先に確認し、同じ遷移をpointer/keyboardで維持した。省略内の参照がfocusされた場合だけ行制限を解除する。PostCard/formatter 27件を再確認。
+- `cargo xtask test`のRust nextest・harness・doctestは成功。frontendは1665件中1662件成功・topicsの3件失敗（timeoutと後続の状態混入）。対象topics/reactionsファイルの最終再実行は15/15成功（33.44秒）。
+- Chromiumの200%相当CSS zoomで返信・日時とExplore tabsを描画確認。対象componentの横overflowは0、3ボタンの上辺は一致。OS/browser native zoomそのものの検証とは区別する。

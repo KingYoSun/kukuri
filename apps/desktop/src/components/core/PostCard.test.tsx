@@ -304,7 +304,12 @@ test('reply context uses the immediate parent and preserves author and reply tar
   view.post.reply_preview!.reply_to = 'root-ancestor';
   const onOpenAuthor = vi.fn();
   const onReply = vi.fn();
-  render(<PostCard view={view} onOpenAuthor={onOpenAuthor} onOpenThread={vi.fn()} onReply={onReply} />);
+  const onOpenThread = vi.fn();
+  render(<PostCard view={view} onOpenAuthor={onOpenAuthor} onOpenThread={onOpenThread} onReply={onReply} />);
+  await userEvent.click(screen.getByText('parent body'));
+  expect(onOpenThread).toHaveBeenCalledWith(view.threadTargetId);
+  screen.getByText('parent body').closest('[role="button"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(onOpenThread).toHaveBeenCalledTimes(2);
   await userEvent.click(screen.getByRole('button', { name: 'Parent Author' }));
   expect(onOpenAuthor).toHaveBeenCalledWith('b'.repeat(64));
   await userEvent.click(screen.getByRole('button', { name: /^Reply$/ }));

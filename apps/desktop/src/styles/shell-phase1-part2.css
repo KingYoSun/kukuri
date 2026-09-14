@@ -638,6 +638,15 @@
   min-width: 0;
 }
 
+/* Keyboard focus must not disappear inside a clamped SmartReferenceText link. */
+.post-reply-context-body:focus-within {
+  -webkit-line-clamp: unset;
+}
+
+.post-reply-context-body[role='button'] {
+  cursor: pointer;
+}
+
 .post-source-topic {
   display: inline-flex;
   align-items: center;
