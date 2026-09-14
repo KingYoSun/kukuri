@@ -38,7 +38,7 @@ TR-1の3→1→2→3と同時HUD/chat、TR-2の表示中追従／手動離脱を
 Computer Useの`@oai/sky`でWindowsローカルとUbuntu24 Remote Desktopを操作した。Ubuntu24へのsource反映と自動検証は`ssh local2`で実施した。
 
 - Ubuntu24: 実際のowner-hosted Domeへ入室。1列でHUD/chat/送信/閉じるが収まり、1→3列でheader操作部が表示内へ戻り、`layout draft 1022`と入室状態が継続した。
-- Windows: 元の開発profileで修正前の管理面と過伸長を確認したが、再起動後の既存roomでdocs-syncのclosed channelエラーがあり、安定した比較用sessionを作れなかった。表示と入力の比較は、既存Tauri review host＋本番frontend＋mock DesktopApiの隔離WebView2 fixtureで行う。これは実WebView描画の検証であり、Windowsの実network／admissionの成功証明とは区別する。
+- Windows: 元の開発profileで修正前の管理面と過伸長を確認したが、再起動後の既存roomでdocs-syncのclosed channelエラーがあり、安定した比較用sessionを作れなかった。表示と入力の比較は、既存Tauri review host＋本番frontend＋mock DesktopApiの隔離WebView2 fixtureで実施した。1280×800 client相当、日本語light、1列のHUD/chat分離、送信／閉じるへの到達、1→3列のheader位置補正と`layout draft 1022`保持を確認した。これは実WebView描画の検証であり、Windowsの実network／admissionの成功証明とは区別する。
 - 隔離hostのタイトルにある#956は再利用したreview executableの固定名。今回のfixtureとsourceは#1022用である。実機画像の元資料として9月14日の未追跡報告は変更・同梱していない。
 
 ![Ubuntu24 before](assets/2026-09-15-1022-layout/linux-before.png)
@@ -49,15 +49,22 @@ Computer Useの`@oai/sky`でWindowsローカルとUbuntu24 Remote Desktopを操�
 
 ![Windows WebView2 fixture before](assets/2026-09-15-1022-layout/windows-before-one.png)
 
+![Windows WebView2 1列 after](assets/2026-09-15-1022-layout/windows-after-one.png)
+
+![Windows WebView2 3列への復元とdraft](assets/2026-09-15-1022-layout/windows-after-three.png)
+
+[Windowsフォーム before](assets/2026-09-15-1022-layout/windows-fixture-before-form.png) / [after](assets/2026-09-15-1022-layout/windows-after-form.png) / [管理と接続group after](assets/2026-09-15-1022-layout/windows-after-wide.png)
+
 ## 検証状況
 
 - `cargo xtask check`: 成功。
 - 対象component／Canvas: 21 files、160 tests成功。追加resize単体3件も成功。
 - 新規browser: Ubuntu24で状態継続・副作用9件成功、フォーム上限／reflow1件成功。既存Explore／immersive／camera回帰は20件成功し、狭幅HUDのtouch修正後に残るmobile試験も成功。
-- `cargo xtask test`: non-CN Rust 940件成功（4件skip）。harness・frontendの最終結果を後記する。
-- `cargo xtask desktop-ui-check`: Windowsでは実行中xtask.exeの置換に失敗したため、同一sourceから構築した`target/debug/xtask.exe desktop-ui-check`へ切替。lint／typecheck成功、Vitestは1687件成功・shell統合5件timeout。該当3ファイルを再確認中。Storybook／browser／visualの補完結果を後記する。
+- `cargo xtask test`: non-CN Rust 940件成功（4件skip）、harness23件とdoctests成功。frontendは1687件成功・無関係なshell統合5件失敗。CIを全体gateとして補完する。
+- `cargo xtask desktop-ui-check`: Windowsでは実行中xtask.exeの置換に失敗したため、同一sourceから構築した`target/debug/xtask.exe desktop-ui-check`へ切替。lint／typecheck成功、Vitestは1687件成功・shell統合5件timeout。該当3ファイル再試験で20件成功・topics2件timeout（同じassertionの緩和はしない）。Storybook build成功。Ubuntu24で最終sourceをbuildし、browser全328件成功。
+- Storybook: 通常／狭幅／offline／closed×light/darkの8条件でaxe違反0。これは実screen reader検証の代替とはしない。
 - Linux visual: 38件中37件成功。開発者設定ja/darkのログ行・focus outline差分1件は基準commitでも再現し、今回のCSS対象外。既存baselineを無条件更新せず、CIの判定と分けて記録する。
 - 独立監査: 通常B、共有domain guard変更なし、Reopenでもないため必須条件には該当しない。
 - 未確認: 実screen reader、物理touch端末、定量GPU計測、Windows実runtimeの長時間通信。fullscreen黒画面は#1023の範囲。
 
-PRの最終headのCI成功とマージ後の対象一致を確認してからCompleteにする。検証中の項目を成功とは扱わない。
+[PR #1028](https://github.com/KingYoSun/kukuri/pull/1028)の最終headのCI成功とマージ後の対象一致を確認してからCompleteにする。ローカルの全体suite失敗を成功とは扱わない。
