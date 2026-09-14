@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 
-type CameraProbe = { cameraMoves: number[][]; cameraModelViewMatrix?: number[] };
+type CameraProbe = { cameraMoves: { position: number[]; animation: string }[]; cameraModelViewMatrix?: number[] };
 
 test('camera capture, real wheel and keyboard UI round trips preserve the Column and draft', async ({ page }) => {
   // Cover the primitive fallback and avoid asynchronous VRM bounds changes in the matrix probe.
@@ -34,23 +34,23 @@ test('camera capture, real wheel and keyboard UI round trips preserve the Column
   if (await create.getAttribute('aria-expanded') === 'false') await create.click();
   await column.getByPlaceholder('Atrium').fill('Camera regression');
   await column.getByRole('button', { name: 'Create metaverse room' }).last().click();
-  await column.getByRole('button', { name: 'Start hosting and enter' }).click();
-  const stage = column.locator('[data-column-gesture-owner="metaverse"]');
-  await expect(stage).toBeVisible();
   await page.evaluate(() => {
     const api = window.__KUKURI_DESKTOP__!;
     const submit = api.submitDomeSessionInput.bind(api);
     const probe = window as unknown as CameraProbe;
     probe.cameraMoves = [];
     api.submitDomeSessionInput = (...args) => {
-      if (args[3].type === 'move') probe.cameraMoves.push([...args[3].position]);
+      if (args[3].type === 'move') probe.cameraMoves.push({ position: [...args[3].position], animation: String(args[3].animation) });
       return submit(...args);
     };
   });
-  // Drain the initial avatar publication; camera gestures must add no move inputs.
-  await page.waitForTimeout(250);
   const clearMoves = () => page.evaluate(() => { (window as unknown as CameraProbe).cameraMoves = []; });
   const moves = () => page.evaluate(() => (window as unknown as CameraProbe).cameraMoves);
+  await column.getByRole('button', { name: 'Start hosting and enter' }).click();
+  const stage = column.locator('[data-column-gesture-owner="metaverse"]');
+  await expect(stage).toBeVisible();
+  // A loaded renderer can publish its first transform much later than DOM visibility.
+  await expect.poll(async () => (await moves()).at(-1)?.animation).toBe('idle');
   await clearMoves();
   await expect(stage).toHaveAttribute('data-input-mode', 'idle');
   await stage.locator('canvas').click({ position: { x: 550, y: 260 } });
@@ -73,13 +73,13 @@ test('camera capture, real wheel and keyboard UI round trips preserve the Column
   expect(await scrolls()).toEqual(before);
   expect(await moves()).toEqual([]);
   await page.keyboard.down('w');
-  await expect.poll(async () => (await moves()).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await moves()).at(-1)?.animation).toBe('walk');
   await page.keyboard.press('Tab');
   await expect(stage).toHaveAttribute('data-input-mode', 'idle');
   await expect(stage.getByRole('button', { name: 'Debug details' })).toBeFocused();
   expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
   // Opening UI clears held keys even if keyup arrives outside the canvas.
-  await page.waitForTimeout(250);
+  await expect.poll(async () => (await moves()).at(-1)?.animation).toBe('idle');
   await clearMoves();
   await page.keyboard.up('w');
   await page.waitForTimeout(200);

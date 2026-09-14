@@ -67,8 +67,17 @@ Windowsでは全身・足元、Pointer Lock取得、マウス移動による回�
 
 Windowsの1列でも全身を確認できた。3列への復元でColumnが右へ残る既存の#1022は、横scrollで戻して確認を続けた。Windowsの2560×1440 fullscreenでは#1023の黒画面と操作停止を再現。Ubuntu24のfullscreenでは描画は残ったが、既存runtimeの非active／suspendに従って操作停止となる場合があった。通常表示への復帰を確認した。これらのfullscreen／Column位置の修正は本PRへ混ぜていない。
 
-Ubuntu24 RDPではlock取得・解除、wheel zoom、Tab／Enter／Escapeを確認した。一方、Computer Useによる絶対座標の移動は、固定中に相対mousemoveとして届かず、同じ入力は解除後には届いた。実マウスでの回転はこの自動操作結果から保証せず、追加の利用者確認を依頼した。RDP越しの相対入力の未確認をbrowser成功で置き換えない。追加結果はPRの実機確認記録を参照する。
+Ubuntu24 RDPではlock取得・解除、wheel zoom、Tab／Enter／Escapeを確認した。一方、Computer Useによる絶対座標の移動は、固定中に相対mousemoveとして届かず、同じ入力は解除後には届いた。利用者の追加確認では、RDP経由では回転せず、Ubuntu24実機を直接操作した場合は回転した。直接操作の成功とRDP経由の制約を区別する。
 
-cameraは既存frame loop内の固定量の計算で、frameごとのReact／store更新やnetworkを追加しない。boundsの頂点計算はVRMロード時だけ行う。通常の追従・resetへ遅延補間を追加していないため、reduced motionでも直接応答する。定量的なGPU frame time比較、物理touch端末、実screen reader、Linuxのローカル物理マウスは未確認。
+cameraは既存frame loop内の固定量の計算で、frameごとのReact／store更新やnetworkを追加しない。boundsの頂点計算はVRMロード時だけ行う。通常の追従・resetへ遅延補間を追加していないため、reduced motionでも直接応答する。定量的なGPU frame time比較、物理touch端末、実screen readerは未確認。
 
 データ分類は[ADR 0050](../adr/0050-metaverse-camera-local-state.md)、UIの契約は[DESIGN](../../DESIGN.md)。カメラstateの保存・送信、カメラ衝突、新しい3D pickingは追加していない。
+
+## CIで検出したテストの待機条件
+
+最終差分のCIでは次の2件の待機条件不足を修正した。基準画像・許容差・製品挙動は変更していない。
+
+- camera試験: DOM表示から250ms待つだけでは、負荷の高いCIで初回のidle座標通知が後から到着し、camera操作の副作用と誤判定した。入室前にAPIを観測し、初回idle通知を確認してから集計をクリアする。W移動後のUI切替も、停止を示すidle通知を待ってからkeyup後の禁止I/Oを確認する。
+- 既存profile視覚試験: 一覧行の表示だけでは最低表示時間付きのloading Noticeが残る。翻訳resourceのloading文言が消えることを待って、従来と同じbaselineへ比較する。Ubuntu24／Chromium、CIモードで3条件のpixel比較が成功した。
+
+camera試験は同じ条件で3回連続実行し、初回通知・実描画の回転／zoom・移動API分離を確認した。最終CIの結果はPR checksへ集約する。
