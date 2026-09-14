@@ -51,6 +51,10 @@ CodeGraphのcaller一覧にはmacro/文字列IPC/一部method呼出しの欠落�
 
 ## 検証経過
 
+独立監査の初回commit `e5ced6b0` はCN releaseと新generation activationの競合B-1でFAIL。実際のDB close後・pin/runtime cleanup前にbarrierを置くtestで、新runtimeが消えることを再現した。assign/activate/releaseのprocess内排他とDB advisory transaction lockで修正する。旧FAIL記録は独立監査記録へ残し、修正commitをdelta監査する。
+
+CI初回の失敗は新scenarioの台帳件数・lane登録、大型ファイルbaseline、browser mockでの停止ボタンと再作成時のaccordion状態だった。scenarioを21件へ更新してnightlyへ配線し、browserは失敗した同じflowで再試行成功。大型ファイル6件の増加は今回のlifecycle guard/内部呼出し・公開facade・一覧のcanonical照合・空topology・IPC・scenario追加に限定して承認対象差分へ記録する。削除本体は独立ファイルへ配置済みで、既存の大きなmoduleをこの修正で全面分割せず、変更6pathだけbaselineを更新する。
+
 - 成功: frontend targeted 18 files / 127 tests。app-api Dome関連22 tests。IPC型生成、frontend typecheck/lint（途中修正後は最終headで再確認する）。
 - Windows: 同じ保存データで停止カード→管理→明示稼働→admission後のscene表示・表示位置移動を確認。削除/再作成・最終headの再確認は継続中。
 - 全frontend suite、全必須gate、CN失敗contract、Playwright flow、harness、Linux実機: 実行中または未実行。

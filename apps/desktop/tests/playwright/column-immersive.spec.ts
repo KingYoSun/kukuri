@@ -78,7 +78,8 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
 // Metaverse Column 内で room を作成して stage(data-column-gesture-owner)を表示する。
 async function createMetaverseRoom(page: Page) {
   const metaverse = page.getByRole('region', { name: /^Metaverse Column/ });
-  await metaverse.getByRole('button', { name: 'Create metaverse room' }).first().click();
+  const createTrigger = metaverse.getByRole('button', { name: 'Create metaverse room' }).first();
+  if (await createTrigger.getAttribute('aria-expanded') === 'false') await createTrigger.click();
   await metaverse.getByPlaceholder('Atrium').fill('Gesture lab');
   await metaverse.getByRole('button', { name: 'Create metaverse room' }).last().click();
   await metaverse.getByRole('button', { name: 'Start hosting and enter' }).click();

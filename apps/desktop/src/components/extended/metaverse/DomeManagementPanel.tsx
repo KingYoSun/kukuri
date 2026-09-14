@@ -87,7 +87,7 @@ export function DomeManagementPanel({ room, actions, endpointId, locale, admitte
     {cleanupPending ? <Button disabled={pending !== null} onClick={() => void run('delete', remove)}>{t('management.retryDelete')}</Button> : <>
       {!admitted ? <Button disabled={pending !== null || (!active && !endpointId) || !hosting}
         onClick={() => void run(active ? 'enter' : 'start', enter)}>{t(active ? 'room.join' : 'management.startAndEnter')}</Button> : null}
-      {hosting?.lease ? <Button variant='secondary' disabled={pending !== null} onClick={() => void run('stop', async () => {
+      {hosting?.lease || active || admitted ? <Button variant='secondary' disabled={pending !== null} onClick={() => void run('stop', async () => {
         const result = await actions.closeHosting(dome.spatial_context, dome.instance_id);
         if (!alive.current) return;
         setHosting(result); onStopped(); await actions.refresh();

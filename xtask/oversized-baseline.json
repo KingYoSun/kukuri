@@ -25,11 +25,15 @@
       "path": "crates/metaverse-host/src/lib.rs"
     },
     {
+      "lines": 1176,
+      "path": "crates/app-api/src/dome_hosting.rs"
+    },
+    {
       "lines": 1129,
       "path": "crates/app-api/src/private_channels.rs"
     },
     {
-      "lines": 1100,
+      "lines": 1128,
       "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
     },
     {
@@ -37,15 +41,15 @@
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
     {
-      "lines": 1096,
-      "path": "crates/app-api/src/dome_hosting.rs"
-    },
-    {
       "lines": 1056,
       "path": "crates/metaverse-host/src/tests.rs"
     },
     {
-      "lines": 1042,
+      "lines": 1045,
+      "path": "crates/app-api/src/game.rs"
+    },
+    {
+      "lines": 1044,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
@@ -53,12 +57,16 @@
       "path": "crates/cn-operator/tests/generate.rs"
     },
     {
-      "lines": 1018,
-      "path": "apps/desktop/src/shell/presentation.test.ts"
+      "lines": 1027,
+      "path": "crates/harness/src/scenarios/desktop_smoke.rs"
     },
     {
-      "lines": 1016,
-      "path": "crates/harness/src/scenarios/desktop_smoke.rs"
+      "lines": 1025,
+      "path": "crates/app-api/src/dome_connections.rs"
+    },
+    {
+      "lines": 1018,
+      "path": "apps/desktop/src/shell/presentation.test.ts"
     },
     {
       "lines": 1004,

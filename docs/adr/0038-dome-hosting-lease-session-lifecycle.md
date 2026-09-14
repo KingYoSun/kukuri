@@ -73,6 +73,8 @@ Community Node hosting は `dome_hosting` capability を明示的に有効化し
 
 Postgres は Dome ごとに active assignment を最大一件に制限する。Node restart は有効な lease と exact manifest bundle を再検証して新 session を開始するが、ephemeral simulation state は復元しない。
 
+#1020ではassign/activate/releaseのassignment、blob pin、runtimeを一つのlifecycle操作として直列化する。同じserver processの排他に加え、同じDBを使うserver間ではInstance IDに対するPostgres advisory transaction lockを保持する。旧epochのreleaseがDBをcloseした後に新generationのruntime・pinを消さないことを、DB closeとcleanupの間にbarrierを置くcontractで固定する。auth/consentとowner/epoch照合は従来どおり維持する。
+
 ## Consequences
 
 Issue #797の5秒heartbeat、15秒offline grace、30秒participant timeoutは[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。

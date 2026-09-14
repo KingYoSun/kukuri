@@ -63,6 +63,7 @@ pub(crate) fn scenario_ci_lane(name: &str) -> Option<&'static str> {
         "community_node_multi_device_connectivity" => Some("nightly"),
         "desktop_smoke_bookmark_workflow"
         | "desktop_smoke_game_room_persist"
+        | "desktop_smoke_metaverse_dome_delete"
         | "desktop_smoke_metaverse_dome_persist"
         | "desktop_smoke_metaverse_dome_move"
         | "desktop_smoke_metaverse_dome_connections"
@@ -98,7 +99,7 @@ mod tests {
                     .into_owned()
             })
             .collect::<BTreeSet<_>>();
-        assert_eq!(scenario_names.len(), 20, "scenario inventory changed");
+        assert_eq!(scenario_names.len(), 21, "scenario inventory changed");
         let orphaned = scenario_names
             .iter()
             .filter(|name| scenario_ci_lane(name).is_none())
