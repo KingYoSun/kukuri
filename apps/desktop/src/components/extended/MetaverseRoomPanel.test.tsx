@@ -263,8 +263,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const beforeEvents = publish.mock.calls.length;
     const beforeAdmission = admission.mock.calls.length;
     view.rerender(<ColumnFullscreenContext.Provider value>{element}</ColumnFullscreenContext.Provider>);
-    await userEvent.click(screen.getByRole('button', { name: 'Dome tools', exact: true }));
-    await userEvent.click(screen.getAllByRole('button', { name: 'Close Dome tools', exact: true })[1]);
+    await userEvent.click(screen.getByRole('button', { name: 'Dome tools' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Close Dome tools' })[1]);
     view.rerender(<ColumnFullscreenContext.Provider value={false}>{element}</ColumnFullscreenContext.Provider>);
     expect(screen.getByLabelText('Metaverse room viewport')).toBe(scene);
     expect(input).toHaveValue('unsent 1023');
