@@ -627,7 +627,8 @@ describe('MetaverseRoomPanel animation sharing', () => {
           position: [10, 0, 20],
           rotation: [0, 90, 0],
           animation: 'sprint',
-        }
+        },
+        room.metaverse!.instance_generation
       );
     });
   });

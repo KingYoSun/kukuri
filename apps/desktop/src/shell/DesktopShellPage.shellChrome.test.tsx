@@ -98,7 +98,7 @@ test('column actions replace the legacy global floating action button', async ()
 
   live.unmount();
   const game = renderAtHash('#/game?topic=kukuri%3Atopic%3Ageneral');
-  expect(screen.getByRole('button', { name: 'Create metaverse room' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Create metaverse room' })).toBeInTheDocument();
 
   game.unmount();
   const timeline = renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');

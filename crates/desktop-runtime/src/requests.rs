@@ -475,7 +475,10 @@ pub struct CloseDomeHostingRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SubmitDomeSessionInputRequest {
+    #[serde(default)]
+    pub expected_generation: Option<u64>,
     pub spatial_context: SpatialContextV1,
     pub instance_id: String,
     pub sequence: u64,

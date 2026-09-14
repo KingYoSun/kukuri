@@ -56,7 +56,7 @@ test.each([
   async ({ path, workspaceLabel, expectedControl }) => {
     renderAtHash(path);
 
-    expect(expectedControl()).toBeInTheDocument();
+    await waitFor(() => expect(expectedControl()).toBeInTheDocument());
 
     await waitFor(() => {
       expect(getActiveColumn(workspaceLabel)).toHaveAttribute('aria-current', 'true');

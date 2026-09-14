@@ -41,6 +41,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
 
     let started = Instant::now();
     app.submit_dome_session_input(SubmitDomeSessionInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: instance_id.clone(),
         sequence: 1,
@@ -66,6 +67,7 @@ pub(crate) async fn run_dome_hosting_lifecycle(
         .context("default persistent prop")?;
     prop.position[0] += 250;
     app.submit_dome_session_input(SubmitDomeSessionInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: instance_id.clone(),
         sequence: 2,

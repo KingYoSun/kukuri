@@ -326,6 +326,12 @@ impl AppService {
             .hosting_instance(&replica, &input.instance_id)
             .await?
             .context("Dome instance was not found")?;
+        if input
+            .expected_generation
+            .is_some_and(|generation| generation != instance.generation)
+        {
+            anyhow::bail!("DOME_SESSION_STALE_INSTANCE");
+        }
         if instance.status != DomeInstanceStatusV1::Active || instance.relationship_detach.is_some()
         {
             anyhow::bail!("DOME_SESSION_STALE_INSTANCE");

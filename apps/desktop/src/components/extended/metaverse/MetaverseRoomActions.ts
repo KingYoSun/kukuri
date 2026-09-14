@@ -80,7 +80,8 @@ export type MetaverseRoomActions = {
     context: SpatialContextV1,
     instanceId: string,
     sequence: number,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ) => Promise<DomePhysicsSnapshotV1>;
   prepareTransition: (
     request: DomeTransitionAdmissionRequestV1

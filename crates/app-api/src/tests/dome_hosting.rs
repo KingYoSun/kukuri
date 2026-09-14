@@ -149,6 +149,7 @@ async fn owner_layout_commit_is_explicit_idempotent_and_restarts_from_new_revisi
     .unwrap();
 
     app.submit_dome_session_input(SubmitDomeSessionInput {
+        expected_generation: None,
         spatial_context: context.clone(),
         instance_id: room_id.clone(),
         sequence: 1,

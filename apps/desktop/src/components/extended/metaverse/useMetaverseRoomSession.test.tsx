@@ -902,13 +902,15 @@ describe('useMetaverseRoomSession', () => {
       expect.anything(),
       'dome-a',
       expect.anything(),
-      expect.objectContaining({ type: 'abort_transition' })
+      expect.objectContaining({ type: 'abort_transition' }),
+      1
     );
     expect(submitDomeSessionInput).toHaveBeenCalledWith(
       expect.anything(),
       'dome-a',
       expect.anything(),
-      expect.objectContaining({ type: 'complete_transition' })
+      expect.objectContaining({ type: 'complete_transition' }),
+      1
     );
   });
 });

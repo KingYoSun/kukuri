@@ -285,7 +285,8 @@ export function useMetaverseRoomSession({
       room.metaverse.spatial_context,
       room.metaverse.instance_id,
       nextSessionSequence(room.metaverse.instance_id, suggestedSequence),
-      input
+      input,
+      room.metaverse.instance_generation
     );
   }, [actions, nextSessionSequence]);
 
@@ -1038,7 +1039,8 @@ export function useMetaverseRoomSession({
       admittedRoom.metaverse.spatial_context,
       admittedRoom.metaverse.instance_id,
       Date.now(),
-      input
+      input,
+      admittedRoom.metaverse.instance_generation
     );
     applyPhysicsSnapshot(snapshot);
   }, [actions, admittedRoom, applyPhysicsSnapshot, t]);

@@ -443,6 +443,12 @@ impl DesktopRuntime {
             })
             .await?;
         let lease = hosting.lease.context("Dome is not currently hosted")?;
+        if request
+            .expected_generation
+            .is_some_and(|generation| generation != lease.instance_generation)
+        {
+            anyhow::bail!("DOME_SESSION_STALE_INSTANCE");
+        }
         let session_id = hosting
             .state
             .session_id
@@ -454,6 +460,7 @@ impl DesktopRuntime {
             {
                 self.app_service
                     .submit_dome_session_input(SubmitDomeSessionInput {
+                        expected_generation: Some(lease.instance_generation),
                         spatial_context: request.spatial_context,
                         instance_id: request.instance_id,
                         sequence: request.sequence,

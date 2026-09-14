@@ -22,6 +22,7 @@ struct TransferNode {
     acceptances: Mutex<Vec<kukuri_core::SignedDomeHostingAcceptanceV1>>,
     activations: Mutex<Vec<DomeHostingActivationRequest>>,
     candidates: AtomicUsize,
+    inputs: AtomicUsize,
     releases: Mutex<Vec<kukuri_cn_protocol::DomeHostingReleaseRequest>>,
     policy_update_after_assignment: Mutex<Option<Arc<MockManagedCommunityNodeState>>>,
 }
@@ -36,12 +37,17 @@ impl TransferNode {
             acceptances: Mutex::new(Vec::new()),
             activations: Mutex::new(Vec::new()),
             candidates: AtomicUsize::new(0),
+            inputs: AtomicUsize::new(0),
             releases: Mutex::new(Vec::new()),
             policy_update_after_assignment: Mutex::new(None),
         })
     }
     fn routes(self: &Arc<Self>) -> Router {
         Router::new()
+            .route(
+                kukuri_cn_protocol::DOME_HOSTING_SESSION_INPUT_PATH,
+                post(reject_input),
+            )
             .route(DOME_HOSTING_ASSIGNMENTS_PATH, post(assign))
             .route(DOME_HOSTING_ACTIVATE_PATH, post(activate))
             .route(kukuri_cn_protocol::DOME_HOSTING_RELEASE_PATH, post(release))
@@ -455,6 +461,7 @@ async fn cn_noop_and_owner_layout_changes_do_not_send_transfer_requests() {
     runtime
         .app_service
         .submit_dome_session_input(SubmitDomeSessionInput {
+            expected_generation: None,
             spatial_context: context.clone(),
             instance_id: instance.clone(),
             sequence: 1,
@@ -724,6 +731,64 @@ async fn deletion_preserves_canonical_close_and_retries_the_same_node_release() 
             .all(|r| r.signed_close == releases[0].signed_close)
     );
     drop(releases);
+    runtime.shutdown().await;
+    server.abort();
+}
+
+async fn reject_input(State(node): State<Arc<TransferNode>>) -> StatusCode {
+    node.inputs.fetch_add(1, Ordering::SeqCst);
+    StatusCode::SERVICE_UNAVAILABLE
+}
+
+#[tokio::test]
+async fn stale_session_input_never_reaches_recreated_community_node_host() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let node = TransferNode::new();
+    let (runtime, url, _, server, _dir) = dome_runtime_with_routes(node.routes()).await;
+    seed_local_community_node_consents(&runtime, &url, 1);
+    let (context, instance) = create_owner(&runtime).await;
+    runtime
+        .delete_dome(crate::DeleteDomeRequest {
+            spatial_context: context.clone(),
+            instance_id: instance.clone(),
+            expected_generation: 1,
+            operation_id: "replace-input".into(),
+        })
+        .await
+        .unwrap();
+    let (_, recreated) = create_owner(&runtime).await;
+    assert_eq!(instance, recreated);
+    runtime
+        .delegate_dome_hosting(delegate_request(&node, &url, &context, &instance))
+        .await
+        .unwrap();
+    for (i, input) in [
+        DomeSessionInputKindV1::Join {
+            avatar_collider: None,
+        },
+        DomeSessionInputKindV1::UpsertPersistentProp { prop: prop() },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert!(
+            runtime
+                .submit_dome_session_input(crate::SubmitDomeSessionInputRequest {
+                    expected_generation: Some(1),
+                    spatial_context: context.clone(),
+                    instance_id: instance.clone(),
+                    sequence: i as u64 + 1,
+                    input
+                })
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(
+        node.inputs.load(Ordering::SeqCst),
+        0,
+        "stale inputs must be rejected before HTTP"
+    );
     runtime.shutdown().await;
     server.abort();
 }

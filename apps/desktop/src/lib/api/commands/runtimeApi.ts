@@ -676,7 +676,8 @@ export const runtimeApi: DesktopApi = {
     spatialContext,
     instanceId,
     sequence,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ) => {
     return invokeDesktop<DomePhysicsSnapshotV1>('submit_dome_session_input', {
       request: {
@@ -684,6 +685,7 @@ export const runtimeApi: DesktopApi = {
         instance_id: instanceId,
         sequence,
         input,
+        expected_generation: expectedGeneration,
       } satisfies SubmitDomeSessionInputRequest,
     });
   }),

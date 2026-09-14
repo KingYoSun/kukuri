@@ -114,8 +114,9 @@ pub(super) fn input(name: &str) -> Value {
                 "lease_duration_millis",
             ],
         ),
-        "submit_dome_session_input" => view(
-            json!({"spatial_context": spatial_context(), "instance_id": string(), "sequence": unsigned(), "input": session_input()}),
+        "submit_dome_session_input" => object(
+            json!({"spatial_context": spatial_context(), "instance_id": string(), "sequence": unsigned(), "input": session_input(), "expected_generation": nullable(unsigned())}),
+            &["spatial_context", "instance_id", "sequence", "input"],
         ),
         "prepare_dome_transition" | "preview_dome_transition_access" => {
             view(json!({"request": transition()}))

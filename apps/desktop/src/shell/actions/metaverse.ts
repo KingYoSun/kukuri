@@ -52,8 +52,8 @@ export function createMetaverseRoomActions({
     closeHosting: (context, instanceId, expectedGeneration) => api.closeDomeHosting(context, instanceId, expectedGeneration),
     setChannelEntryDome: (topicId, channelId, instanceId) =>
       api.setPrivateChannelEntryDome(topicId, channelId, instanceId).then(() => undefined),
-    submitSessionInput: (context, instanceId, sequence, input) =>
-      api.submitDomeSessionInput(context, instanceId, sequence, input),
+    submitSessionInput: (context, instanceId, sequence, input, expectedGeneration) =>
+      api.submitDomeSessionInput(context, instanceId, sequence, input, expectedGeneration),
     prepareTransition: (request) => api.prepareDomeTransition(request),
     previewTransitionAccess: (request) => api.previewDomeTransitionAccess(request),
     commitTransition: (ticket, position, rotation) =>

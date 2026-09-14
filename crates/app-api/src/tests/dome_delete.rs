@@ -370,3 +370,109 @@ async fn active_dome_deletion_stops_host_and_survives_service_restart() {
         .unwrap();
     assert_eq!(hosted.state.lease_epoch, Some(2));
 }
+
+#[tokio::test]
+async fn stale_session_inputs_cannot_mutate_recreated_dome() {
+    use crate::SubmitDomeSessionInput;
+    use kukuri_core::DomeSessionInputKindV1;
+    let app = AppService::new(
+        Arc::new(MemoryStore::default()),
+        Arc::new(FakeTransport::new("stale-input", FakeNetwork::default())),
+    );
+    let topic = "kukuri:topic:stale-input";
+    let context = SpatialContextV1::Topic {
+        topic_id: TopicId::new(topic),
+    };
+    let id = app
+        .create_metaverse_room(topic, create_input())
+        .await
+        .unwrap();
+    app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+        expected_generation: Some(1),
+        spatial_context: context.clone(),
+        instance_id: id.clone(),
+        endpoint_id: "owner".into(),
+        lease_duration_millis: 60_000,
+    })
+    .await
+    .unwrap();
+    let mut prop = app.list_game_rooms(topic).await.unwrap()[0]
+        .metaverse
+        .as_ref()
+        .unwrap()
+        .dome
+        .customization
+        .persistent_props[0]
+        .clone();
+    prop.position[0] += 250;
+    let delayed = [
+        DomeSessionInputKindV1::Join {
+            avatar_collider: None,
+        },
+        DomeSessionInputKindV1::UpsertPersistentProp { prop },
+    ];
+    app.delete_dome(DeleteDomeInput {
+        spatial_context: context.clone(),
+        instance_id: id.clone(),
+        expected_generation: 1,
+        operation_id: "replace-input".into(),
+    })
+    .await
+    .unwrap();
+    app.create_metaverse_room(topic, create_input())
+        .await
+        .unwrap();
+    app.start_owner_dome_hosting(StartOwnerDomeHostingInput {
+        expected_generation: Some(2),
+        spatial_context: context.clone(),
+        instance_id: id.clone(),
+        endpoint_id: "owner".into(),
+        lease_duration_millis: 60_000,
+    })
+    .await
+    .unwrap();
+    let now = chrono::Utc::now().timestamp_millis();
+    let before = app
+        .dome_host_sessions
+        .lock()
+        .await
+        .get_mut(&id)
+        .unwrap()
+        .signed_snapshot(now)
+        .unwrap()
+        .snapshot;
+    for (i, input) in delayed.into_iter().enumerate() {
+        let result = app
+            .submit_dome_session_input(SubmitDomeSessionInput {
+                expected_generation: Some(1),
+                spatial_context: context.clone(),
+                instance_id: id.clone(),
+                sequence: i as u64 + 1,
+                input,
+            })
+            .await;
+        assert!(
+            result.is_err(),
+            "stale input must be rejected before mutation"
+        );
+    }
+    let after = app
+        .dome_host_sessions
+        .lock()
+        .await
+        .get_mut(&id)
+        .unwrap()
+        .signed_snapshot(now)
+        .unwrap()
+        .snapshot;
+    assert_eq!(before.bodies, after.bodies);
+    assert_eq!(
+        app.dome_host_sessions
+            .lock()
+            .await
+            .get(&id)
+            .unwrap()
+            .participant_count(),
+        0
+    );
+}

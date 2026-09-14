@@ -675,7 +675,7 @@ export type DelegateDomeHostingRequest = { expected_generation?: number | null, 
 
 export type CloseDomeHostingRequest = { expected_generation?: number | null, spatial_context: SpatialContextV1, instance_id: string, };
 
-export type SubmitDomeSessionInputRequest = { spatial_context: SpatialContextV1, instance_id: string, sequence: number, input: DomeSessionInputKindV1, };
+export type SubmitDomeSessionInputRequest = { expected_generation?: number | null, spatial_context: SpatialContextV1, instance_id: string, sequence: number, input: DomeSessionInputKindV1, };
 
 export type PrepareDomeTransitionRequest = { request: DomeTransitionAdmissionRequestV1, };
 

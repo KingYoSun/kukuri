@@ -433,7 +433,8 @@ export interface DesktopApi {
     spatialContext: SpatialContextV1,
     instanceId: string,
     sequence: number,
-    input: DomeSessionInputKindV1
+    input: DomeSessionInputKindV1,
+    expectedGeneration?: number
   ): Promise<DomePhysicsSnapshotV1>;
   prepareDomeTransition(
     request: DomeTransitionAdmissionRequestV1

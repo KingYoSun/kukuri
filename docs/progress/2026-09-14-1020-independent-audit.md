@@ -1,6 +1,35 @@
 # #1020 独立監査
 
-## 現在判定: 9382357a delta監査
+## 現在判定: 0c4ff02b delta監査
+
+- 対象commit: `0c4ff02b`（比較元 `9382357a`）、Scope revision `2026-09-14-r1`、区分C。
+- 判定: **FAIL**。B-1と所有Dome metadata欠落の管理問題はコード上解消。旧GUI session inputの世代再束縛B-3が残存する。
+- inventory: 8群 / 適合7 / 不適合1 / 未分類0。群3は適合へ更新、群6のGUI session inputをB-3により不適合へ更新。
+
+### 解消した経路と追加callerの分類
+
+- B-1: statusもprocess lifecycle MutexとInstance ID advisory transaction lockへ参加し、assignment readからruntime mutationまで保持する。4caller(assign/activate/release/status)で同じ取得順。submitの期限切れ処理は現runtime自身をsessions lock内で調べるため旧assignment readとは異なる。旧statusをread直後でbarrier停止するtestのruntime epoch=2/pins assertを確認し、実装担当から3race tests成功を受領した。
+- 所有Dome metadata: `append_owned_dome_management`は許可されたchannel集合とlocal ownerの署名検証済みcanonical Instanceだけを使う。欠落Presetと空の派生game projectionでも所有Domeを管理へ戻し、他ownerの未取得行は従来どおりadmission候補から除外する。`management_only`はDomeEntryModelとManagementで入室を禁止。Preset署名不正・binding不一致は欠落扱いに緩和しない。
+- delete: `instance_management_manifest`の新callerは管理用read projectionとdelete。deleteは同じowner/Context/generation guardを維持し、scene用の仮metadataはtombstoneとしてだけpublishする。journalとcloseのauthority解決はPreset/game blob不要。従来の署名・retention境界は維持。停止時Preset欠落・game blob欠落・fresh projectionのtestsを確認した。
+- GUI start/stop/delegate: expected_generationがPanel/Actions/API/Runtime/AppServiceへ伝わり、各write前に検証される。CLIの省略=current targetと内部lock所有callerのNoneは意図的な現行target操作で、古い表示対象からのGUI要求と分類を分ける。3操作のdocs全体不変testを確認した。
+- UI admission/focus: admittedIdentity(account/Context/ID/generation)とfocus identityにより、同room IDの新世代へadmission状態を引き継がない。返却snapshotのID/generation照合と低epochの表示拒否は適合。ただし以下の入力側mutationを事後表示拒否で代替できない。
+- nullable Presetのconsumerをrgで補完。CN assignment構築はNoneを明示拒否し、CLI schema/typeもnullableへ同期。list_pending/delete parity登録は新しいauthorityを追加しない。
+
+### B-3: 旧GUI session inputを新世代のleaseで再署名する
+
+- 分類: Existing-gap、固定INVAR-1/2、群6/INV-3のJoin/input/presence sink。merge blocker。
+- 入口: `useMetaverseRoomSession.ts:278`のsubmitInputForRoom（Join/KeepAlive/Leave/移動）と1033行のsubmitPropMutation（owner Prop操作）。roomにはgenerationがあるが、APIへ渡すのはContext/Instance ID/sequence/inputだけ。
+- `crates/desktop-runtime/src/requests.rs:478`のSubmitDomeSessionInputRequestにexpected_generationがなく、runtime `private_channels_game_api.rs:439`～492は現在leaseをfetchして、そのgeneration/epochで入力を署名する。AppService local経路も`dome_hosting.rs:324`～378で現在canonicalと現在runtimeの一致だけを検証し、現在runtime generationで署名してapplyする。
+- sequence: generation1のGUI Joinまたはowner Prop要求を保持 → ownerが削除し同IDのgeneration2を作成・hosting開始 → 保持した要求がbackendへ到着 → generation2のleaseで再署名され、generation2のparticipant/propが変わる。
+- 利用者影響: 旧Domeへ行った操作が新Domeの参加状態・共有物へ反映される。UIのsnapshot ID/generation拒否はapply後であるため、禁止mutationを防がない。
+- 証拠: caller/IPC/request型/署名・apply sinkの直接の制御フロー。動的再現testは監査者未実行。
+- 最小修正/検証: GUI inputにexpected_generationを伝播し、local/CN双方で署名前に不一致を拒否する。旧入力を新generationへ送るnegative testで新runtimeのparticipant/propsとCN入力HTTP hitが不変であることを確認する。CLI省略=current target方針は維持可能。
+
+### 実行事実と未確認gate
+
+実装担当からtargeted backend25 PASS、frontend130 PASS、snapshot binding追加後2 files/47 PASS、typecheck PASS、browser management flow PASS、CN3race tests PASSを受領。監査者はコードとtestのassertを独立確認したが、このdeltaでは重いbuildを重複実行していない。最新lint、全CI、Windows/Linux実機、全必須gateは別工程で未確認。旧判定履歴は以下に保持する。
+
+## 9382357a delta監査（当時の判定を保持）
 
 - 対象commit: `9382357a`（比較元 `e5ced6b0`）、Scope revision: `2026-09-14-r1`、区分C。
 - 判定: **FAIL**。B-1のassign/activate/release競合はコード上解消したが、runtime removalの逆引きで同じ境界を迂回するstatus入口が残る。

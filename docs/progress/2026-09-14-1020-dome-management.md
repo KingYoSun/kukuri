@@ -66,3 +66,12 @@ CI初回の失敗は新scenarioの台帳件数・lane登録、大型ファイル
 - 全frontend suite、全必須gate、CN失敗contract、Playwright flow、harness、Linux実機: 実行中または未実行。
 - 中断: `cargo test -p kukuri-app-api dome_ --lib`のlayout commitが二重lockで停止したことをcall pathで確認し、該当test processだけ停止。内部関数へ修正後、Dome22 testsは完走した。
 - 最終独立監査: 未実施。PASSと必須CI、merge tree整合を確認するまでCloseしない。
+
+### 追加監査B-3の修正
+
+`0c4ff02b`への独立監査で、旧GUIのJoin/Prop要求が現在generationで再署名されるExisting-gapを確認した。要求に任意の`expected_generation`を追加し、GUIの共通input・Prop入口から必ず渡す。runtimeはlease照合後・署名/HTTP前、app-apiはcanonical Instance照合後・runtime mutation前に拒否する。runtimeからlocal app-apiへも取得済みleaseの世代を固定して渡す。省略する既存CLI/Rust callerは現対象を明示的に操作する互換方針を維持する。
+
+- `stale_session_inputs_cannot_mutate_recreated_dome`: G1のJoin/Propを保持→削除→G2作成/稼働→送信。修正前は成功してしまいFAIL、修正後は拒否してparticipantsとphysics bodiesが不変。Dome関連26 tests PASS。
+- `stale_session_input_never_reaches_recreated_community_node_host`: 同sequenceでCNへのHTTP hitが修正前2、修正後0。PASS。
+- CIで一覧読込み完了前にcreateボタンを同期取得していたshell testを、実際の読込み完了待機へ同期。Linux専用CLI registry件数も追加2command分を139→141へ同期。
+- CI視覚差分のprofile-connectionsは変更対象外の読込み中表示の一時capture。expected/actualを確認し、baselineを変更せず最終headで再実行する。

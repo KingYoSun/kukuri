@@ -17,7 +17,7 @@
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
-      "lines": 1211,
+      "lines": 1217,
       "path": "crates/app-api/src/dome_hosting.rs"
     },
     {
@@ -29,7 +29,7 @@
       "path": "crates/metaverse-host/src/lib.rs"
     },
     {
-      "lines": 1134,
+      "lines": 1141,
       "path": "crates/desktop-runtime/src/runtime/private_channels_game_api.rs"
     },
     {
@@ -49,7 +49,7 @@
       "path": "crates/metaverse-host/src/tests.rs"
     },
     {
-      "lines": 1049,
+      "lines": 1051,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
@@ -57,7 +57,7 @@
       "path": "crates/cn-operator/tests/generate.rs"
     },
     {
-      "lines": 1027,
+      "lines": 1033,
       "path": "crates/harness/src/scenarios/desktop_smoke.rs"
     },
     {
