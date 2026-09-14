@@ -1,4 +1,5 @@
 {
+  "fullscreen": { "openTools": "Dome 管理与连接", "closeTools": "关闭管理与连接" },
   "title": "元宇宙房间",
   "rooms": {
     "summary_one": "此话题中有 {{count}} 个房间",

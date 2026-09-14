@@ -235,6 +235,8 @@ Community Index の問い合わせ先は `自動`を既定とし、健康な状�
 
 Stream / Metaverse Column の fullscreen は Fullscreen API の `fullscreenchange` を正本にする一時的 runtime state とする。入退出で Column 順、span、scope、active layout、Draft、LiveSession / Metaverse room stateを変更せず、退出後は元 Column へ focus を戻す。保存 layout と URL へ fullscreen 状態を含めない。
 
+Fullscreen要素は通常のColumn Canvasをrootにした交差判定の外に出るため、可視集合の公開時に実際の`document.fullscreenElement`を合成する。全画面の所有Column（内側のmediaが全画面の場合も含む）をvisibleとし、覆われたColumnは非表示として扱う。遅延したIntersectionObserver通知で所有Columnをsuspendせず、退出後は通常交差判定へ戻す。audio focusの取得やnetwork sessionの再開始を伴わない。Metaverseの高さと補助面配置は`DESIGN.md`の全画面契約に従う。
+
 mobile の明示的な追加導線は viewport 左右端と Column indicator から始まる主方向 horizontal swipe とする。1回の gesture で隣接1 Column だけへ移動し、先頭・末尾では wrap しない。短い drag、縦優位、cancel、indicator tap は切替にしない。Metaverse scene、media control、Composer 等の中央操作は各 surface が所有し、edge または indicator 以外から Column gesture を開始しない。
 
 現行 Stream は映像 source、transport、seek、background playback の product contract を持たないため、架空の player や設定は追加しない。player 導入時に、seek と Column swipe の非競合、および background playback を明示 opt-in とする試験を追加する。Metaverse の参加・退出・chat は viewport 内 HUD / discovery card を正本とし、Column footerへ複製しない。

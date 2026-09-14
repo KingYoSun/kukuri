@@ -21,6 +21,7 @@ import {
   MetaverseRoomDiscovery,
   type CreateMetaverseRoomInput,
 } from './metaverse/MetaverseRoomDiscovery';
+import { MetaverseRoomLayout } from './metaverse/MetaverseRoomLayout';
 import { MetaverseRoomView } from './metaverse/MetaverseRoomView';
 import { DomeConnectionPanel } from './metaverse/DomeConnectionPanel';
 import { PendingDomeDeletions } from './metaverse/PendingDomeDeletions';
@@ -262,7 +263,7 @@ export function MetaverseRoomPanel({
   }
 
   return (
-    <div className='metaverse-panel' ref={panelRef}>
+    <MetaverseRoomLayout admitted={Boolean(session.admittedRoom)} panelRef={panelRef} before={<>
       <PendingDomeDeletions key={scope} actions={actions} context={managementContext} locale={locale} />
       <MetaverseRoomDiscovery
         rooms={rooms}
@@ -314,6 +315,30 @@ export function MetaverseRoomPanel({
         onClose={() => { setManagedId(null); managementOrigin.current?.focus(); }}
       /> : null}
 
+      </>} after={<>
+      <DomeConnectionPanel
+        actions={actions}
+        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
+        rooms={rooms}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        locale={locale}
+      />
+      <DomeHostingPanel
+        key={`hosting:${scope}:${(managedRoom ?? session.selectedRoom)?.room_id}:${(managedRoom ?? session.selectedRoom)?.metaverse?.instance_generation}`}
+        actions={actions}
+        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
+        localAuthorPubkey={syncStatus.local_author_pubkey}
+        localEndpointId={syncStatus.discovery.local_endpoint_id}
+        locale={locale}
+        onSpawnGuestProp={session.spawnGuestProp}
+        onAddPersistentProp={session.addPersistentProp}
+        onDeletePersistentProp={session.deletePersistentProp}
+        communityNodes={communityNodePanelView?.nodes ?? []}
+        onFetchCommunityNodeConsents={onFetchCommunityNodeConsents}
+        onAcceptCommunityNodeConsents={onAcceptCommunityNodeConsents}
+        onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
+      />
+      </>}>
       <MetaverseRoomView
         room={session.admittedRoom}
         activeTopic={activeTopic}
@@ -358,28 +383,6 @@ export function MetaverseRoomPanel({
         microphoneEnabled={session.microphoneEnabled}
         onToggleMicrophone={session.toggleMicrophone}
       />
-      <DomeConnectionPanel
-        actions={actions}
-        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
-        rooms={rooms}
-        localAuthorPubkey={syncStatus.local_author_pubkey}
-        locale={locale}
-      />
-      <DomeHostingPanel
-        key={`hosting:${scope}:${(managedRoom ?? session.selectedRoom)?.room_id}:${(managedRoom ?? session.selectedRoom)?.metaverse?.instance_generation}`}
-        actions={actions}
-        room={managedScope === scope && managedId ? managedRoom : session.selectedRoom}
-        localAuthorPubkey={syncStatus.local_author_pubkey}
-        localEndpointId={syncStatus.discovery.local_endpoint_id}
-        locale={locale}
-        onSpawnGuestProp={session.spawnGuestProp}
-        onAddPersistentProp={session.addPersistentProp}
-        onDeletePersistentProp={session.deletePersistentProp}
-        communityNodes={communityNodePanelView?.nodes ?? []}
-        onFetchCommunityNodeConsents={onFetchCommunityNodeConsents}
-        onAcceptCommunityNodeConsents={onAcceptCommunityNodeConsents}
-        onOpenCommunityNodeSettings={onOpenCommunityNodeSettings}
-      />
-    </div>
+    </MetaverseRoomLayout>
   );
 }

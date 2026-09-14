@@ -1,4 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { createRef } from 'react';
+import { ColumnFullscreenContext } from '@/shell/ColumnPresentationContext';
+import { MetaverseRoomLayout } from './metaverse/MetaverseRoomLayout';
 
 import type { GameRoomView, SyncStatus } from '@/lib/api';
 import i18n from '@/i18n';
@@ -132,10 +135,16 @@ function selectedRoom(
   initialHudOpen = true,
   initialChatOpen = true,
   transitionNeighbors: DomeNeighborTransitionView[] = [],
-  domeRecovery: DomeRecoveryStatus = ONLINE_DOME_RECOVERY
+  domeRecovery: DomeRecoveryStatus = ONLINE_DOME_RECOVERY,
+  fullscreen = false
 ) {
   return (
     <StoryFrame>
+      <ColumnFullscreenContext.Provider value={fullscreen}>
+      <div style={fullscreen ? { height: 720 } : undefined}>
+      <MetaverseRoomLayout admitted panelRef={createRef<HTMLDivElement>()}
+        before={fullscreen ? <p>Dome discovery and management</p> : null}
+        after={fullscreen ? <label>Connection draft<input defaultValue='North neighbor' /></label> : null}>
       <MetaverseRoomView
         room={room}
         activeTopic='kukuri:topic:demo'
@@ -196,9 +205,16 @@ function selectedRoom(
         onMessageDraftChange={() => undefined}
         onSendMessage={(event) => event.preventDefault()}
       />
+      </MetaverseRoomLayout>
+      </div>
+      </ColumnFullscreenContext.Provider>
     </StoryFrame>
   );
 }
+
+export const FullscreenRoom: Story = {
+  render: () => selectedRoom(true, true, [], ONLINE_DOME_RECOVERY, true),
+};
 
 export const EmptyRooms: Story = {
   render: () => panel([]),

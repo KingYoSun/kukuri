@@ -38,6 +38,9 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await addColumn(page, 'Add Live Column');
   await addColumn(page, 'Add Metaverse Column');
   const { metaverse, stage } = await createMetaverseRoom(page);
+  const draft = metaverse.locator('.metaverse-chat-form input');
+  await draft.fill('Unsent fullscreen draft 1023');
+  const originalCanvas = await stage.locator('canvas').elementHandle();
   const live = page.getByRole('region', { name: /^Live Column/ });
   const before = await page.locator('[data-column-id]').evaluateAll((columns) =>
     columns.map((column) => ({
@@ -60,6 +63,21 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
   await page.getByRole('menuitem', { name: 'Enter Metaverse fullscreen' }).click();
   await expect.poll(() => metaverse.evaluate((element) => document.fullscreenElement === element)).toBe(true);
+  await expect(metaverse).toHaveAttribute('data-runtime-visible', 'true');
+  await expect(metaverse).not.toHaveAttribute('data-runtime-suspended', 'true');
+  const viewport = metaverse.locator('.metaverse-viewport-shell');
+  await expect(viewport).not.toHaveAttribute('data-render-suspended', 'true');
+  const bodyBounds = await metaverse.locator('.shell-column-body').boundingBox();
+  const sceneBounds = await viewport.boundingBox();
+  expect(sceneBounds!.height).toBeGreaterThan(bodyBounds!.height - 100);
+  expect(sceneBounds!.y + sceneBounds!.height).toBeLessThanOrEqual(bodyBounds!.y + bodyBounds!.height);
+  await expect(draft).toBeInViewport();
+  await expect(metaverse.getByRole('button', { name: 'Refresh dome connections' })).toBeHidden();
+  await metaverse.getByRole('button', { name: 'Dome tools', exact: true }).click();
+  await expect(metaverse.locator('.metaverse-auxiliary')).toBeVisible();
+  await metaverse.locator('.metaverse-auxiliary').getByRole('button', { name: 'Close Dome tools', exact: true }).click();
+  await expect(metaverse.getByRole('button', { name: 'Dome tools', exact: true })).toBeFocused();
+  await expect(draft).toHaveValue('Unsent fullscreen draft 1023');
   await metaverse.getByRole('button', { name: 'Open Metaverse menu' }).click();
   await page.getByRole('menuitem', { name: 'Exit Metaverse fullscreen' }).click();
   await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
@@ -73,6 +91,9 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
     )
   ).toEqual(before);
   await expect(stage).toHaveCount(1);
+  expect(await originalCanvas!.evaluate((canvas) => canvas.isConnected)).toBe(true);
+  await expect(draft).toHaveValue('Unsent fullscreen draft 1023');
+  await expect(metaverse).toBeFocused();
 });
 
 // Metaverse Column 内で room を作成して stage(data-column-gesture-owner)を表示する。

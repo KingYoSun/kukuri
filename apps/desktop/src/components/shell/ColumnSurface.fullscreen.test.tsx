@@ -35,7 +35,7 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   });
 
   render(
-    <div className='shell-phase1'>
+    <div className='shell-phase1 shell-column-canvas'>
       <ColumnSurface
         active
         columnId='stream-1'
@@ -53,9 +53,15 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   );
 
   const column = screen.getByRole('region', { name: /Stream Column/ });
+  const body = column.querySelector('.shell-column-body')!;
+  const canvas = column.parentElement!;
+  body.scrollTop = 230;
+  canvas.scrollLeft = 3200;
   requestFullscreen.mockImplementation(async () => {
     fullscreenElement = column;
     document.dispatchEvent(new Event('fullscreenchange'));
+    body.scrollTop = 0;
+    canvas.scrollLeft = 600;
   });
   await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
   await user.click(screen.getByRole('menuitem', { name: 'Enter Stream fullscreen' }));
@@ -64,6 +70,9 @@ test('a fullscreen-capable column enters and exits fullscreen from its menu', as
   await user.click(screen.getByRole('button', { name: 'Open Stream menu' }));
   await user.click(screen.getByRole('menuitem', { name: 'Exit Stream fullscreen' }));
   await waitFor(() => expect(document.fullscreenElement).toBeNull());
+  await waitFor(() => expect(column).toHaveFocus());
+  expect(body.scrollTop).toBe(230);
+  expect(canvas.scrollLeft).toBe(3200);
 });
 
 test('an unavailable fullscreen API reports a visible assistive failure', async () => {

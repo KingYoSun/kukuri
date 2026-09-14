@@ -1,4 +1,5 @@
 {
+  "fullscreen": { "openTools": "Dome tools", "closeTools": "Close Dome tools" },
   "title": "Metaverse Rooms",
   "rooms": {
     "summary_one": "{{count}} room in this topic",
