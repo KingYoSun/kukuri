@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { MonitorPause } from 'lucide-react';
 import * as THREE from 'three';
@@ -21,6 +21,8 @@ import type {
   SharedRoomObjectV1,
 } from '@/lib/api';
 import { FixedDome } from './metaverse/FixedDome';
+import { MetaverseFollowCamera } from './metaverse/MetaverseFollowCamera';
+import { createAvatarCameraState, FALLBACK_CAMERA_BOUNDS, type AvatarCameraBounds, type AvatarCameraState } from './metaverse/MetaverseCameraModel';
 import { resolveDomeCollider } from './metaverse/DomeSceneModel';
 import { avatarColliderFromLoadedVrm } from './metaverse/AvatarColliderModel';
 import {
@@ -77,6 +79,7 @@ type SceneProps = {
   onAvatarAssetStatus: (status: AvatarAssetStatus) => void;
   controlsEnabled?: boolean;
   suspended?: boolean;
+  cameraState?: RefObject<AvatarCameraState>;
 };
 
 export type SessionPropView = {
@@ -292,12 +295,14 @@ function AvatarModel({
   animationRef,
   statusTarget,
   forcePrimitive = false,
+  cameraBoundsRef,
 }: {
   assetUrl: string;
   color: number;
   animationRef?: RefObject<AvatarAnimationState>;
   statusTarget?: (status: AvatarAssetStatus) => void;
   forcePrimitive?: boolean;
+  cameraBoundsRef?: RefObject<AvatarCameraBounds>;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
   const vrmRuntimeRef = useRef<{ vrm: VRM | null; loadedRoot: THREE.Object3D | null }>({
@@ -312,6 +317,7 @@ function AvatarModel({
     if (!group) {
       return;
     }
+    if (cameraBoundsRef) cameraBoundsRef.current = FALLBACK_CAMERA_BOUNDS;
     if (forcePrimitive) {
       setVisiblePrimitive(true);
       statusTarget?.('fallback-primitive');
@@ -335,6 +341,17 @@ function AvatarModel({
         const vrmRoot = vrm.scene;
         vrmRoot.scale.setScalar(1);
         VRMUtils.rotateVRM0(vrm);
+        if (cameraBoundsRef) {
+          vrm.update(0);
+          vrmRoot.updateMatrixWorld(true);
+          vrmRoot.traverse((object) => { if (object instanceof THREE.SkinnedMesh) object.skeleton.update(); });
+          const box = new THREE.Box3().setFromObject(vrmRoot, true);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          if (!box.isEmpty() && Number.isFinite(size.length())) {
+            cameraBoundsRef.current = { centerY: center.y, radius: Math.max(0.5, size.length() / 2) };
+          }
+        }
         // Keep the shared transform yaw unchanged; flip only the normalized VRM visual forward.
         vrmRoot.rotation.y = THREE.MathUtils.degToRad(
           avatarVrmVisualRootYawDegrees(THREE.MathUtils.radToDeg(vrmRoot.rotation.y))
@@ -434,7 +451,7 @@ function AvatarModel({
       animationRuntimeRef.current = null;
       vrmRuntimeRef.current = { vrm: null, loadedRoot: null };
     };
-  }, [assetUrl, forcePrimitive, statusTarget]);
+  }, [assetUrl, cameraBoundsRef, forcePrimitive, statusTarget]);
 
   useFrame((_, delta) => {
     const runtime = animationRuntimeRef.current;
@@ -472,11 +489,15 @@ function LocalAvatar({
   initialLocalTransform = null,
   gravityMilli,
   controlsEnabled = true,
-}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus' | 'controlsEnabled' | 'transitionBoundaryStates' | 'initialLocalTransform'> & {
+  cameraState,
+}: Pick<SceneProps, 'room' | 'localPeerId' | 'avatarAssetUrl' | 'onLocalTransform' | 'onAvatarAssetStatus' | 'controlsEnabled' | 'transitionBoundaryStates' | 'initialLocalTransform' | 'cameraState'> & {
   chatBubble?: LatestChatBubble;
   gravityMilli: number;
 }) {
   const groupRef = useRef<THREE.Group | null>(null);
+  const fallbackCameraState = useRef(createAvatarCameraState());
+  const localCameraStateRef = cameraState ?? fallbackCameraState;
+  const cameraBoundsRef = useRef<AvatarCameraBounds>(FALLBACK_CAMERA_BOUNDS);
   const spawnPosition = room.metaverse?.default_spawn.position;
   const spawnRotation = room.metaverse?.default_spawn.rotation;
   const spawnPositionKey = spawnPosition?.join(',');
@@ -515,15 +536,18 @@ function LocalAvatar({
     lastSentAtRef.current = 0;
     lastPublishedTransformRef.current = null;
     keysRef.current.clear();
+    localCameraStateRef.current.reset = true;
     if (groupRef.current) {
       groupRef.current.position.copy(scenePosition(nextTransform.position));
       groupRef.current.rotation.y = THREE.MathUtils.degToRad(nextTransform.rotation[1]);
     }
-  }, [initialLocalTransform, initialTransformKey, localPeerId, room.room_id, spawnPositionKey, spawnRotationKey]);
+  }, [initialLocalTransform, initialTransformKey, localCameraStateRef, localPeerId, room.room_id, spawnPositionKey, spawnRotationKey]);
 
   useEffect(() => {
+    const clearInput = () => { keysRef.current.clear(); jumpRequestedRef.current = false; };
+    clearInput();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!controlsEnabled || isEditableTarget(event.target)) {
+      if (!controlsEnabled || isEditableTarget(event.target) || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || !document.hasFocus()) {
         return;
       }
       const key = event.key.toLowerCase();
@@ -556,9 +580,14 @@ function LocalAvatar({
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', clearInput);
+    document.addEventListener('visibilitychange', clearInput);
     return () => {
+      clearInput();
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', clearInput);
+      document.removeEventListener('visibilitychange', clearInput);
     };
   }, [controlsEnabled]);
 
@@ -636,8 +665,10 @@ function LocalAvatar({
         color={0x4f9fef}
         animationRef={animationRef}
         statusTarget={onAvatarAssetStatus}
+        cameraBoundsRef={cameraBoundsRef}
       />
       <AvatarChatBubble bubble={chatBubble} />
+      <MetaverseFollowCamera avatar={groupRef} bounds={cameraBoundsRef} state={localCameraStateRef} enabled={controlsEnabled} />
     </group>
   );
 }
@@ -766,9 +797,9 @@ function SceneContents({
   onAvatarAssetStatus,
   controlsEnabled,
   resourcePlan,
+  cameraState,
 }: Omit<SceneProps, 'hud' | 'suspended'> & { resourcePlan: ClientResourcePlan }) {
   const remoteEntries = useMemo(() => Object.entries(remoteTransforms), [remoteTransforms]);
-  const { camera } = useThree();
   const customization = room.metaverse?.dome.customization;
   const baseEnvironment = customization?.environment;
   const [environment, setEnvironment] = useState(baseEnvironment);
@@ -785,10 +816,6 @@ function SceneContents({
     }
     onLocalTransform(transform);
   };
-
-  useEffect(() => {
-    camera.lookAt(0, 0.9, 0);
-  }, [camera]);
 
   return (
     <>
@@ -836,6 +863,7 @@ function SceneContents({
         onLocalTransform={handleLocalTransform}
         onAvatarAssetStatus={onAvatarAssetStatus}
         controlsEnabled={controlsEnabled}
+        cameraState={cameraState}
         transitionBoundaryStates={transitionBoundaryStates}
         initialLocalTransform={initialLocalTransform}
         gravityMilli={environment?.gravity_milli ?? 9_800}
@@ -894,6 +922,7 @@ export function MetaverseScene({
   onAvatarAssetStatus,
   controlsEnabled = true,
   suspended = false,
+  cameraState,
 }: SceneProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const clientBudget = useMemo(
@@ -955,6 +984,7 @@ export function MetaverseScene({
           onLocalTransform={onLocalTransform}
           onAvatarAssetStatus={onAvatarAssetStatus}
           controlsEnabled={controlsEnabled && !suspended}
+          cameraState={cameraState}
           resourcePlan={resourcePlan}
         />
       </Canvas>

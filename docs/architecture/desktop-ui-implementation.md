@@ -24,6 +24,7 @@ OS取得のfrontend wrapperは `lib/api/systemLocale.ts`、読み取り専用IPC
 4. `shell-scoped-overrides.css`: `.shell-phase1`配下だけに適用する上書き
 5. `column-span-workspace.css`: desktopの可変span Column Canvas
 6. `mobile-column-workspace.css`: 759px以下の1 Column＝1 viewportとmobile input ownership
+7. `metaverse-camera.css`: Metaverse専用のアバター操作状態・視点調整ボタン・中央の目印
 
 `css-vars.test.ts`は`index.css`のlocal `@import`を直接列挙し、同梱bundle内の未定義`var()`参照を検出する。stylesheetを追加・削除するときにtest側へ別の手動一覧を追加しない。
 

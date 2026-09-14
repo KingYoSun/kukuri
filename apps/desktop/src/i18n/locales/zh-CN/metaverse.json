@@ -292,5 +292,24 @@
     "scenePending": "空间数据未就绪",
     "loadingRooms": "正在检查Dome列表…",
     "staleTarget": "此Dome已更新。请关闭管理并重新选择。"
+  },
+  "camera": {
+    "resume": "恢复角色操作",
+    "controls": "调整视角",
+    "left": "向左看",
+    "right": "向右看",
+    "up": "向上看",
+    "down": "向下看",
+    "in": "拉近",
+    "out": "拉远",
+    "reset": "重置视角",
+    "hint": "WASD / 方向键: 移动 · 鼠标: 视角 · 滚轮: 距离 · R: 重置 · Tab: 菜单 · Enter: 聊天 · Esc: 释放",
+    "states": {
+      "idle": "指针自由",
+      "requesting": "正在锁定指针…",
+      "locked": "角色操作中",
+      "unavailable": "无法锁定指针。请使用视角调整按钮或恢复操作以重试。",
+      "inactive": "角色操作已暂停"
+    }
   }
 }

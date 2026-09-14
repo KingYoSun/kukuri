@@ -292,5 +292,24 @@
     "scenePending": "Scene data unavailable",
     "loadingRooms": "Checking the Dome list…",
     "staleTarget": "This Dome has changed. Close management and select it again."
+  },
+  "camera": {
+    "resume": "Resume avatar controls",
+    "controls": "Adjust view",
+    "left": "Look left",
+    "right": "Look right",
+    "up": "Look up",
+    "down": "Look down",
+    "in": "Zoom in",
+    "out": "Zoom out",
+    "reset": "Reset camera",
+    "hint": "WASD / arrows: move · Mouse: look · Wheel: distance · R: reset · Tab: menu · Enter: chat · Esc: release",
+    "states": {
+      "idle": "Pointer free",
+      "requesting": "Capturing pointer…",
+      "locked": "Avatar controls active",
+      "unavailable": "Pointer capture unavailable. Use the view adjustment buttons or resume to retry.",
+      "inactive": "Avatar controls paused"
+    }
   }
 }

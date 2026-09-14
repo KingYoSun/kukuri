@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
@@ -104,6 +104,23 @@ afterEach(() => {
 });
 
 describe('MetaverseRoomView', () => {
+  test('provides explicit camera control and a pointer lock resume action', () => {
+    render(<MetaverseRoomView {...viewProps()} />);
+    expect(screen.getByRole('button', { name: 'Resume avatar controls' })).toBeEnabled();
+    fireEvent.click(screen.getByText('Adjust view'));
+    expect(screen.getByRole('button', { name: 'Reset camera' })).toBeEnabled();
+  });
+
+  test('clicking the 3D view enters avatar controls without using the resume button', () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    render(<MetaverseRoomView {...viewProps()} />);
+    fireEvent.click(screen.getByLabelText('Metaverse room viewport'));
+    expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide room HUD' })).not.toBeInTheDocument();
+    // This mock has no canvas: explicit capture failure remains usable and visible.
+    expect(screen.getByText('Pointer capture unavailable. Use the view adjustment buttons or resume to retry.')).toBeInTheDocument();
+  });
+
   test('passes room session state into the scene and composes HUD/chat controls', () => {
     render(<MetaverseRoomView {...viewProps()} />);
 
@@ -120,7 +137,7 @@ describe('MetaverseRoomView', () => {
     expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
 
     screen.getByLabelText('Metaverse room viewport').parentElement?.focus();
-    await screen.findByText('Scene controls: true');
+    await screen.findByText('Scene controls: false');
     fireEvent.keyDown(window, { key: 'Enter' });
 
     const input = await screen.findByLabelText('Room chat message');
@@ -133,6 +150,42 @@ describe('MetaverseRoomView', () => {
     fireEvent.keyDown(screen.getByLabelText('VRM file'), { key: 'Enter' });
 
     expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
+  });
+
+  test('Tab opens the HUD, normal UI Tab stays native and Escape restores scene focus', async () => {
+    const user = userEvent.setup();
+    const view = render(<MetaverseRoomView {...viewProps({ initialHudOpen: false, initialChatOpen: false })} />);
+    const stage = view.container.querySelector<HTMLElement>('[data-column-gesture-owner]')!;
+    act(() => stage.focus());
+    fireEvent.keyDown(window, { key: 'Tab' });
+    const debug = await screen.findByRole('button', { name: 'Debug details' });
+    await waitFor(() => expect(debug).toHaveFocus());
+    await user.tab();
+    expect(debug).not.toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(stage).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Debug details' })).not.toBeInTheDocument();
+  });
+
+  test('chat Escape keeps the draft, ignores IME confirmation and causes no domain actions', async () => {
+    const props = viewProps({ initialHudOpen: false, initialChatOpen: false, messageDraft: 'unsent draft' });
+    const view = render(<MetaverseRoomView {...props} />);
+    const stage = view.container.querySelector<HTMLElement>('[data-column-gesture-owner]')!;
+    act(() => stage.focus());
+    fireEvent.keyDown(window, { key: 'Enter', isComposing: true });
+    expect(screen.queryByLabelText('Room chat message')).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const input = await screen.findByLabelText('Room chat message');
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    expect(input).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(stage).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(await screen.findByLabelText('Room chat message')).toHaveValue('unsent draft');
+    expect(props.onSendMessage).not.toHaveBeenCalled();
+    expect(props.onLocalTransform).not.toHaveBeenCalled();
+    expect(props.onSaveCustomization).not.toHaveBeenCalled();
   });
 
   test('preserves HUD and chat state while the selected room is temporarily absent', async () => {
@@ -159,7 +212,7 @@ describe('MetaverseRoomView', () => {
     const view = render(<MetaverseRoomView {...viewProps({ initialChatOpen: false })} />);
 
     screen.getByLabelText('Metaverse room viewport').parentElement?.focus();
-    await screen.findByText('Scene controls: true');
+    await screen.findByText('Scene controls: false');
     fireEvent.keyDown(window, { key: 'Enter' });
     view.unmount();
 
