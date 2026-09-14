@@ -1,10 +1,5 @@
 /* #1022: content sizing belongs to the Column, not the desktop viewport. */
-.metaverse-auxiliary,
-.metaverse-aux-before,
-.metaverse-aux-after { display: contents; }
-.metaverse-aux-before > * { order: 0; }
-.metaverse-panel > .metaverse-room-view { order: 1; }
-.metaverse-aux-after > * { order: 2; }
+.metaverse-auxiliary { display: contents; }
 .metaverse-auxiliary[hidden] { display: none; }
 
 /* Fullscreen keeps the existing scene and form subtrees mounted. */
@@ -28,12 +23,19 @@
 }
 .metaverse-panel[data-immersive] > .metaverse-aux-toggle {
   justify-self: start;
-  order: 0;
+  grid-area: 1 / 1;
 }
 .metaverse-panel[data-immersive] > .metaverse-room-view {
   min-height: 0;
   margin: 0;
   padding: 0;
+  grid-area: 2 / 1 / 4;
+}
+.metaverse-panel[data-immersive][data-tools-open] {
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+}
+.metaverse-panel[data-immersive]:not([data-tools-open]) > .metaverse-room-view {
+  grid-row: 2;
 }
 .metaverse-panel[data-immersive] :where(.metaverse-room-stage, .metaverse-viewport-shell) {
   min-height: 0;
@@ -44,8 +46,9 @@
   max-height: min(28rem, 100%);
 }
 .metaverse-panel[data-immersive] > .metaverse-auxiliary:not([hidden]) {
-  position: absolute;
-  inset: 3rem 0 0 auto;
+  grid-area: 2 / 1;
+  justify-self: end;
+  min-height: 0;
   z-index: 5;
   display: grid;
   align-content: start;
@@ -58,6 +61,7 @@
   border-radius: var(--radius-panel);
   background: var(--surface-panel-solid);
 }
+.metaverse-panel[data-immersive] > .metaverse-aux-after:not([hidden]) { grid-row: 3; }
 
 .metaverse-panel,
 .metaverse-discovery-card {

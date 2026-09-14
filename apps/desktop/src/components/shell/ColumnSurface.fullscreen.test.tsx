@@ -105,3 +105,39 @@ test('an unavailable fullscreen API reports a visible assistive failure', async 
 
   expect(await screen.findByText('Could not change Stream fullscreen mode.')).toBeVisible();
 });
+
+test('request and exit rejection preserve real fullscreen state and allow retry', async () => {
+  const user = userEvent.setup();
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fullscreenElement });
+  Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true });
+  const request = vi.fn().mockRejectedValueOnce(new Error('denied'));
+  const exit = vi.fn().mockRejectedValueOnce(new Error('busy'));
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, value: request });
+  Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit });
+  render(<ColumnSurface active pinned fullscreenable columnId='room' position={1} total={1} span={3} title='Metaverse' scopeLabel='Demo'>
+    <input aria-label='Draft' defaultValue='Keep me' />
+  </ColumnSurface>);
+  const column = screen.getByRole('region', { name: /Metaverse Column/ });
+  request.mockImplementationOnce(async () => {
+    fullscreenElement = column;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  exit.mockImplementationOnce(async () => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  const toggle = async (name: string) => {
+    await user.click(screen.getByRole('button', { name: 'Open Metaverse menu' }));
+    await user.click(screen.getByRole('menuitem', { name }));
+  };
+  await toggle('Enter Metaverse fullscreen');
+  expect(await screen.findByText('Could not change Metaverse fullscreen mode.')).toBeVisible();
+  expect(fullscreenElement).toBeNull();
+  await toggle('Enter Metaverse fullscreen');
+  expect(fullscreenElement).toBe(column);
+  await toggle('Exit Metaverse fullscreen');
+  expect(fullscreenElement).toBe(column);
+  await toggle('Exit Metaverse fullscreen');
+  expect(fullscreenElement).toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveValue('Keep me');
+});

@@ -1,10 +1,11 @@
 import { createRef, useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { ColumnFullscreenContext } from '@/shell/ColumnPresentationContext';
 import { MetaverseRoomLayout } from './MetaverseRoomLayout';
 
-it('preserves scene, form and draft through fullscreen tools and return without repeating mount effects', () => {
+it('preserves scene, form and draft through fullscreen tools and return without repeating mount effects', async () => {
   const mount = vi.fn();
   const unmount = vi.fn();
   function Session() {
@@ -24,6 +25,11 @@ it('preserves scene, form and draft through fullscreen tools and return without 
   const { rerender } = render(view(false));
   const draft = screen.getByRole('textbox', { name: 'Chat draft' });
   const name = screen.getByRole('textbox', { name: 'Dome name' });
+  name.focus();
+  await userEvent.tab();
+  expect(draft).toHaveFocus();
+  await userEvent.tab();
+  expect(screen.getByRole('button', { name: 'Hosting action' })).toHaveFocus();
   fireEvent.change(draft, { target: { value: 'Unsent 1023' } });
   fireEvent.change(name, { target: { value: 'Edited name' } });
   rerender(view(true));

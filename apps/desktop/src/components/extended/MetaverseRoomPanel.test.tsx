@@ -15,6 +15,7 @@ import type {
 import { MetaverseRoomPanel } from './MetaverseRoomPanel';
 import { createDefaultMetaverseRoomState } from './metaverse/DomeSceneModel';
 import { createMetaverseRoomActions } from '@/shell/actions/metaverse';
+import { ColumnFullscreenContext } from '@/shell/ColumnPresentationContext';
 
 vi.mock('./MetaverseScene', () => ({
   MetaverseScene: (props: {
@@ -247,6 +248,32 @@ function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
 }
 
 describe('MetaverseRoomPanel animation sharing', () => {
+  test('fullscreen tools preserve the admitted session and draft without repeating presence or host actions', async () => {
+    const api = createDesktopMockApi();
+    const publish = vi.spyOn(api, 'publishMetaverseRoomEvent');
+    const admission = vi.spyOn(api, 'submitDomeSessionInput');
+    const startHost = vi.spyOn(api, 'startOwnerDomeHosting');
+    const delegateHost = vi.spyOn(api, 'delegateDomeHosting');
+    const closeHost = vi.spyOn(api, 'closeDomeHosting');
+    const element = panelElement(api);
+    const view = render(<ColumnFullscreenContext.Provider value={false}>{element}</ColumnFullscreenContext.Provider>);
+    const scene = await screen.findByLabelText('Metaverse room viewport');
+    const input = screen.getByRole('textbox', { name: 'Room chat message' });
+    await userEvent.type(input, 'unsent 1023');
+    const beforeEvents = publish.mock.calls.length;
+    const beforeAdmission = admission.mock.calls.length;
+    view.rerender(<ColumnFullscreenContext.Provider value>{element}</ColumnFullscreenContext.Provider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Dome tools', exact: true }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Close Dome tools', exact: true })[1]);
+    view.rerender(<ColumnFullscreenContext.Provider value={false}>{element}</ColumnFullscreenContext.Provider>);
+    expect(screen.getByLabelText('Metaverse room viewport')).toBe(scene);
+    expect(input).toHaveValue('unsent 1023');
+    expect(publish.mock.calls.length).toBe(beforeEvents);
+    expect(admission.mock.calls.length).toBe(beforeAdmission);
+    expect(startHost).not.toHaveBeenCalled();
+    expect(delegateHost).not.toHaveBeenCalled();
+    expect(closeHost).not.toHaveBeenCalled();
+  });
   test('requires a new authoritative admission when the same room id has a new generation', async () => {
     const api = createDesktopMockApi();
     const input = vi.spyOn(api, 'submitDomeSessionInput');

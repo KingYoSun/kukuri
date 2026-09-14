@@ -23,19 +23,22 @@ export function MetaverseRoomLayout({ admitted, panelRef, before, after, childre
     }
   }, [immersive, panelRef]);
   return (
-    <div className='metaverse-panel' ref={panelRef} data-immersive={immersive || undefined}>
+    <div className='metaverse-panel' ref={panelRef} data-immersive={immersive || undefined}
+      data-tools-open={immersive && open || undefined}>
       {immersive && <Button ref={toggleRef} className='metaverse-aux-toggle' variant='secondary'
-        aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        aria-expanded={open} aria-controls={`${id}-before ${id}-after`} onClick={() => setOpen(!open)}>
         {t(open ? 'fullscreen.closeTools' : 'fullscreen.openTools')}
       </Button>}
-      <div id={id} className='metaverse-auxiliary' hidden={immersive && !open}>
+      <div id={`${id}-before`} className='metaverse-auxiliary metaverse-aux-before' hidden={immersive && !open}>
         {immersive && <Button variant='secondary' onClick={() => { setOpen(false); toggleRef.current?.focus(); }}>
           {t('fullscreen.closeTools')}
         </Button>}
-        <div className='metaverse-aux-before'>{before}</div>
-        <div className='metaverse-aux-after'>{after}</div>
+        {before}
       </div>
       {children}
+      <div id={`${id}-after`} className='metaverse-auxiliary metaverse-aux-after' hidden={immersive && !open}>
+        {after}
+      </div>
     </div>
   );
 }

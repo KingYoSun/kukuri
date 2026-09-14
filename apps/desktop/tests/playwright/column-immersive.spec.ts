@@ -74,7 +74,8 @@ test('Stream and Metaverse fullscreen return to the same Column workspace state'
   await expect(draft).toBeInViewport();
   await expect(metaverse.getByRole('button', { name: 'Refresh dome connections' })).toBeHidden();
   await metaverse.getByRole('button', { name: 'Dome tools', exact: true }).click();
-  await expect(metaverse.locator('.metaverse-auxiliary')).toBeVisible();
+  await expect(metaverse.locator('.metaverse-aux-before')).toBeVisible();
+  await expect(metaverse.locator('.metaverse-aux-after')).toBeVisible();
   await metaverse.locator('.metaverse-auxiliary').getByRole('button', { name: 'Close Dome tools', exact: true }).click();
   await expect(metaverse.getByRole('button', { name: 'Dome tools', exact: true })).toBeFocused();
   await expect(draft).toHaveValue('Unsent fullscreen draft 1023');
