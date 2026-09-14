@@ -328,7 +328,7 @@ export const Reply: Story = {
       replyParentAuthor: { pubkey: 'b'.repeat(64), label: 'Parent Author', picture: null },
       post: {
         ...basePost,
-        content: 'This reply shows a compact context line above its own body.',
+        content: '直前の返信先から派生する返信。投稿者・日時・操作はこの返信自身の情報です。',
         reply_to: 'parent-1',
         reply_preview: {
           object_id: 'parent-1',
@@ -339,10 +339,10 @@ export const Reply: Story = {
             display_name: 'Parent Author',
             picture_asset: null,
           },
-          content: 'The original post being replied to.',
+          content: '直前の返信対象の簡略表示です。長い本文でも、返信自身の本文と混同せずに会話を追えるようにします。'.repeat(3),
           attachments: [],
-          root_id: 'parent-1',
-          reply_to: null,
+          root_id: 'ancestor-root',
+          reply_to: 'ancestor-root',
         },
       },
     }),

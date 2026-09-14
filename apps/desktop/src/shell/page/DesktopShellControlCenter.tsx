@@ -159,14 +159,20 @@ export function DesktopShellControlCenter({
         (kind) => kind !== 'stream' && kind !== 'metaverse'
       );
 
+  const restoreTriggerFocus = useRef(false);
+  useEffect(() => {
+    if (!workspaceState.controlCenterOpen && restoreTriggerFocus.current) {
+      restoreTriggerFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [workspaceState.controlCenterOpen, triggerRef]);
+
   const setOpen = useCallback(
     (open: boolean, restoreFocus = false) => {
       setWorkspaceState((current) => ({ ...current, controlCenterOpen: open }));
-      if (!open && restoreFocus) {
-        triggerRef.current?.focus();
-      }
+      restoreTriggerFocus.current = !open && restoreFocus;
     },
-    [setWorkspaceState, triggerRef]
+    [setWorkspaceState]
   );
 
   useEffect(() => {
@@ -243,7 +249,7 @@ export function DesktopShellControlCenter({
 
   return (
     <>
-      <div className='shell-control-cluster'>
+      <div className='shell-control-cluster' data-control-center-open={workspaceState.controlCenterOpen}>
         <AccountMenu onOpen={() => setOpen(false)} onManage={() => openSettings('account')} onProfile={onOpenProfile} />
         <Button
           ref={triggerRef}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bookmark, Flag, Link2, Reply, Repeat2, Trash2 } from 'lucide-react';
 
-import { formatLocalizedTime } from '@/i18n/format';
+import { formatPostDateTime } from '@/i18n/format';
 import type {
   BookmarkedCustomReactionView,
   CommunityNodeManifestFetch,
@@ -383,52 +383,70 @@ export function PostCard({
     );
   };
 
-  const contentBlock = (
+  const replyContext = (
     <>
-      <div className='post-body post-layout-safe'>
-        {!view.adultContentGated && showReplyContext && view.replyParentAuthor && replyPreview ? (
-          <div className='post-reply-context'>
+      {!view.adultContentGated && showReplyContext && view.replyParentAuthor && replyPreview ? (
+        <div className='post-reply-context'>
+          <button
+            type='button'
+            className='post-reply-context-avatar'
+            aria-label={view.replyParentAuthor.label}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenAuthor(view.replyParentAuthor!.pubkey);
+            }}
+          >
+            <AuthorAvatar
+              label={view.replyParentAuthor.label}
+              picture={view.replyParentAuthor.picture ?? null}
+              size='sm'
+            />
+          </button>
+          <div className='post-reply-context-main'>
             <button
               type='button'
-              className='post-reply-context-avatar'
-              aria-label={view.replyParentAuthor.label}
+              className='post-reply-context-author author-link'
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenAuthor(view.replyParentAuthor!.pubkey);
               }}
             >
-              <AuthorAvatar
-                label={view.replyParentAuthor.label}
-                picture={view.replyParentAuthor.picture ?? null}
-                size='sm'
-              />
+              {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
             </button>
-            <div className='post-reply-context-main'>
-              <button
-                type='button'
-                className='post-reply-context-author author-link'
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenAuthor(view.replyParentAuthor!.pubkey);
+            {replyPreview.content.trim().length > 0 ? (
+              <div
+                className='post-reply-context-body post-copy-wrap'
+                role={!readOnly && canOpenThread ? 'button' : undefined}
+                tabIndex={!readOnly && canOpenThread ? 0 : undefined}
+                onClick={!readOnly && canOpenThread ? openPrimaryTarget : undefined}
+                onKeyDown={(event) => {
+                  if (readOnly || !canOpenThread || event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openPrimaryTarget();
+                  }
                 }}
               >
-                {t('feed.replyingTo', { author: view.replyParentAuthor.label })}
-              </button>
-              {replyPreview.content.trim().length > 0 ? (
-                <div className='post-reply-context-body post-copy-wrap'>
-                  <SmartReferenceText
-                    text={replyPreview.content}
-                    className='post-copy-wrap'
-                    onActivateReference={onActivateReference}
-                    mentionAuthors={view.mentionAuthors}
-                    onOpenMention={onOpenAuthor}
-                  />
-                </div>
-              ) : null}
-            </div>
+                <SmartReferenceText
+                  text={replyPreview.content}
+                  className='post-copy-wrap'
+                  onActivateReference={onActivateReference}
+                  mentionAuthors={view.mentionAuthors}
+                  onOpenMention={onOpenAuthor}
+                />
+              </div>
+            ) : replyPreview.attachments.length > 0 ? (
+              <span className='post-reply-context-body'>{t('feed.moreMedia', { count: replyPreview.attachments.length })}</span>
+            ) : null}
           </div>
-        ) : null}
+        </div>
+      ) : null}
+    </>
+  );
 
+  const contentBlock = (
+    <>
+      <div className='post-body post-layout-safe'>
         {isWithdrawn ? (
           <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
             {t('feed.withdrawnPost')}
@@ -501,7 +519,7 @@ export function PostCard({
     </>
   );
 
-  return (
+  const card = (
     <article
       className={
         context === 'thread'
@@ -539,7 +557,7 @@ export function PostCard({
         <div className='post-meta-trailing'>
           <RelationshipBadge label={view.relationshipLabel} />
           <span className='post-meta-chip'>{audienceChipLabel}</span>
-          <span>{formatLocalizedTime(post.created_at * 1000)}</span>
+          <time className='post-timestamp' dateTime={new Date(post.created_at * 1000).toISOString()}>{formatPostDateTime(post.created_at * 1000)}</time>
         </div>
       </div>
 
@@ -914,5 +932,12 @@ export function PostCard({
         />
       ) : null}
     </article>
+  );
+
+  return (
+    <div className={showReplyContext && !view.adultContentGated ? 'post-reply-group post-layout-safe' : 'post-layout-safe'}>
+      {replyContext}
+      {card}
+    </div>
   );
 }

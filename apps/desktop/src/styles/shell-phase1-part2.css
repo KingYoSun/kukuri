@@ -572,27 +572,38 @@
   min-width: 0;
 }
 
-/* X-style: the replied-to post is stacked above the reply body, linked by a
-   vertical connector through the parent avatar. Distinct from the bordered,
-   nested quote-repost card (.post-source-*). */
+/* The immediate parent precedes the reply card, outside its content. */
+.post-reply-group {
+  position: relative;
+}
+
+.post-reply-group > .post-card {
+  margin-left: var(--space-md);
+}
 
 .post-reply-context {
   position: relative;
-  margin-bottom: var(--space-sm);
+  margin: 0 0 var(--space-sm) var(--space-xs);
   display: grid;
-  grid-template-columns: 2.5rem 1fr;
-  gap: var(--space-2xs) var(--space-sm);
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  gap: var(--space-2xs) var(--space-xs);
   min-width: 0;
 }
 
 .post-reply-context::before {
   content: '';
   position: absolute;
-  left: 1.25rem;
-  top: 2.5rem;
+  left: 0.875rem;
+  top: 2rem;
   bottom: calc(var(--space-sm) * -1);
   border-left: 2px solid var(--border-accent);
-  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.post-timestamp {
+  max-width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .post-reply-context-avatar {
@@ -619,8 +630,21 @@
 }
 
 .post-reply-context-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: var(--muted-foreground);
   min-width: 0;
+}
+
+/* Keyboard focus must not disappear inside a clamped SmartReferenceText link. */
+.post-reply-context-body:focus-within {
+  -webkit-line-clamp: unset;
+}
+
+.post-reply-context-body[role='button'] {
+  cursor: pointer;
 }
 
 .post-source-topic {
