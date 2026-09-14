@@ -1,0 +1,154 @@
+/* #1022: content sizing belongs to the Column, not the desktop viewport. */
+.metaverse-panel,
+.metaverse-discovery-card {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.metaverse-panel :where(.panel, .composer, .post-card, label, input, select, textarea),
+.metaverse-room-view {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.metaverse-panel :where(p, small, h3, h4, .topic-diagnostic) {
+  overflow-wrap: anywhere;
+}
+
+.metaverse-panel :where(.panel-header, .post-meta) {
+  flex-wrap: wrap;
+}
+
+.metaverse-create-form,
+.metaverse-panel > .panel-subsection,
+.metaverse-panel .metaverse-management-panel,
+.metaverse-panel .composer-compact {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.metaverse-create-form-primary {
+  grid-template-columns: minmax(0, 1fr) 8rem;
+}
+
+.metaverse-room-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 24rem));
+}
+
+.metaverse-panel .button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  height: auto;
+}
+
+.metaverse-panel :where(.composer-compact, .metaverse-room-card, .metaverse-management-panel) > .button {
+  justify-self: start;
+}
+
+.metaverse-connection-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  max-width: 52rem;
+}
+
+.metaverse-viewport-shell,
+.shell-phase1 .metaverse-viewport-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  padding: 0.75rem;
+  align-content: start;
+}
+
+.shell-phase1 .metaverse-viewport-canvas {
+  right: 0 !important;
+}
+
+.metaverse-viewport-shell :where(.metaverse-connection-badge, .metaverse-hud-toolbar,
+  .metaverse-camera-controls, .metaverse-recovery-banner, .metaverse-room-chat-log,
+  .metaverse-chat-toggle),
+.shell-phase1 .metaverse-room-hud,
+.metaverse-room-hud {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+
+.metaverse-connection-badge {
+  grid-area: 1 / 1;
+  flex-wrap: wrap;
+  justify-self: start;
+}
+
+.metaverse-hud-toolbar {
+  grid-area: 1 / 2;
+  flex-wrap: wrap;
+  justify-self: end;
+}
+
+.metaverse-camera-controls { grid-area: 2 / 1; justify-self: start; }
+.metaverse-recovery-banner { grid-area: 3 / 1; align-self: start; }
+.metaverse-resource-tier {
+  position: relative;
+  inset: auto;
+  grid-area: 5 / 1 / auto / -1;
+  justify-self: start;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.metaverse-room-chat-log,
+.metaverse-chat-toggle { grid-area: 4 / 1; align-self: end; }
+.metaverse-room-chat-log { width: min(27rem, 100%); max-height: 14rem; }
+.metaverse-chat-toggle { justify-self: start; }
+
+.shell-phase1 .metaverse-room-hud,
+.metaverse-room-hud {
+  grid-area: 2 / 2 / 5;
+  width: 100%;
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.metaverse-hud-scrollbar-indicator { display: none; }
+.metaverse-room-hud,
+.metaverse-room-chat-log,
+.metaverse-chat-list { touch-action: pan-y; }
+.metaverse-room-chat-log-header { gap: var(--space-xs); }
+.metaverse-room-chat-log-header > span { min-width: 0; overflow-wrap: anywhere; }
+.metaverse-room-chat-log-header > button { flex: none; }
+.metaverse-room-chat-log .metaverse-chat-list { overflow-wrap: anywhere; }
+.metaverse-room-chat-log .metaverse-chat-form .button { white-space: normal; }
+
+@container (max-width: 50rem) {
+  .metaverse-viewport-shell,
+  .shell-phase1 .metaverse-viewport-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+
+  .metaverse-viewport-shell :where(.metaverse-connection-badge, .metaverse-hud-toolbar,
+    .metaverse-camera-controls, .metaverse-recovery-banner, .metaverse-room-chat-log,
+    .metaverse-chat-toggle),
+  .shell-phase1 .metaverse-room-hud,
+  .metaverse-room-hud {
+    grid-area: auto;
+    justify-self: start;
+  }
+
+  .metaverse-camera-controls { order: 2; }
+  .metaverse-resource-tier { grid-area: auto; order: 6; }
+  .metaverse-recovery-banner { order: 3; }
+  .metaverse-room-hud { order: 4; }
+  .metaverse-room-chat-log, .metaverse-chat-toggle { order: 5; }
+  .shell-phase1 .metaverse-room-hud, .metaverse-room-hud { max-height: 16rem; }
+}
+
+@container (max-width: 32rem) {
+  .metaverse-create-form-primary,
+  .metaverse-connection-slots { grid-template-columns: minmax(0, 1fr); }
+}
