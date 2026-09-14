@@ -994,19 +994,3 @@
   visibility: hidden;
   pointer-events: none;
 }
-
-/* Explore uses the same compact pill density as other text controls. */
-.shell-phase1 .shell-community-index-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--space-2xs);
-}
-
-.shell-phase1 .shell-community-index-tabs .shell-tab {
-  flex: 0 1 auto;
-  width: auto;
-  min-height: 2rem;
-  padding: 0 0.625rem;
-  border-radius: var(--radius-pill);
-  line-height: 1.4;
-}

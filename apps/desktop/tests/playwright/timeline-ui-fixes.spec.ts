@@ -69,4 +69,7 @@ test('control center hides the account trigger and restores focus on close', asy
   await expect(trigger).toBeFocused();
   await account.click();
   await expect(page.getByRole('menu')).toBeVisible();
+  await trigger.click();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect(page.locator('#shell-control-center')).toBeVisible();
 });
