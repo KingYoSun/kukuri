@@ -307,7 +307,7 @@ test('reply context uses the immediate parent and preserves author and reply tar
   render(<PostCard view={view} onOpenAuthor={onOpenAuthor} onOpenThread={vi.fn()} onReply={onReply} />);
   await userEvent.click(screen.getByRole('button', { name: 'Parent Author' }));
   expect(onOpenAuthor).toHaveBeenCalledWith('b'.repeat(64));
-  await userEvent.click(screen.getByRole('button', { name: 'Reply', exact: true }));
+  await userEvent.click(screen.getByRole('button', { name: /^Reply$/ }));
   expect(onReply).toHaveBeenCalledWith(view.post);
   expect(screen.getByText('parent body')).toBeVisible();
   expect(screen.queryByText('root-ancestor')).not.toBeInTheDocument();
