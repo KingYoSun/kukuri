@@ -75,6 +75,7 @@ module "vm" {
 
   # --- index / moderation stack (#615) ---
   deploy_indexer_stack                   = var.deploy_indexer_stack
+  index_expected_topics                  = var.index_expected_topics
   cn_indexer_image                       = var.cn_indexer_image
   arcadedb_image                         = var.arcadedb_image
   indexer_data_disk_gb                   = var.indexer_data_disk_gb
@@ -232,6 +233,18 @@ locals {
       display_name = "Community Node media fetch unavailable total"
       unit         = "1"
     }
+    body_fetch_failures_recent = {
+      display_name = "Community Node post body fetch failures in last 10 minutes (-1 unknown)"
+      unit         = "1"
+    }
+    index_expected_topics_present = {
+      display_name = "Community Node expected public topics present"
+      unit         = "1"
+    }
+    index_expected_topics_entries = {
+      display_name = "Community Node expected public topics index entries (-1 unknown)"
+      unit         = "1"
+    }
     relation_last_success_age_seconds = {
       display_name = "Community Node relation analysis age"
       unit         = "s"
@@ -289,6 +302,20 @@ locals {
         display    = "Community Node relation analysis stale"
         comparison = "COMPARISON_GT"
         threshold  = var.relation_analyze_interval_minutes * 180
+      }
+    } : {},
+    var.deploy_indexer_stack && length(var.index_expected_topics) > 0 ? {
+      index_topics_missing = {
+        metric     = "index_expected_topics_present"
+        display    = "Community Node expected index topics missing or unreadable"
+        comparison = "COMPARISON_LT"
+        threshold  = 0.5
+      }
+      index_empty = {
+        metric     = "index_expected_topics_entries"
+        display    = "Community Node expected public index empty or unreadable"
+        comparison = "COMPARISON_LT"
+        threshold  = 0.5
       }
     } : {}
   )

@@ -38,6 +38,9 @@ backup_retention_days = 30
 # Cloud Monitoring alert policies are enabled by default. Add one or more
 # pre-created notification channel resource names before production apply.
 enable_community_node_monitoring = true
+# Only for a node that promises indexing of these topics. Register them through
+# the audited admin UI first; this monitors them and never changes the database.
+# index_expected_topics = ["kukuri:topic:general", "kukuri:topic:test", "kukuri:topic:dev"]
 # monitoring_notification_channels = [
 #   "projects/your-gcp-project/notificationChannels/1234567890",
 # ]

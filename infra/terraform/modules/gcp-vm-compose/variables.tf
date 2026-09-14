@@ -330,6 +330,16 @@ variable "backup_schedule_oncalendar" {
 }
 
 # --- monitoring helpers passthrough ---
+variable "index_expected_topics" {
+  description = "索引対象に必須の公開topic集合。明示したnodeだけで欠落・空索引を監視し、自動登録はしない。"
+  type        = set(string)
+  default     = []
+  validation {
+    condition     = alltrue([for topic in var.index_expected_topics : can(regex("^[a-zA-Z0-9:_-]{1,200}$", topic))])
+    error_message = "Expected index topics must be 1-200 ASCII letters, digits, colons, underscores or hyphens."
+  }
+}
+
 variable "deployment_profile" {
   description = "deployment profile 名（メタ表示用）。"
   type        = string

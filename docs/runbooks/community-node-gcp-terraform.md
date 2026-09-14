@@ -16,6 +16,11 @@
 既存production環境の日常rollout、意図しないVM置換の回避、容量枯渇からの復旧、実投稿の
 live確認は `docs/runbooks/community-node-production-rollout.md` を先に参照する。
 
+特定の公開topicの索引を提供するlow-cost nodeは `index_expected_topics` に期待集合を明示できる。
+空が既定で、一般nodeへ既定topicを強制しない。この設定は監視専用で、管理画面でのtopic登録を
+代替しない。欠落・空索引警報、本文取得失敗metric、実投稿による検索確認は
+[production rolloutの索引可用性手順](community-node-production-rollout.md#522-default-onboarding-node-の索引可用性)に従う。
+
 > 注意: この runbook は法的助言ではない。日本国内で relay を運用する場合の電気通信事業の
 > 届出要否や記載内容は、最終的に operator 自身と総合通信局・専門家への確認が必要。region 既定の
 > `asia-northeast1`（東京）も法的保証ではなく、単なる既定値。

@@ -174,11 +174,13 @@ locals {
   }), "\r\n", "\n"))
 
   monitor_script_b64 = base64encode(replace(templatefile("${path.module}/templates/monitor.sh.tftpl", {
-    install_dir          = local.install_dir
-    postgres_data_path   = local.postgres_data_path
-    indexer_data_path    = local.indexer_data_path
-    deploy_indexer_stack = var.deploy_indexer_stack
-    indexer_status_port  = local.indexer_status_port
+    index_health_helpers  = file("${path.module}/scripts/index-health.sh")
+    index_expected_topics = sort(tolist(var.index_expected_topics))
+    install_dir           = local.install_dir
+    postgres_data_path    = local.postgres_data_path
+    indexer_data_path     = local.indexer_data_path
+    deploy_indexer_stack  = var.deploy_indexer_stack
+    indexer_status_port   = local.indexer_status_port
   }), "\r\n", "\n"))
 
   startup_script = replace(templatefile("${path.module}/templates/startup.sh.tftpl", {
