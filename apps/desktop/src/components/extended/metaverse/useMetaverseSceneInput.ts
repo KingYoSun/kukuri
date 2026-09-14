@@ -25,6 +25,7 @@ export function useMetaverseSceneInput(stageRef: RefObject<HTMLDivElement | null
   useEffect(() => {
     const canvas = stageRef.current?.querySelector('canvas') ?? null;
     owner.current = canvas;
+    if (!canvas) return;
     const changed = () => {
       if (canvas && document.pointerLockElement === canvas) {
         if (!wanted.current || !permitted.current || document.hidden || !document.hasFocus()) {

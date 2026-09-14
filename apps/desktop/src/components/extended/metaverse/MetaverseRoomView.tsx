@@ -168,7 +168,7 @@ export function MetaverseRoomView({
     let focusFrameId = 0;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === 'Escape' && (sceneFocused || stageRef.current?.contains(event.target as Node))) {
+      if (event.key === 'Escape' && (sceneFocused || (event.target instanceof Node && stageRef.current?.contains(event.target)))) {
         release();
         setChatOpen(false);
         setHudOpen(false);

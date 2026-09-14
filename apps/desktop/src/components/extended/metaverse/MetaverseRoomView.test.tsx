@@ -104,6 +104,11 @@ afterEach(() => {
 });
 
 describe('MetaverseRoomView', () => {
+  test('does not register document input ownership before a room is rendered', () => {
+    const listen = vi.spyOn(document, 'addEventListener');
+    render(<MetaverseRoomView {...viewProps({ room: null })} />);
+    expect(listen).not.toHaveBeenCalledWith('pointerlockchange', expect.any(Function));
+  });
   test('provides explicit camera control and a pointer lock resume action', () => {
     render(<MetaverseRoomView {...viewProps()} />);
     expect(screen.getByRole('button', { name: 'Resume avatar controls' })).toBeEnabled();

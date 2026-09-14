@@ -2,7 +2,7 @@
 
 ## 状態と範囲
 
-- 状態: 実装済み、全体validation・実機確認の最終整理中。
+- 実装・対象検証の記録。最終headのCIとマージ判定は[PR #1027](https://github.com/KingYoSun/kukuri/pull/1027)を参照。
 - Scope revision: `2026-09-14-r2`。基準commit: `77d4aec1eaf98139e219e70e7d7737ca4383b38a`。
 - リスクB。cameraとMetaverse専用input ownerに閉じ、Column共通guard、IPC、host physics、admission、shared transformは変更しない。独立監査の必須条件には該当しない。
 - 承認済み要求: アバター追従、drag不要の回転、Tab／EnterでUIと固定を切替、3D表示中央のclickで開始。「アバター操作」と「視点の調整」を区別する。
@@ -54,12 +54,21 @@ Windowsでは全身・足元、Pointer Lock取得、マウス移動による回�
 
 ## Validation
 
-- targeted camera／frame／input／view: 実行済み。数値比較の丸め差は近似比較へ修正し、該当testは成功。
-- `metaverse-camera.spec.ts`: Chromium実Canvasで成功。中央click、実Pointer Lock、実wheel、外側scroll不変、Tab／Enter／Escape、draft保持、reset、再取得を確認。
-- `cargo xtask check`: lint／typecheckとRust／Tauri checkを含め成功（後続差分は最終UI gateで再確認）。
-- `cargo xtask test`: 実行中。
-- `cargo xtask desktop-ui-check`: 初回はRust buildと並走中に無関係なAccountKeyPanelの5秒timeoutが発生したため中断。負荷を分離して再実行する。
-- `cargo xtask oversized-files`: 初回は既存CSSが1000行を越えたため失敗。新規cameraスタイルを専用CSSへ配置して上限増加を回避し、再確認する。
-- CI、Storybook／a11y、全体browser／visual、追加の表示条件は最終結果を追記する。実行中・未確認を成功扱いしない。
+- camera／frame／input／viewの個別test: 初回の導線不足、room未表示での不要なdocument listenerを失敗testで確認して修正。投影・frame追従・lock lifecycle・UI往復を検証した。
+- `metaverse-camera.spec.ts`: Chromiumの実Canvasで成功。idle時に安定するmodel-view uniformが、実マウス移動とwheelで変化することを観測した。camera操作によるmove API追加0件、W移動によるmove発生、Tab後の押下状態解消、中央click、draft保持も確認。テスト側だけでWebGL／mock APIを観測し、製品にdebug APIを追加していない。
+- `cargo xtask check`: Rust／Tauri check、lint、typecheckを含め成功。後続testの型修正後もtypecheckを再確認。
+- `cargo xtask test`: 初回は既存のSQLite削除でWindows共有違反が発生。該当test単独の再実行は成功し、全体の再実行では通常Rust 940件成功・4件skip、harness 23件成功、doctest成功。frontendは1679件成功・9件timeout（7ファイル）。その7ファイルを1 workerで再実行しても6件timeoutが残った。条件とassertionを緩和せず、今回と無関係なshell testのローカル時間超過として記録する。通常のCIではこれらを含むfrontend suiteが成功している。
+- `cargo xtask desktop-ui-check`: ローカル一括実行は既存AccountKeyPanel／shell testのtimeoutで中断した。内訳のlint／typecheck、Storybook build、browser全318件、visual到達smoke全38件を確認。Windowsのvisual比較は既定でskipされるため、pixel比較成功とは扱わない。Linux CIのdesktop-ui／desktop-browserが正式な全体gate。
+- `oversized-files`: 初回のCSS増加を専用`metaverse-camera.css`へ分け、baseline上限を増やさず成功。Windowsで実行中のxtask.exeをCargoが置換できない再実行は、同一sourceの既存xtask binaryから実行した。
+- Storybookの5 input状態＋日本語／中国語×light／darkの9条件でaxe違反0。拡大・強制配色・reduced motionのbrowser表示も確認した。これはscreen reader実機操作の代替ではない。
+- PRの初回headでは全11 checksが成功。最終差分のCI結果と追加の実機確認はPRへ集約し、過去headの成功だけでmergeしない。
+
+## 実機確認の範囲と残る制約
+
+Windowsの1列でも全身を確認できた。3列への復元でColumnが右へ残る既存の#1022は、横scrollで戻して確認を続けた。Windowsの2560×1440 fullscreenでは#1023の黒画面と操作停止を再現。Ubuntu24のfullscreenでは描画は残ったが、既存runtimeの非active／suspendに従って操作停止となる場合があった。通常表示への復帰を確認した。これらのfullscreen／Column位置の修正は本PRへ混ぜていない。
+
+Ubuntu24 RDPではlock取得・解除、wheel zoom、Tab／Enter／Escapeを確認した。一方、Computer Useによる絶対座標の移動は、固定中に相対mousemoveとして届かず、同じ入力は解除後には届いた。実マウスでの回転はこの自動操作結果から保証せず、追加の利用者確認を依頼した。RDP越しの相対入力の未確認をbrowser成功で置き換えない。追加結果はPRの実機確認記録を参照する。
+
+cameraは既存frame loop内の固定量の計算で、frameごとのReact／store更新やnetworkを追加しない。boundsの頂点計算はVRMロード時だけ行う。通常の追従・resetへ遅延補間を追加していないため、reduced motionでも直接応答する。定量的なGPU frame time比較、物理touch端末、実screen reader、Linuxのローカル物理マウスは未確認。
 
 データ分類は[ADR 0050](../adr/0050-metaverse-camera-local-state.md)、UIの契約は[DESIGN](../../DESIGN.md)。カメラstateの保存・送信、カメラ衝突、新しい3D pickingは追加していない。
