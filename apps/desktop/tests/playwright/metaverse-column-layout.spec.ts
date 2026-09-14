@@ -111,29 +111,35 @@ test('wide forms use the adopted bounds and reflow without losing their values',
 
 for (const [locale, copy, shell] of [['en', en, shellEn], ['ja', ja, shellJa], ['zh-CN', zh, shellZh]] as const) {
   for (const theme of ['light', 'dark']) {
-    test(`layout and operation continuity (${locale}, ${theme})`, async ({ page }) => {
-      test.setTimeout(60_000);
-      const column = await openRoom(page, locale, theme, copy);
-      const chat = column.locator('.metaverse-chat-form input');
-      const light = column.locator('.metaverse-dome-customization input[type=number]').first();
-      await chat.fill('未送信 draft');
-      await light.fill('2300');
-      const room = await column.locator('.metaverse-room-hud h3').textContent();
-      const sceneElement = await column.locator('.metaverse-room-stage').elementHandle();
-      await page.evaluate(() => {
-        const api = window.__KUKURI_DESKTOP__ as unknown as Record<string, (...args: unknown[]) => unknown>;
-        const probe = window as unknown as { layoutMutations: string[] };
-        probe.layoutMutations = [];
-        for (const key of ['createMetaverseRoom', 'updateMetaverseRoom', 'startOwnerDomeHosting', 'closeDomeHosting', 'deleteDome', 'publishMetaverseRoomEvent', 'commitDomeLayout', 'createDomeConnectionProposal']) {
-          const original = api[key];
-          api[key] = (...args) => {
-            // Existing peer presence continues independently of layout.
-            if (key !== 'publishMetaverseRoomEvent' || (args[4] as { type: string }).type !== 'presence_join') probe.layoutMutations.push(key);
-            return original.apply(api, args);
-          };
+    for (const value of [1, 2, 3]) {
+      test(`layout and operation continuity (${locale}, ${theme}, ${value} spans)`, async ({ page }) => {
+        test.setTimeout(60_000);
+        const column = await openRoom(page, locale, theme, copy);
+        // Each case checks one resize and all its controls. Keep the full 3→1→2→3
+        // sequence above; grouping all three hit-test passes approached 60s on CI.
+        if (value === 3) {
+          await column.getByRole('button', { name: shell.columnMenu.open.replace('{{title}}', 'Metaverse') }).click();
+          await page.getByRole('menuitemradio').filter({ hasText: /^1\s/ }).click();
         }
-      });
-      for (const value of [1, 2, 3]) {
+        const chat = column.locator('.metaverse-chat-form input');
+        const light = column.locator('.metaverse-dome-customization input[type=number]').first();
+        await chat.fill('未送信 draft');
+        await light.fill('2300');
+        const room = await column.locator('.metaverse-room-hud h3').textContent();
+        const sceneElement = await column.locator('.metaverse-room-stage').elementHandle();
+        await page.evaluate(() => {
+          const api = window.__KUKURI_DESKTOP__ as unknown as Record<string, (...args: unknown[]) => unknown>;
+          const probe = window as unknown as { layoutMutations: string[] };
+          probe.layoutMutations = [];
+          for (const key of ['createMetaverseRoom', 'updateMetaverseRoom', 'startOwnerDomeHosting', 'closeDomeHosting', 'deleteDome', 'publishMetaverseRoomEvent', 'commitDomeLayout', 'createDomeConnectionProposal']) {
+            const original = api[key];
+            api[key] = (...args) => {
+              // Existing peer presence continues independently of layout.
+              if (key !== 'publishMetaverseRoomEvent' || (args[4] as { type: string }).type !== 'presence_join') probe.layoutMutations.push(key);
+              return original.apply(api, args);
+            };
+          }
+        });
         await column.getByRole('button', { name: shell.columnMenu.open.replace('{{title}}', 'Metaverse') }).click();
         await page.getByRole('menuitemradio').filter({ hasText: new RegExp(`^${value}\\s`) }).click();
         await headerVisible(column);
@@ -149,13 +155,13 @@ for (const [locale, copy, shell] of [['en', en, shellEn], ['ja', ja, shellJa], [
             return Boolean(hit && el.contains(hit));
           })).toBe(true);
         }
-      }
-      // Layout must not submit the draft or save customization.
-      await expect(chat).toHaveValue('未送信 draft');
-      await expect(light).toHaveValue('2300');
-      expect(await sceneElement!.evaluate(el => el.isConnected)).toBe(true);
-      expect(await page.evaluate(() => (window as unknown as { layoutMutations: string[] }).layoutMutations)).toEqual([]);
-    });
+        // Layout must not submit the draft or save customization.
+        await expect(chat).toHaveValue('未送信 draft');
+        await expect(light).toHaveValue('2300');
+        expect(await sceneElement!.evaluate(el => el.isConnected)).toBe(true);
+        expect(await page.evaluate(() => (window as unknown as { layoutMutations: string[] }).layoutMutations)).toEqual([]);
+      });
+    }
   }
 }
 

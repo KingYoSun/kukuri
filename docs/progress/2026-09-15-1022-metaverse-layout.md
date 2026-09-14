@@ -68,3 +68,9 @@ Computer Useの`@oai/sky`でWindowsローカルとUbuntu24 Remote Desktopを操�
 - 未確認: 実screen reader、物理touch端末、定量GPU計測、Windows実runtimeの長時間通信。fullscreen黒画面は#1023の範囲。
 
 [PR #1028](https://github.com/KingYoSun/kukuri/pull/1028)の最終headのCI成功とマージ後の対象一致を確認してからCompleteにする。ローカルの全体suite失敗を成功とは扱わない。
+
+## CIで確認した試験粒度の調整
+
+`f9e059ff`のCIではUI suiteは成功した。browserは327件成功し、中国語lightの3幅連続試験1件が最後の副作用確認時に60秒上限へ到達した。他の5言語/theme条件も56〜59秒であり、個別assertionの失敗ではなく1ケースに3幅分の操作到達確認をまとめた実行時間の問題だった。
+
+言語/theme別の試験を幅ごとに分け、3→1、3→2、1→3の各変更でchat／設定draft、scene DOM、全操作のhit test、禁止mutationを検査する。別の3→1→2→3連続試験は残し、assertionとtimeoutは緩和していない。Ubuntu24で分割後の対象22件が成功し、個別の状態継続試験は約9〜12秒になった。lint／typecheckも成功。製品コード・採用寸法・実機確認対象への変更はない。最終CIはPR checksへ集約する。
