@@ -1,0 +1,17 @@
+[package]
+name = "kukuri-retire-legacy-docs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+blake3 = "1.8.6"
+iroh-docs = "=0.101.0"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "macros"] }

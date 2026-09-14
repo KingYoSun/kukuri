@@ -343,6 +343,54 @@ loopback以外へbindする場合は、先に同等の認証・firewall境界を
 `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）の有効化が必要（標準配備は既定有効。#709）。
 無効化・再有効化手順は `docs/runbooks/openai-compatible-vlm.md` の「appeal / operator レビュー運用」を参照。
 
+### 5.2.2 default onboarding node の索引可用性
+
+この節は本runbookのdefault onboarding nodeだけに適用する。利用者側の既定購読とノードの
+`cn_index.supported_topics` は別の状態であり、image更新・readiness成功では同期されない。
+`general` / `test` / `dev` の公開索引を提供するこのnodeでは、管理画面の対応トピックに
+`kukuri:topic:general` / `kukuri:topic:test` / `kukuri:topic:dev` があることを確認する。
+欠落していれば、5.2.1のpreview→applyで追加し、監査IDを残す。既存topicを削除しない。
+
+非公開の `infra/terraform/envs/low-cost/terraform.tfvars` に期待集合を明示する。
+これは監視条件であり、DBを自動変更しない。他のnodeへ強制する既定値ではない。
+
+```hcl
+index_expected_topics = ["kukuri:topic:general", "kukuri:topic:test", "kukuri:topic:dev"]
+```
+
+GCP plan CIを有効にしている場合は、`CN_LOW_COST_TFVARS_B64`の期待集合も同じ値へ同期する。
+この更新では既存の他設定を保持する。ローカルtfvarsだけの更新ではCIが警報削除を計画し得る。
+
+`kukuri-monitor.timer` が5分ごとに次のCloud Monitoring metricを送る。
+
+| metric（`custom.googleapis.com/kukuri/community_node/` 配下） | 意味・扱い |
+| --- | --- |
+| `index_expected_topics_present` | 期待する公開topicがすべてDBにあれば1。欠落・DB取得失敗なら0。0が5分続くと既存通知先に警報 |
+| `index_expected_topics_entries` | 期待する公開topic群の索引行数。DB取得失敗は-1。0以下が5分続くと警報 |
+| `body_fetch_failures_recent` | 直近10分の本文取得失敗log件数。log取得失敗は-1（不明）。peer依存のため単独の通知警報は作らず、provider障害と区別して調査 |
+
+期待集合が空のnodeには、先頭2つのmetricの時系列・警報は作らない。索引stack無効時も警報を作らない。
+監視はread-only SELECTと状態/logの参照だけを行う。metricへ本文・鍵・ピア識別子を含めない。
+本文失敗の計数はindexerの `failed to resolve post body; not indexing the post (fail-closed)` logを
+使うため、このlogを変更する際は `infra/terraform/modules/gcp-vm-compose/scripts/index-health.sh`
+とfixtureを同時に更新する。
+
+監視script更新時は、Terraformで生成したstartupの変更が監視部分だけであることを確認する。
+3節のin-place metadata同期でVM置換を避け、生成されたmonitor scriptも既存の
+`/var/lib/kukuri/community-node/monitor.sh`へowner root・mode 700で反映する。
+反映前に同fileをbackupし、`bash -n`を通す。readinessやcontainerのrestartは不要。
+`sudo systemctl start kukuri-monitor.service`、終了コード、Monitoring上の実値、警報の有効化と
+既存通知先の保持を確認する。metadataとruntime fileを一致させ、次回startupで旧監視に戻さない。
+
+監視の回帰確認（Linux/WSL内のPython・bashを使用。Windows PythonからWSLのbashを直接呼ばない）:
+
+```bash
+python3 -m unittest discover -s infra/terraform/tests
+terraform -chdir=infra/terraform fmt -check -recursive
+terraform -chdir=infra/terraform/envs/low-cost validate
+terraform -chdir=infra/terraform/envs/low-cost test
+```
+
 ### 5.3 public surface
 
 ```bash
@@ -397,6 +445,19 @@ workerは起動直後とpoll interval（既定300秒）ごとにsupported scope�
 `BlobText` のraw bytesは `BlobService::fetch_blob_ephemeral` で取得し、検証とscanの間だけ保持する。
 Postgresは本文を持たず、ArcadeDBには検証・allow判定済みの検索用textだけを投影する。本文blobの非残留は
 6.2と同じlocal miss、ephemeral transfer、再度のlocal missの組で確認する。
+
+default onboarding nodeのrollout完了・障害復旧では、本文処理の差分有無にかかわらず、
+既定3topicそれぞれの実投稿についてこの検索確認を行う。既存の無害な公開投稿を使える場合は
+新規投稿は不要。新規投稿には検証であると分かる本文を使い、topic・object ID・時刻を記録する。
+投稿元を接続・購読状態に保ち、日本語/ASCII検索、topic内検索、横断の発見・おすすめで同じ
+object IDが返ることを確認する。CLIでは `set_topic_gossip_enabled` を `enabled=true` で呼び、
+`get_sync_status` の `subscribed_topics` に対象があることを確認する。`create_post`の成功だけは
+購読開始の証拠にならない。
+
+readinessの `truth=projection=0` はデータ整合性の結果であり、検索可能性の成功証拠ではない。
+本文取得失敗も `skipped_non_allow` に含まれるため、有害判定と同一視しない。本文が再取得不能な
+場合は索引を抑止する既存境界を維持し、供給元の接続・保持状態と最新logを照合する。
+再起動・再巡回後にも実結果と監視値を確認する。過去の検索・media検証で今回の実動を代替しない。
 
 ## 6. 実クライアントのbenign media確認
 

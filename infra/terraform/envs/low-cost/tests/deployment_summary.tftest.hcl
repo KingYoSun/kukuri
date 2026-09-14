@@ -53,3 +53,39 @@ run "indexer_stack_disabled_summary" {
     error_message = "deployment summary must report a disabled indexer stack as not provisioned"
   }
 }
+
+run "generic_node_does_not_require_starter_topics" {
+  command = plan
+  assert {
+    condition     = !contains(keys(google_monitoring_alert_policy.community_node), "index_empty") && !contains(keys(google_monitoring_alert_policy.community_node), "index_topics_missing")
+    error_message = "An empty expected topic set must not create index availability alerts."
+  }
+}
+
+run "expected_public_topics_are_monitored" {
+  command = plan
+  variables {
+    deploy_indexer_stack  = true
+    index_expected_topics = ["kukuri:topic:general", "kukuri:topic:test", "kukuri:topic:dev"]
+  }
+  assert {
+    condition     = google_monitoring_alert_policy.community_node["index_empty"].conditions[0].condition_threshold[0].threshold_value == 0.5
+    error_message = "An empty or unreadable expected-topic index must alert."
+  }
+  assert {
+    condition     = google_monitoring_alert_policy.community_node["index_topics_missing"].conditions[0].condition_threshold[0].comparison == "COMPARISON_LT"
+    error_message = "Missing expected topics must alert."
+  }
+  assert {
+    condition     = google_monitoring_metric_descriptor.community_node["body_fetch_failures_recent"].value_type == "DOUBLE" && !contains(keys(google_monitoring_alert_policy.community_node), "body_fetch_failures_recent")
+    error_message = "Peer-dependent body failures are separately observable, not safety-provider paging."
+  }
+}
+
+run "invalid_expected_topic_is_rejected" {
+  command = plan
+  variables {
+    index_expected_topics = ["topic'; SELECT 1; --"]
+  }
+  expect_failures = [var.index_expected_topics]
+}

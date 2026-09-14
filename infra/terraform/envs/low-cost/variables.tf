@@ -457,6 +457,16 @@ variable "vlm_api_timeout_secs" {
 }
 
 # --- operator manifest (#380) ---
+variable "index_expected_topics" {
+  description = "このnodeで索引を必要とする公開topic集合。空なら任意の空ノードに欠落/空索引警報を作らない。"
+  type        = set(string)
+  default     = []
+  validation {
+    condition     = alltrue([for topic in var.index_expected_topics : can(regex("^[a-zA-Z0-9:_-]{1,200}$", topic))])
+    error_message = "Expected index topics must be 1-200 ASCII letters, digits, colons, underscores or hyphens."
+  }
+}
+
 variable "operator_config_path" {
   description = "operator-config.yaml のパス（この env ディレクトリからの相対パス、例: operator-config.yaml）。空でなければ main.tf が file() で読み込み、VM に配置して cn-user-api の COMMUNITY_NODE_OPERATOR_CONFIG に設定し public manifest endpoint / report_endpoint gating を有効化する。空なら manifest endpoint は 404 のまま。"
   type        = string

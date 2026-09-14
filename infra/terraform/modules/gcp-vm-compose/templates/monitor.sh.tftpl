@@ -82,6 +82,14 @@ media_fetch_unavailable_total="$(printf '%s' "$status_json" | sed -n 's/.*"media
 media_fetch_unavailable_total="$${media_fetch_unavailable_total:-0}"
 write_metric media_fetch_unavailable_total "$media_fetch_unavailable_total"
 
+${index_health_helpers}
+postgres_container="$(cd "$INSTALL_DIR" && "$COMPOSE_BIN" ps -q cn-postgres 2>/dev/null || true)"
+expected_topics=(%{ for topic in index_expected_topics }'${topic}' %{ endfor })
+health_metrics="$(index_health_metrics "$postgres_container" "$indexer_container" "$${expected_topics[@]}")"
+while read -r metric value; do
+  write_metric "$metric" "$value"
+done <<< "$health_metrics"
+
 relation_timestamp="$(systemctl show kukuri-relation-analyze.service -p ExecMainExitTimestamp --value 2>/dev/null || true)"
 relation_epoch="$(date -d "$relation_timestamp" +%s 2>/dev/null || echo 0)"
 relation_status="$(systemctl show kukuri-relation-analyze.service -p ExecMainStatus --value 2>/dev/null || echo 1)"
