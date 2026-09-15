@@ -16,6 +16,6 @@
 - Accessibility / interaction: browserで方位buttonの24px以上の幅・44px以上の高さ、keyboard選択、詳細scroll、カテゴリ往復、write 0を確認。nativeで方位keyboardとpointerを確認。詳細はpane内scrollで全操作へ到達する。
 - Performance: sessionとmapでtopology取得を共有。選択・カテゴリ往復でdomain mutationを増やさず、新しいWebGL描画・遠方asset prefetchを追加しない。
 - Validation: [作業記録](../progress/2026-09-15-1025-dome-connections.md)にtest、実機、CIの最終結果を集約。
-- Not verified: 最終native fullscreen／戻る確認はWindowsの許可画面を手動で閉じる対応待ち。200%／High Contrast／物理touch／screen reader、複数Domeの実P2P通行も未確認。22条件のaxe違反0だが20条件のcolor-contrast incompleteは自動判定未完了。browserやin-process scenarioの成功と区別する。
-- Review result: 承認済み案を実装。targeted component／browser／Storybook build成功、visual smoke 38件成功。コードの独立監査PASS。最終CIと必要な実機確認は作業記録とPR checksで確定する。
-- Exceptions: なし。未実施条件を成功と扱わない。
+- Not verified: 最終native fullscreen／戻る確認、200%／High Contrast／物理touch／screen reader、複数Domeの実P2P通行は未確認。22条件のaxe違反0だが20条件のcolor-contrast incompleteは自動判定未完了。browserやin-process scenarioの成功と区別する。
+- Review result: 承認済み案を実装。targeted component／browser／Storybook build成功、visual smoke 38件成功。コードの独立監査PASS。ユーザーは残りの追加実機確認を未確認として省略し、CI成功後のマージを明示承認した。
+- Exceptions: Windowsの許可画面を遠隔のユーザーが操作できないため、追加実機確認を省略。初期実装の両OS実機証拠を維持し、以後OS固有fullscreen／入力処理に変更がないことを照合した。未確認を成功と扱わず、AC／INVARと必須CI・独立監査は維持する。

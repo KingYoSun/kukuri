@@ -70,4 +70,10 @@ Storybookの11状態×light/dark、計22条件でaxeの対象WCAG tag違反0。�
 
 `77db7d222626c3085b42ece38983cf5d0652caff` の[独立delta監査](2026-09-15-1025-independent-audit.md)はPASS。inventory 3件すべて適合、未分類0、不適合0、blocker0。許可ContextのIrohDocsSync内部同期は既存read機構として維持し、禁止するAppService購読Taskの新規起動・Connection／epoch等のdomain writeと区別する。後続差分はこの説明、comment、検証記録、画像のみで、domain動作は変更しない。
 
-実機確認待ちを残したままComplete／マージ可能とは扱わない。必要な実機確認と最終CIが揃ってからPRをreadyにし、承認済みのマージとmerge tree確認を行う。
+### 追加実機確認の省略とマージ判断
+
+上記の実機待ちによる保留は、ユーザーが残りの追加実機確認を未確認として省略し、マージすることを明示承認したため解除した。最終版のnative fullscreen／復帰・メニュー往復、複数Domeの実P2P等を実施済みとは扱わない。
+
+初期実装でWindows／Ubuntu24の基本描画・方位入力を実機確認済みであり、その後の修正はprivate readの副作用、旧世代recordの選択、色・凡例・未使用CSSに限られる。OS固有のfullscreen／input ownership処理は変更していない。自動の状態・入力・境界test、CI、独立監査の証拠を維持し、追加実機確認だけを省略する。製品AC／INVARや署名・権限契約は変更しない。
+
+`76f8fc68e255576383ee60d557fa3e5e8ecd5485`の全14 checks成功を確認。省略判断の記録更新後も最新headの必須CIを確認してマージし、merge tree一致後にIssueをComplete／Closeする。最終結果はPR／Issueの現在判定で追跡する。
