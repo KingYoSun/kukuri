@@ -49,6 +49,22 @@ pub struct IndexerStateSnapshot {
     pub media_fetch_timeout: u64,
     /// メディア取得の大きさ超過件数。
     pub media_fetch_oversize: u64,
+    /// provider を呼んで判定した scan 数の累計（#1050）。
+    #[serde(default)]
+    pub scans_fresh: u64,
+    /// 保存済み verdict を再利用して provider を呼ばなかった scan 数の累計（#1050）。
+    #[serde(default)]
+    pub scans_reused: u64,
+    /// 最後の全件見直し 1 巡にかかった時間（ミリ秒。#1050）。
+    #[serde(default)]
+    pub last_pass_duration_ms: Option<u64>,
+    /// 最後の変更通知駆動の取り込みにかかった時間（ミリ秒。#1050）。
+    #[serde(default)]
+    pub last_event_ingest_duration_ms: Option<u64>,
+    /// 最後に新規判定で索引に入った投稿の、作成時刻から索引までの遅れ（秒。著者時刻由来の
+    /// 近似値。#1050）。
+    #[serde(default)]
+    pub last_index_lag_secs: Option<i64>,
 }
 
 /// 共有の観測状態。ワーカー・取り込みパイプライン・メディア取得器が更新する。
@@ -70,6 +86,11 @@ pub struct IndexerRuntimeState {
     media_fetch_unavailable: AtomicU64,
     media_fetch_timeout: AtomicU64,
     media_fetch_oversize: AtomicU64,
+    scans_fresh: AtomicU64,
+    scans_reused: AtomicU64,
+    last_pass_duration_ms: RwLock<Option<u64>>,
+    last_event_ingest_duration_ms: RwLock<Option<u64>>,
+    last_index_lag_secs: RwLock<Option<i64>>,
 }
 
 impl IndexerRuntimeState {
@@ -104,6 +125,34 @@ impl IndexerRuntimeState {
             .fetch_add(summary.skipped_non_allow as u64, Ordering::Relaxed);
         self.deindexed
             .fetch_add(summary.deindexed as u64, Ordering::Relaxed);
+        self.scans_fresh
+            .fetch_add(summary.scans_fresh as u64, Ordering::Relaxed);
+        self.scans_reused
+            .fetch_add(summary.scans_reused as u64, Ordering::Relaxed);
+    }
+
+    /// 全件見直し 1 巡の所要時間を記録する（#1050）。
+    pub fn record_pass_duration(&self, millis: u64) {
+        *self
+            .last_pass_duration_ms
+            .write()
+            .expect("last_pass_duration_ms poisoned") = Some(millis);
+    }
+
+    /// 変更通知駆動の取り込みの所要時間を記録する（#1050）。
+    pub fn record_event_ingest_duration(&self, millis: u64) {
+        *self
+            .last_event_ingest_duration_ms
+            .write()
+            .expect("last_event_ingest_duration_ms poisoned") = Some(millis);
+    }
+
+    /// 新規判定で索引に入った投稿の作成→索引の遅れを記録する（秒。#1050）。
+    pub fn record_index_lag(&self, secs: i64) {
+        *self
+            .last_index_lag_secs
+            .write()
+            .expect("last_index_lag_secs poisoned") = Some(secs.max(0));
     }
 
     /// エラーを記録する（scope は replica id 表現。全体エラーなら None）。
@@ -174,6 +223,20 @@ impl IndexerRuntimeState {
             media_fetch_unavailable: self.media_fetch_unavailable.load(Ordering::Relaxed),
             media_fetch_timeout: self.media_fetch_timeout.load(Ordering::Relaxed),
             media_fetch_oversize: self.media_fetch_oversize.load(Ordering::Relaxed),
+            scans_fresh: self.scans_fresh.load(Ordering::Relaxed),
+            scans_reused: self.scans_reused.load(Ordering::Relaxed),
+            last_pass_duration_ms: *self
+                .last_pass_duration_ms
+                .read()
+                .expect("last_pass_duration_ms poisoned"),
+            last_event_ingest_duration_ms: *self
+                .last_event_ingest_duration_ms
+                .read()
+                .expect("last_event_ingest_duration_ms poisoned"),
+            last_index_lag_secs: *self
+                .last_index_lag_secs
+                .read()
+                .expect("last_index_lag_secs poisoned"),
         }
     }
 }
@@ -198,8 +261,13 @@ mod tests {
                 indexed: 2,
                 skipped_non_allow: 1,
                 deindexed: 0,
+                scans_fresh: 4,
+                scans_reused: 5,
             },
         );
+        state.record_pass_duration(1200);
+        state.record_event_ingest_duration(80);
+        state.record_index_lag(-3);
         state.record_scan_error();
         state.record_provider_unavailable();
         state.record_deindexed(4);
@@ -227,6 +295,45 @@ mod tests {
         assert_eq!(snapshot.media_fetch_unavailable, 1);
         assert_eq!(snapshot.media_fetch_timeout, 1);
         assert_eq!(snapshot.media_fetch_oversize, 1);
+        assert_eq!(snapshot.scans_fresh, 4);
+        assert_eq!(snapshot.scans_reused, 5);
+        assert_eq!(snapshot.last_pass_duration_ms, Some(1200));
+        assert_eq!(snapshot.last_event_ingest_duration_ms, Some(80));
+        assert_eq!(
+            snapshot.last_index_lag_secs,
+            Some(0),
+            "negative lag is clamped"
+        );
+    }
+
+    #[test]
+    fn snapshot_deserializes_from_json_without_new_fields() {
+        // #1050 以前の indexer が返す JSON（新フィールド無し）も読める（readiness 側の互換）。
+        let legacy = serde_json::json!({
+            "worker_running": true,
+            "ingest_enabled": true,
+            "opened_scopes": 3,
+            "last_sync_at": 1,
+            "last_ingest_at": 2,
+            "last_error": null,
+            "last_error_scope": null,
+            "scanned": 10,
+            "indexed": 8,
+            "skipped_non_allow": 2,
+            "scan_errors": 0,
+            "provider_unavailable": 0,
+            "deindexed": 0,
+            "media_fetch_success": 1,
+            "media_fetch_unavailable": 0,
+            "media_fetch_timeout": 0,
+            "media_fetch_oversize": 0
+        });
+        let snapshot: IndexerStateSnapshot = serde_json::from_value(legacy).expect("legacy json");
+        assert_eq!(snapshot.opened_scopes, 3);
+        assert_eq!(snapshot.scans_fresh, 0);
+        assert_eq!(snapshot.scans_reused, 0);
+        assert_eq!(snapshot.last_pass_duration_ms, None);
+        assert_eq!(snapshot.last_index_lag_secs, None);
     }
 
     #[test]

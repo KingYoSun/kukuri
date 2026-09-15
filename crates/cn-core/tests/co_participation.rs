@@ -16,6 +16,7 @@ use kukuri_cn_core::{
 };
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety_runtime::VerdictPersistMeta;
 use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
@@ -124,7 +125,12 @@ async fn co_participation_pairs_from_public_topics_only_memory() -> Result<()> {
     let store = MemoryIndexEntryStore::new(verdicts.clone());
     for (i, (scope_kind, scope_id, object_id, author)) in seed().entries.iter().enumerate() {
         let verdict_id = verdicts
-            .persist_verdict(SubjectKind::Post, &format!("subject-{i}"), &allow_verdict())
+            .persist_verdict(
+                SubjectKind::Post,
+                &format!("subject-{i}"),
+                &allow_verdict(),
+                &VerdictPersistMeta::default(),
+            )
             .await?;
         store
             .upsert_entry(&entry(
@@ -155,6 +161,7 @@ async fn co_participation_pairs_from_public_topics_only_postgres() -> Result<()>
                 SubjectKind::Post,
                 &format!("subject-{i}"),
                 &allow_verdict(),
+                &VerdictPersistMeta::default(),
             )
             .await?;
             upsert_index_entry(

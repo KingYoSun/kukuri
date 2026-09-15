@@ -459,6 +459,39 @@ readinessの `truth=projection=0` はデータ整合性の結果であり、検�
 場合は索引を抑止する既存境界を維持し、供給元の接続・保持状態と最新logを照合する。
 再起動・再巡回後にも実結果と監視値を確認する。過去の検索・media検証で今回の実動を代替しない。
 
+### 5.6 verdict再利用とrisk signal集約の確認（#1050）
+
+`cn-indexer` は内容とscan構成が不変のsubjectについて保存済みverdictを再利用し、risk signalは
+鍵ごとに1行へ集約する。#1050以降のrolloutでは、migration適用後に次を確認する。
+
+1. 事前（backup後、`cn-migrate` 前）に活性重複鍵の件数と、通報から参照される行が2件以上ある鍵の
+   件数を記録する。後者は0件であることを確認する（0件でない場合は2件目以降が失効扱いになる）。
+
+```bash
+PG_CONTAINER="$(sudo docker ps -qf name=cn-postgres)"
+sudo docker exec "$PG_CONTAINER" sh -lc \
+  "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -At -F '|' \
+   -c \"SELECT issuer_node_id, target, target_id, category, basis, count(*)
+       FROM cn_safety.risk_signals
+       WHERE appeal_status IS DISTINCT FROM 'cleared' AND expires_at IS NULL
+       GROUP BY 1,2,3,4,5 HAVING count(*) > 1;\""
+```
+
+2. `cn-migrate` 後に同じSQLが0行であること、`pg_indexes` に
+   `uq_cn_safety_risk_signals_active_key` があることを確認する。
+3. 新revisionの `/v1/status` で `scans_reused` が全件見直しごとに増え、`scans_fresh` が新規・変更
+   投稿の件数に留まることを確認する。`last_pass_duration_ms` が旧revisionの全件再scan時
+   （generalの13件で約3分）から大きく短くなっていること、変更通知後に
+   `last_event_ingest_duration_ms` と `last_index_lag_secs` が記録されることを確認する。
+4. 2巡以上経過後に `cn_safety.risk_signals` と `cn_safety.signed_moderation_events` の件数が
+   pass を跨いで増えていないことを確認する。
+5. benignな新規投稿を1件行い、replica到着から `cn_index.index_entries.indexed_at` までが
+   数十秒以内（当該投稿のscan 1回分 + debounce）であることを確認する。他投稿の再scanを待たない。
+
+`hold`（scan failure / provider unavailable / media取得不能）は再利用されず毎pass再試行される。
+`scans_fresh` が既存投稿数ぶん増え続ける場合は、対象verdictがholdのままか、policy / provider
+構成のfingerprintが起動ごとに変わっていないかをlogで確認する。
+
 ## 6. 実クライアントのbenign media確認
 
 実在の違法mediaや疑わしいmediaを検証に使わない。権利上問題のない小さな画像をpublic topicへ投稿し、

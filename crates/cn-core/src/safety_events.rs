@@ -192,13 +192,31 @@ pub async fn list_distributable_moderation_events(
     rows.iter().map(moderation_event_from_row).collect()
 }
 
-/// risk signal を保存する。`target_id` が空 / 空白なら保存しない。新しい id を採番して返す。
+/// risk signal 永続化の結果（#1050）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PersistedRiskSignal {
+    /// 永続化された（または集約先となった）signal。
+    pub stored: StoredRiskSignal,
+    /// 新しい行を作ったか。既存の活性行へ集約した場合や、cleared 済み行を尊重して挿入を
+    /// 見送った場合は false。
+    pub newly_created: bool,
+}
+
+const RISK_SIGNAL_COLUMNS: &str = "id, issuer_node_id, target, target_id, category, severity, \
+     basis, visibility, confidence, expires_at, appeal_status, persisted_at";
+
+/// risk signal を保存する。`target_id` が空 / 空白なら保存しない。
+///
+/// 同一鍵の活性 signal があれば新規行を作らず集約する（詳細は
+/// [`persist_risk_signal_deduplicated`]）。
 pub async fn persist_risk_signal(
     pool: &PgPool,
     issuer_node_id: &str,
     signal: &SafetyRiskSignal,
 ) -> Result<StoredRiskSignal> {
-    persist_risk_signal_with_author(pool, issuer_node_id, signal, None).await
+    persist_risk_signal_deduplicated(pool, issuer_node_id, signal, None)
+        .await
+        .map(|persisted| persisted.stored)
 }
 
 /// Persist a risk signal and, for content targets, atomically associate it with
@@ -209,6 +227,27 @@ pub async fn persist_risk_signal_with_author(
     signal: &SafetyRiskSignal,
     subject_author: Option<&str>,
 ) -> Result<StoredRiskSignal> {
+    persist_risk_signal_deduplicated(pool, issuer_node_id, signal, subject_author)
+        .await
+        .map(|persisted| persisted.stored)
+}
+
+/// risk signal を鍵 `(issuer_node_id, target, target_id, category, basis)` で集約して保存する
+/// （#1050 AC-2 / INVAR-4）。
+///
+/// 1. 同鍵の活性行（`appeal_status` が cleared 以外 かつ `expires_at` 無し）があれば、その行の
+///    severity / confidence / visibility を更新し、id / persisted_at / appeal_status は据え置く。
+/// 2. 活性行が無く cleared 行だけがあれば、審査の結論を尊重して新規行を作らず cleared 行を返す。
+/// 3. どちらも無ければ INSERT する。部分 UNIQUE index `uq_cn_safety_risk_signals_active_key`
+///    との競合（同時挿入）は `ON CONFLICT ... DO UPDATE` で 1 の更新に倒す。
+///
+/// 著者関連付け（`risk_signal_subject_authors`）は集約の有無に関わらず同一取引で行う。
+pub async fn persist_risk_signal_deduplicated(
+    pool: &PgPool,
+    issuer_node_id: &str,
+    signal: &SafetyRiskSignal,
+    subject_author: Option<&str>,
+) -> Result<PersistedRiskSignal> {
     if issuer_node_id.trim().is_empty() {
         bail!("risk signal issuer_node_id must not be empty");
     }
@@ -216,54 +255,161 @@ pub async fn persist_risk_signal_with_author(
         bail!("risk signal target_id must not be empty");
     }
     if let Some(author) = subject_author {
-        if author.trim().is_empty() {
-            bail!("risk signal subject author must not be empty");
-        }
-        if !matches!(
-            signal.target,
-            RiskSignalTarget::PostId | RiskSignalTarget::BlobCid
-        ) {
-            bail!("only post_id/blob_cid risk signals can be attributed to an author");
-        }
+        validate_subject_author(signal.target, author)?;
     }
+    let target = to_db_enum(&signal.target)?;
+    let category = to_db_enum(&signal.category)?;
+    let basis = to_db_enum(&signal.basis)?;
+    let severity = to_db_enum(&signal.severity)?;
+    let visibility = to_db_enum(&signal.visibility)?;
+
     let mut tx = pool.begin().await?;
-    let id = Uuid::new_v4().to_string();
-    let row = sqlx::query(
-        "INSERT INTO cn_safety.risk_signals
-            (id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-             confidence, expires_at, appeal_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                   confidence, expires_at, appeal_status, persisted_at",
-    )
-    .bind(&id)
+    let active = sqlx::query(&format!(
+        "SELECT {RISK_SIGNAL_COLUMNS}
+         FROM cn_safety.risk_signals
+         WHERE issuer_node_id = $1 AND target = $2 AND target_id = $3
+           AND category = $4 AND basis = $5
+           AND appeal_status IS DISTINCT FROM 'cleared'
+           AND expires_at IS NULL
+         ORDER BY persisted_at ASC, id ASC
+         LIMIT 1
+         FOR UPDATE"
+    ))
     .bind(issuer_node_id)
-    .bind(to_db_enum(&signal.target)?)
+    .bind(&target)
     .bind(&signal.target_id)
-    .bind(to_db_enum(&signal.category)?)
-    .bind(to_db_enum(&signal.severity)?)
-    .bind(to_db_enum(&signal.basis)?)
-    .bind(to_db_enum(&signal.visibility)?)
-    .bind(signal.confidence.map(i16::from))
-    .bind(signal.expires_at.as_deref())
-    .bind(signal.appeal_status.map(|s| to_db_enum(&s)).transpose()?)
-    .fetch_one(&mut *tx)
+    .bind(&category)
+    .bind(&basis)
+    .fetch_optional(&mut *tx)
     .await?;
-    if let Some(author) = subject_author {
-        sqlx::query(
-            "INSERT INTO cn_safety.risk_signal_subject_authors
-                (target, target_id, author_pubkey)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (target, target_id, author_pubkey) DO NOTHING",
-        )
-        .bind(to_db_enum(&signal.target)?)
-        .bind(&signal.target_id)
-        .bind(author)
-        .execute(&mut *tx)
+
+    let (row, newly_created) = if let Some(active) = active {
+        let id: String = active.try_get("id")?;
+        let row = sqlx::query(&format!(
+            "UPDATE cn_safety.risk_signals
+             SET severity = $2, confidence = $3, visibility = $4
+             WHERE id = $1
+             RETURNING {RISK_SIGNAL_COLUMNS}"
+        ))
+        .bind(&id)
+        .bind(&severity)
+        .bind(signal.confidence.map(i16::from))
+        .bind(&visibility)
+        .fetch_one(&mut *tx)
         .await?;
+        (row, false)
+    } else {
+        // 失効していない cleared 行 = 現在も有効な審査結論。cn-cli の再発行は旧行に expires_at を
+        // 刻んでから呼ぶため、ここには掛からず新行を作れる。
+        let cleared = sqlx::query(&format!(
+            "SELECT {RISK_SIGNAL_COLUMNS}
+             FROM cn_safety.risk_signals
+             WHERE issuer_node_id = $1 AND target = $2 AND target_id = $3
+               AND category = $4 AND basis = $5
+               AND appeal_status = 'cleared'
+               AND expires_at IS NULL
+             ORDER BY persisted_at DESC, id DESC
+             LIMIT 1"
+        ))
+        .bind(issuer_node_id)
+        .bind(&target)
+        .bind(&signal.target_id)
+        .bind(&category)
+        .bind(&basis)
+        .fetch_optional(&mut *tx)
+        .await?;
+        match cleared {
+            Some(cleared) => (cleared, false),
+            None => {
+                let id = Uuid::new_v4().to_string();
+                let row = sqlx::query(&format!(
+                    "INSERT INTO cn_safety.risk_signals
+                        (id, issuer_node_id, target, target_id, category, severity, basis,
+                         visibility, confidence, expires_at, appeal_status)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     ON CONFLICT (issuer_node_id, target, target_id, category, basis)
+                        WHERE appeal_status IS DISTINCT FROM 'cleared' AND expires_at IS NULL
+                     DO UPDATE SET severity = EXCLUDED.severity,
+                                   confidence = EXCLUDED.confidence,
+                                   visibility = EXCLUDED.visibility
+                     RETURNING {RISK_SIGNAL_COLUMNS}, (xmax = 0) AS inserted"
+                ))
+                .bind(&id)
+                .bind(issuer_node_id)
+                .bind(&target)
+                .bind(&signal.target_id)
+                .bind(&category)
+                .bind(&severity)
+                .bind(&basis)
+                .bind(&visibility)
+                .bind(signal.confidence.map(i16::from))
+                .bind(signal.expires_at.as_deref())
+                .bind(signal.appeal_status.map(|s| to_db_enum(&s)).transpose()?)
+                .fetch_one(&mut *tx)
+                .await?;
+                let inserted: bool = row.try_get("inserted")?;
+                (row, inserted)
+            }
+        }
+    };
+    if let Some(author) = subject_author {
+        insert_subject_author(&mut tx, &target, &signal.target_id, author).await?;
     }
     tx.commit().await?;
-    risk_signal_from_row(&row)
+    Ok(PersistedRiskSignal {
+        stored: risk_signal_from_row(&row)?,
+        newly_created,
+    })
+}
+
+/// content target の risk signal を著者へ関連付ける（既にあれば何もしない）。
+///
+/// 保存済み verdict を再利用したとき（#1050）に、共有 blob の 2 人目の著者が trust 入力から
+/// 漏れないようにするための入口。
+pub async fn attribute_risk_signal_subject_author(
+    pool: &PgPool,
+    target: RiskSignalTarget,
+    target_id: &str,
+    author: &str,
+) -> Result<()> {
+    if target_id.trim().is_empty() {
+        bail!("risk signal target_id must not be empty");
+    }
+    validate_subject_author(target, author)?;
+    let mut tx = pool.begin().await?;
+    insert_subject_author(&mut tx, &to_db_enum(&target)?, target_id, author).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+fn validate_subject_author(target: RiskSignalTarget, author: &str) -> Result<()> {
+    if author.trim().is_empty() {
+        bail!("risk signal subject author must not be empty");
+    }
+    if !matches!(target, RiskSignalTarget::PostId | RiskSignalTarget::BlobCid) {
+        bail!("only post_id/blob_cid risk signals can be attributed to an author");
+    }
+    Ok(())
+}
+
+async fn insert_subject_author(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    target: &str,
+    target_id: &str,
+    author: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO cn_safety.risk_signal_subject_authors
+            (target, target_id, author_pubkey)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (target, target_id, author_pubkey) DO NOTHING",
+    )
+    .bind(target)
+    .bind(target_id)
+    .bind(author)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// risk signal を新着順で取得する（operator の監査・レビュー用。visibility を問わない）。

@@ -978,3 +978,447 @@ async fn ingest_allow_records_no_artifacts() -> Result<()> {
     assert!(store.signals().is_empty());
     Ok(())
 }
+
+// --- #1050: 保存済み verdict の再利用と、変更 key に絞った取り込み ---
+
+/// provider 呼び出しを記録する known-CSAM provider を使う service（同じ store を共有できる）。
+fn recording_service_with_store(
+    store: Arc<MemorySafetyArtifactStore>,
+    policy: kukuri_cn_safety::SafetyPolicy,
+) -> (Arc<SafetyScanService>, Arc<RecordingProvider>) {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let provider = Arc::new(RecordingProvider {
+        requests: std::sync::Mutex::new(Vec::new()),
+    });
+    let orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .policy(policy)
+    .provider(provider.clone())
+    .build()
+    .expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store)
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    (Arc::new(service), provider)
+}
+
+fn recorded_subjects(provider: &RecordingProvider) -> Vec<String> {
+    provider
+        .requests
+        .lock()
+        .expect("recording provider mutex")
+        .iter()
+        .filter_map(|request| request.subject_id.clone())
+        .collect()
+}
+
+/// 本文 text の post を共有 replica に実在させ、object_id と署名鍵 / envelope / state を返す。
+async fn persist_post_with_source(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> (
+    String,
+    KukuriKeys,
+    kukuri_core::KukuriEnvelope,
+    serde_json::Value,
+) {
+    let keys = KukuriKeys::generate();
+    let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
+    let object = envelope
+        .to_post_object()
+        .expect("post object")
+        .expect("post object present");
+    let object_id = object.object_id.as_str().to_string();
+    let state = serde_json::to_value(&object).expect("state json");
+    docs.open_replica(replica).await.expect("open");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: state.clone(),
+        },
+    )
+    .await
+    .expect("state op");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/envelope")),
+            value: serde_json::to_value(&envelope).expect("envelope json"),
+        },
+    )
+    .await
+    .expect("envelope op");
+    (object_id, keys, envelope, state)
+}
+
+#[test]
+fn changed_keys_classify_objects_withdrawals_and_fallback() {
+    use kukuri_cn_indexer::ingest::{ChangedKeys, classify_changed_keys};
+    assert_eq!(
+        classify_changed_keys([
+            "objects/a/state",
+            "objects/a/envelope",
+            "withdrawals/b/state"
+        ]),
+        ChangedKeys::Objects(vec!["a".to_string(), "b".to_string()])
+    );
+    assert_eq!(
+        classify_changed_keys(["objects/a/state", "manifests/media/m1/envelope"]),
+        ChangedKeys::WholeScope
+    );
+    assert_eq!(
+        classify_changed_keys(["objects//state"]),
+        ChangedKeys::WholeScope
+    );
+    assert_eq!(
+        classify_changed_keys(Vec::<&str>::new()),
+        ChangedKeys::WholeScope
+    );
+}
+
+#[tokio::test]
+async fn second_pass_with_unchanged_content_performs_no_provider_calls() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "stable body").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service_with_store(
+        store.clone(),
+        kukuri_cn_safety::SafetyPolicy::public_node_default(),
+    );
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (service, store.clone()));
+
+    let first = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(
+        (first.indexed, first.scans_fresh, first.scans_reused),
+        (1, 1, 0)
+    );
+    assert_eq!(recorded_subjects(&provider), vec![object_id.clone()]);
+
+    let second = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(
+        (second.indexed, second.scans_fresh, second.scans_reused),
+        (1, 0, 1),
+        "unchanged content is reused without a provider call"
+    );
+    assert_eq!(recorded_subjects(&provider).len(), 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    assert!(store.events().is_empty());
+    assert!(store.signals().is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn reingest_deindexes_when_verdict_flips_after_policy_change() -> Result<()> {
+    // 同じ store を共有したまま scan 構成（policy_version）が変わると再 scan され、非 allow への
+    // 変化が観測されて de-index される。構成が同じままなら provider 結果が変わっても再 scan しない
+    // （再利用の契約。運用上の再評価は policy / provider 構成の更新で起こす）。
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "flips after policy").await;
+
+    let (allow, store) = allow_service();
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (allow, store.clone()));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    let flip_provider =
+        MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(object_id.as_str());
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+
+    // 構成が同じ（既定 policy）なら保存済み allow を再利用し、flip は観測されない。
+    let same_config = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(Arc::new(flip_provider.clone()))
+    .build()
+    .expect("orchestrator");
+    let same_config = Arc::new(
+        SafetyScanService::builder(Arc::new(same_config), store.clone())
+            .signer(Arc::new(
+                Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer"),
+            ))
+            .build()
+            .expect("service"),
+    );
+    let summary = IngestPipeline::new(
+        docs.clone(),
+        same_config,
+        entries.clone(),
+        projection.clone(),
+    )
+    .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+    .await?;
+    assert_eq!(summary.scans_reused, 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    // policy_version が変わると再 scan され、known hash match で de-index される。
+    let policy = kukuri_cn_safety::SafetyPolicy {
+        policy_version: "2026-09-test-v2".to_string(),
+        ..kukuri_cn_safety::SafetyPolicy::public_node_default()
+    };
+    let new_config = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .policy(policy)
+    .provider(Arc::new(flip_provider))
+    .build()
+    .expect("orchestrator");
+    let new_config = Arc::new(
+        SafetyScanService::builder(Arc::new(new_config), store.clone())
+            .signer(Arc::new(signer))
+            .build()
+            .expect("service"),
+    );
+    let summary = IngestPipeline::new(
+        docs.clone(),
+        new_config,
+        entries.clone(),
+        projection.clone(),
+    )
+    .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+    .await?;
+    assert_eq!(summary.scans_fresh, 1);
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn held_verdict_is_retried_and_indexed_when_provider_recovers() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let object_id = persist_post(&docs, &replica, &topic, "held then allowed").await;
+
+    // provider 利用不可 → hold（fail-closed）。
+    let (unavailable, store) = provider_unavailable_service();
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (unavailable, store.clone()));
+    let first = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!((first.indexed, first.skipped_non_allow), (0, 1));
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    // 同じ構成（provider 名 / capability / policy）で provider が復旧すると、hold は再利用されず
+    // 再 scan されて allow になる。
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let recovered = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(Arc::new(MockSafetyProvider::known_csam("mock-known-csam")))
+    .build()
+    .expect("orchestrator");
+    let recovered = Arc::new(
+        SafetyScanService::builder(Arc::new(recovered), store.clone())
+            .signer(Arc::new(signer))
+            .build()
+            .expect("service"),
+    );
+    let second = IngestPipeline::new(docs.clone(), recovered, entries.clone(), projection.clone())
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(
+        (second.indexed, second.scans_fresh, second.scans_reused),
+        (1, 1, 0)
+    );
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn state_content_change_triggers_rescan() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let (object_id, _keys, _envelope, mut state) =
+        persist_post_with_source(&docs, &replica, &topic, "editable state").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service_with_store(
+        store.clone(),
+        kukuri_cn_safety::SafetyPolicy::public_node_default(),
+    );
+    let (pipeline, _entries, _) = pipeline_with(&docs, &projection, (service, store));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(recorded_subjects(&provider).len(), 1);
+
+    // state（status）が変わると content hash が変わり、再 scan される。
+    state["status"] = serde_json::json!("edited");
+    docs.apply_doc_op(
+        &replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: state,
+        },
+    )
+    .await?;
+    let summary = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!((summary.scans_fresh, summary.scans_reused), (1, 0));
+    assert_eq!(recorded_subjects(&provider).len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn withdrawal_after_reuse_still_deindexes() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let (object_id, keys, envelope, _state) =
+        persist_post_with_source(&docs, &replica, &topic, "withdrawn later").await;
+
+    let (allow, store) = allow_service();
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (allow, store));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    let reused = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(reused.scans_reused, 1);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    let withdrawal = kukuri_core::build_post_withdrawal_envelope(
+        &keys,
+        &envelope,
+        1,
+        None,
+        kukuri_core::WithdrawalReasonVisibility::Public,
+        Some(kukuri_core::PostWithdrawalReason::AuthorRequest),
+    )?;
+    docs.apply_doc_op(
+        &replica,
+        DocOp::SetJson {
+            key: stable_key("withdrawals", &format!("{object_id}/state")),
+            value: serde_json::to_value(&withdrawal)?,
+        },
+    )
+    .await?;
+
+    // 撤回 key だけの変更通知でも対象 object が de-index される（再利用より撤回が優先）。
+    let summary = pipeline
+        .ingest_changed_keys(
+            IndexScopeKind::PublicTopic,
+            "rust",
+            &replica,
+            &[stable_key("withdrawals", &format!("{object_id}/state"))],
+        )
+        .await?;
+    assert_eq!((summary.scanned, summary.deindexed), (1, 1));
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn ingest_changed_keys_processes_only_the_changed_object() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let first = persist_post(&docs, &replica, &topic, "first").await;
+    let second = persist_post(&docs, &replica, &topic, "second").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service_with_store(
+        store.clone(),
+        kukuri_cn_safety::SafetyPolicy::public_node_default(),
+    );
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (service, store));
+    let full = pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(full.scanned, 2);
+    assert_eq!(recorded_subjects(&provider).len(), 2);
+
+    // 3 件目の変更通知: その object だけを走査・scan する。
+    let third = persist_post(&docs, &replica, &topic, "third").await;
+    let summary = pipeline
+        .ingest_changed_keys(
+            IndexScopeKind::PublicTopic,
+            "rust",
+            &replica,
+            &[stable_key("objects", &format!("{third}/state"))],
+        )
+        .await?;
+    assert_eq!(
+        (summary.scanned, summary.indexed, summary.scans_fresh),
+        (1, 1, 1)
+    );
+    let subjects = recorded_subjects(&provider);
+    assert_eq!(subjects.len(), 3);
+    assert_eq!(subjects[2], third);
+    for id in [&first, &second, &third] {
+        assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", id));
+    }
+
+    // 対象を特定できない key が混ざると scope 全体の見直しへ倒れる（既存分は再利用）。
+    let fallback = pipeline
+        .ingest_changed_keys(
+            IndexScopeKind::PublicTopic,
+            "rust",
+            &replica,
+            &["manifests/media/m1/envelope".to_string()],
+        )
+        .await?;
+    assert_eq!(
+        (
+            fallback.scanned,
+            fallback.scans_fresh,
+            fallback.scans_reused
+        ),
+        (3, 0, 3)
+    );
+    assert_eq!(recorded_subjects(&provider).len(), 3);
+    Ok(())
+}

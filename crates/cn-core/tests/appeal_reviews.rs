@@ -462,3 +462,60 @@ async fn invalid_review_inputs_are_rejected_without_state_change() -> Result<()>
     database.cleanup().await?;
     result
 }
+
+/// #1050 INV-9: 検知メタデータ編集で category を変えた結果、別の活性 signal と鍵が衝突する場合は
+/// 部分 UNIQUE index が拒否し、取引全体が巻き戻る（部分書込なし）。
+#[tokio::test]
+async fn edit_detection_category_collision_is_rejected_without_partial_write() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping appeal review integration test");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_appeal_edit_collision").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let nsfw = persist_risk_signal(&pool, ISSUER, &signal("erin", AppealStatus::None)).await?;
+        let mut spam_signal = signal("erin", AppealStatus::None);
+        spam_signal.category = SafetyCategory::Spam;
+        let spam = persist_risk_signal(&pool, ISSUER, &spam_signal).await?;
+        assert_ne!(nsfw.id, spam.id);
+
+        insert_community_node_appeal(&pool, ISSUER, &spam.id, &report("erin", "衝突")).await?;
+        let expected = get_appeal_review(&pool, &spam.id)
+            .await?
+            .expect("review")
+            .version();
+        let collision = apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &spam.id,
+            &AppealReviewOperation::Edit {
+                expected,
+                edit: RiskSignalMetadataEdit {
+                    category: Some(SafetyCategory::Nsfw),
+                    severity: Some(Severity::Low),
+                    confidence: Some(20),
+                    expires_at: None,
+                },
+            },
+            true,
+        )
+        .await;
+        assert!(collision.is_err(), "same active key must be rejected");
+
+        let unchanged = get_risk_signal(&pool, &spam.id)
+            .await?
+            .expect("spam signal");
+        assert_eq!(unchanged.signal.category, SafetyCategory::Spam);
+        assert_eq!(unchanged.signal.severity, Severity::High);
+        let other = get_risk_signal(&pool, &nsfw.id)
+            .await?
+            .expect("nsfw signal");
+        assert_eq!(other.signal.category, SafetyCategory::Nsfw);
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}

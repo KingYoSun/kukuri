@@ -22,7 +22,9 @@ use kukuri_cn_indexer::query::FailClosedIndexQuery;
 use kukuri_cn_protocol::{CHANNEL_MEMBERSHIP_SECRET_HEADER, build_auth_envelope_json};
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
-use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
+use kukuri_cn_safety_runtime::{
+    MemorySafetyArtifactStore, SafetyArtifactStore, VerdictPersistMeta,
+};
 use kukuri_cn_trust::{EdgeFeatures, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore};
 use kukuri_cn_user_api::{RelationVisibilityState, UserApiConfig, app_router, build_state};
 use kukuri_core::{KukuriKeys, generate_keys};
@@ -109,6 +111,7 @@ impl MemoryIndex {
                 SubjectKind::Post,
                 object_id,
                 &verdict(SafetyAction::Allow, false),
+                &VerdictPersistMeta::default(),
             )
             .await?;
         self.entries
@@ -145,6 +148,7 @@ impl MemoryIndex {
                 SubjectKind::Post,
                 object_id,
                 &verdict(SafetyAction::Exclude, true),
+                &VerdictPersistMeta::default(),
             )
             .await?;
         Ok(())

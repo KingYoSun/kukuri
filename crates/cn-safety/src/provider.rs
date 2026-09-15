@@ -209,6 +209,21 @@ pub trait SafetyProvider: Send + Sync {
     /// この provider が提供する capability。
     fn capabilities(&self) -> &[SafetyProviderCapability];
 
+    /// scan 構成の安定識別子（保存済み verdict の再利用鍵の一部。#1050）。
+    ///
+    /// 同じ subject に対する判定を変え得る構成（model / 応答形式 / capability 集合）が変わったら
+    /// 別の値になるようにする。既定は provider 名 + capability 列。model 等を持つ provider は
+    /// override する。秘密値・endpoint URL は含めない（fingerprint は verdict 行に保存される）。
+    fn config_fingerprint(&self) -> String {
+        let capabilities = self
+            .capabilities()
+            .iter()
+            .map(|capability| format!("{capability:?}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("{}|{capabilities}", self.name())
+    }
+
     /// 対象を scan する。I/O 失敗は `ScanError` で返し、呼び出し側が fail-closed に写像する。
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError>;
 }

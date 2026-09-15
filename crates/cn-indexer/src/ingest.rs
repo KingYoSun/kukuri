@@ -35,7 +35,7 @@ use kukuri_blob_service::BlobService;
 use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
-use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService};
+use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService, ScanDisposition};
 use kukuri_core::{KukuriEnvelope, ObjectStatus, ReplicaId, verify_post_withdrawal};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
 
@@ -55,6 +55,61 @@ pub struct IngestSummary {
     pub skipped_non_allow: usize,
     /// tombstone / deleted で de-index した entry 数。
     pub deindexed: usize,
+    /// provider を呼んで判定した scan 数（post text + media blob。#1050）。
+    pub scans_fresh: usize,
+    /// 保存済み verdict を再利用して provider を呼ばなかった scan 数（#1050）。
+    pub scans_reused: usize,
+}
+
+/// 変更通知から取り込み対象を決める鍵の分類（#1050）。
+///
+/// `objects/<id>/state|envelope` と `withdrawals/<id>/state` は対象 object を特定できる。
+/// それ以外（media manifest 等）は対象を特定できないため scope 全体の見直しへ倒す。
+#[derive(Debug, PartialEq, Eq)]
+pub enum ChangedKeys {
+    /// 特定できた object id の集合（重複なし・安定順）。
+    Objects(Vec<String>),
+    /// 対象を特定できない鍵を含むため scope 全体を見直す。
+    WholeScope,
+}
+
+/// 変更通知の鍵を取り込み対象へ分類する純関数。
+pub fn classify_changed_keys<'a>(keys: impl IntoIterator<Item = &'a str>) -> ChangedKeys {
+    let mut ids: Vec<String> = Vec::new();
+    let mut any = false;
+    for key in keys {
+        any = true;
+        let object_id = key
+            .strip_prefix("objects/")
+            .or_else(|| key.strip_prefix("withdrawals/"))
+            .and_then(|rest| rest.split('/').next())
+            .filter(|id| !id.is_empty());
+        match object_id {
+            Some(id) => {
+                if !ids.iter().any(|known| known == id) {
+                    ids.push(id.to_string());
+                }
+            }
+            None => return ChangedKeys::WholeScope,
+        }
+    }
+    if !any {
+        return ChangedKeys::WholeScope;
+    }
+    ChangedKeys::Objects(ids)
+}
+
+/// scope 走査で読み込んだ、per-record 処理の共有文脈。
+struct ScopeContext {
+    envelopes: HashMap<String, DocRecord>,
+    withdrawn_object_ids: HashSet<String>,
+}
+
+/// 1 record の取り込みで行った scan の内訳（#1050）。
+#[derive(Debug, Default)]
+struct ScanStats {
+    fresh: usize,
+    reused: usize,
 }
 
 /// ingest pipeline。docs replica + safety scan service + index 投影を束ねる。
@@ -102,15 +157,21 @@ impl IngestPipeline {
         self
     }
 
-    /// スキャンを実行し、観測状態に分類（スキャン失敗 / 外部プロバイダ利用不可）を記録する。
+    /// 保存済み verdict を再利用できなければスキャンを実行し、観測状態に分類（スキャン失敗 /
+    /// 外部プロバイダ利用不可）を記録する（#1050）。
+    ///
+    /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
+    /// blob = blob hash）。再利用時は provider を呼ばず artifact も作らない。
     ///
     /// media blob の未複製・ピア不在も verdict 上は `ProviderUnavailable` になるが、外部 safety
     /// provider 障害ではない。scan 中に media fetch の利用不可カウンタが増えた場合は、専用の
     /// `media_fetch_unavailable` だけに記録し、provider 障害カウンタへ重複計上しない。
-    async fn scan_and_record_with_metrics(
+    async fn scan_or_reuse_with_metrics(
         &self,
         request: &ProviderScanRequest,
         subject_author: &str,
+        source_fingerprint: &str,
+        stats: &mut ScanStats,
     ) -> Result<SafetyScanOutcome> {
         let media_fetch_unavailable_before = self
             .metrics
@@ -118,7 +179,7 @@ impl IngestPipeline {
             .map(|metrics| metrics.media_fetch_unavailable_count());
         let outcome = match self
             .safety
-            .scan_and_record_for_author(request, subject_author)
+            .scan_or_reuse(request, Some(subject_author), source_fingerprint)
             .await
         {
             Ok(outcome) => outcome,
@@ -129,6 +190,13 @@ impl IngestPipeline {
                 return Err(error);
             }
         };
+        match outcome.disposition {
+            ScanDisposition::Reused => {
+                stats.reused += 1;
+                return Ok(outcome);
+            }
+            ScanDisposition::Fresh => stats.fresh += 1,
+        }
         if let Some(metrics) = &self.metrics {
             let media_fetch_became_unavailable = media_fetch_unavailable_before
                 .is_some_and(|before| metrics.media_fetch_unavailable_count() > before);
@@ -167,7 +235,69 @@ impl IngestPipeline {
             )
             .await
             .with_context(|| format!("failed to query replica {}", replica_id.as_str()))?;
+        let (state_records, context) = self.scope_context(replica_id, records).await?;
+        self.ingest_records(scope_kind, scope_id, replica_id, &state_records, &context)
+            .await
+    }
 
+    /// 変更通知で届いた鍵に対応する object だけを取り込む（#1050 AC-4）。
+    ///
+    /// `objects/<id>/…` と `withdrawals/<id>/state` は対象 object を特定できるため、その object の
+    /// `objects/<id>/` prefix（state + envelope）と撤回だけを読み、scope 全体の prefix 走査を
+    /// 行わない。対象を特定できない鍵（media manifest 等）が混ざる場合は `ingest_scope` へ倒す。
+    /// 全件見直し（`ingest_scope`）は引き続き定期的に走り、取りこぼしを回収する。
+    pub async fn ingest_changed_keys(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        replica_id: &ReplicaId,
+        keys: &[String],
+    ) -> Result<IngestSummary> {
+        let object_ids = match classify_changed_keys(keys.iter().map(String::as_str)) {
+            ChangedKeys::Objects(ids) => ids,
+            ChangedKeys::WholeScope => {
+                debug!(
+                    replica_id = %replica_id.as_str(),
+                    keys = keys.len(),
+                    "changed keys are not object-scoped; falling back to the whole scope"
+                );
+                return self.ingest_scope(scope_kind, scope_id, replica_id).await;
+            }
+        };
+        self.docs_sync.open_replica(replica_id).await?;
+
+        let mut records: Vec<DocRecord> = Vec::new();
+        for object_id in &object_ids {
+            let mut object_records = self
+                .docs_sync
+                .query_replica_with_policy(
+                    replica_id,
+                    DocQuery::Prefix(stable_key("objects", &format!("{object_id}/"))),
+                    DocFetchPolicy::LocalThenRemote,
+                )
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to query object `{object_id}` in replica {}",
+                        replica_id.as_str()
+                    )
+                })?;
+            records.append(&mut object_records);
+        }
+        let (state_records, context) = self.scope_context(replica_id, records).await?;
+        self.ingest_records(scope_kind, scope_id, replica_id, &state_records, &context)
+            .await
+    }
+
+    /// prefix 走査結果を state record と共有文脈（envelope map + 検証済み撤回集合）に分ける。
+    ///
+    /// 撤回は docs が canonical（gossip は起床合図に過ぎない）。元の署名済み envelope に対して
+    /// 検証できた撤回だけを抑制対象にする。
+    async fn scope_context(
+        &self,
+        replica_id: &ReplicaId,
+        records: Vec<DocRecord>,
+    ) -> Result<(Vec<DocRecord>, ScopeContext)> {
         // 同一 prefix scan の envelope entry を object_id -> envelope record で index 化し、
         // blob text の本文取得で追加クエリ（N+1）を発生させないようにする。
         let mut envelopes: HashMap<String, DocRecord> = HashMap::new();
@@ -182,8 +312,6 @@ impl IngestPipeline {
             }
         }
 
-        // Docs are canonical for withdrawals; gossip only wakes the subscriber. A target is
-        // suppressed only after the withdrawal verifies against the original signed envelope.
         let withdrawal_records = self
             .docs_sync
             .query_replica_with_policy(
@@ -214,21 +342,36 @@ impl IngestPipeline {
                 withdrawn_object_ids.insert(content.target_object_id.0);
             }
         }
+        Ok((
+            state_records,
+            ScopeContext {
+                envelopes,
+                withdrawn_object_ids,
+            },
+        ))
+    }
 
+    /// state record 群を 1 件ずつ取り込む（単一 entry の失敗で scope 全体を止めない）。
+    async fn ingest_records(
+        &self,
+        scope_kind: IndexScopeKind,
+        scope_id: &str,
+        replica_id: &ReplicaId,
+        state_records: &[DocRecord],
+        context: &ScopeContext,
+    ) -> Result<IngestSummary> {
         let mut summary = IngestSummary::default();
-        for record in &state_records {
+        for record in state_records {
             summary.scanned += 1;
-            match self
+            let mut stats = ScanStats::default();
+            let outcome = self
                 .ingest_object_record(
-                    scope_kind,
-                    scope_id,
-                    replica_id,
-                    record,
-                    &envelopes,
-                    &withdrawn_object_ids,
+                    scope_kind, scope_id, replica_id, record, context, &mut stats,
                 )
-                .await
-            {
+                .await;
+            summary.scans_fresh += stats.fresh;
+            summary.scans_reused += stats.reused;
+            match outcome {
                 Ok(IngestOutcome::Indexed) => summary.indexed += 1,
                 Ok(IngestOutcome::SkippedNonAllow) => summary.skipped_non_allow += 1,
                 Ok(IngestOutcome::Deindexed) => summary.deindexed += 1,
@@ -254,8 +397,8 @@ impl IngestPipeline {
         scope_id: &str,
         replica_id: &ReplicaId,
         record: &DocRecord,
-        envelopes: &HashMap<String, DocRecord>,
-        withdrawn_object_ids: &HashSet<String>,
+        context: &ScopeContext,
+        stats: &mut ScanStats,
     ) -> Result<IngestOutcome> {
         let object: PostObjectView = match serde_json::from_slice(&record.value) {
             Ok(object) => object,
@@ -265,7 +408,10 @@ impl IngestPipeline {
             }
         };
 
-        if withdrawn_object_ids.contains(object.object_id.as_str()) {
+        if context
+            .withdrawn_object_ids
+            .contains(object.object_id.as_str())
+        {
             self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
                 .await?;
             return Ok(IngestOutcome::Deindexed);
@@ -297,7 +443,7 @@ impl IngestPipeline {
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
         let source = SourceResolver::new(self.docs_sync.as_ref(), self.blob_service.as_deref());
         let text = match source
-            .resolve_body_text(replica_id, &object, envelopes)
+            .resolve_body_text(replica_id, &object, &context.envelopes)
             .await
         {
             Ok(text) => text,
@@ -316,10 +462,12 @@ impl IngestPipeline {
         // safety scan（fail-closed）。post 本文 text を scan service に渡す。生成された
         // moderation artifact（risk signal / signed event）は service が署名・永続化する（#406）。
         // 永続化失敗は `?` で呼び出し側の per-entry fail-closed（投影しない）に乗る。
+        // 再利用鍵の内容 fingerprint は state record の content hash（本文参照・添付参照・
+        // status を含む）。内容が同じで scan 構成も同じなら provider を呼ばない（#1050）。
         let request = ProviderScanRequest::for_subject(SubjectKind::Post, object.object_id.clone())
             .with_text(text.clone());
         let outcome = self
-            .scan_and_record_with_metrics(&request, &object.author)
+            .scan_or_reuse_with_metrics(&request, &object.author, &record.content_hash, stats)
             .await?;
         let report = &outcome.report;
 
@@ -366,8 +514,9 @@ impl IngestPipeline {
             if let Some(mime) = &target.mime {
                 request = request.with_media_mime(mime.clone());
             }
+            // blob は不変なので hash 自体が内容 fingerprint。
             let media_outcome = self
-                .scan_and_record_with_metrics(&request, &object.author)
+                .scan_or_reuse_with_metrics(&request, &object.author, &target.hash, stats)
                 .await?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
@@ -427,6 +576,12 @@ impl IngestPipeline {
             source_replica_id: replica_id.as_str().to_string(),
         };
         self.projection.upsert_entry(&entry).await?;
+        if outcome.disposition == ScanDisposition::Fresh
+            && let Some(metrics) = &self.metrics
+        {
+            // 新規に判定して索引に入った投稿の、作成から索引までの遅れ（著者時刻由来の近似値）。
+            metrics.record_index_lag(chrono::Utc::now().timestamp() - object.created_at);
+        }
         Ok(IngestOutcome::Indexed)
     }
 

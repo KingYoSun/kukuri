@@ -10,21 +10,22 @@ use std::sync::Arc;
 use anyhow::Result;
 use kukuri_cn_core::{
     DistributionAudience, PgSafetyArtifactStore, TestDatabase, connect_postgres,
-    dispute_risk_signal, get_risk_signal, get_signed_moderation_event, initialize_database,
-    list_distributable_moderation_events, list_distributable_risk_signals,
+    dispute_risk_signal, get_risk_signal, get_scan_verdict, get_signed_moderation_event,
+    initialize_database, list_distributable_moderation_events, list_distributable_risk_signals,
     list_risk_signals_for_target, list_trust_risk_inputs, persist_risk_signal,
-    persist_signed_moderation_event, update_risk_signal_appeal_status,
+    persist_risk_signal_deduplicated, persist_signed_moderation_event,
+    reissue_corrected_risk_signal, update_risk_signal_appeal_status,
 };
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent, issue_signed_event};
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     AppealStatus, Basis, MockSafetyProvider, ModerationAction, ModerationEventSigner, ReasonCode,
-    RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyRiskSignal, Severity, Visibility,
+    RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyPolicy, SafetyProviderCapability,
+    SafetyRiskSignal, Severity, Visibility,
 };
-use kukuri_cn_safety_runtime::SafetyScanService;
 use kukuri_cn_safety_runtime::{
-    SafetyOrchestrator, Secp256k1ModerationEventSigner, SystemScanClock, UuidEventIdGenerator,
-    verify_signed_event,
+    SafetyOrchestrator, SafetyScanService, ScanDisposition, Secp256k1ModerationEventSigner,
+    SystemScanClock, UuidEventIdGenerator, verify_signed_event,
 };
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
@@ -515,6 +516,264 @@ async fn list_trust_risk_inputs_partitions_absolute_and_relative_from_postgres()
         assert_eq!(inputs.relative[0].category, SafetyCategory::Nsfw);
         assert_eq!(inputs.absolute[0].issuer_node_id, issuer);
 
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+// --- #1050: risk signal の集約（同一鍵は 1 行）と保存済み verdict の再利用 ---
+
+fn nsfw_signal(target_id: &str, confidence: u8) -> SafetyRiskSignal {
+    SafetyRiskSignal {
+        target: RiskSignalTarget::PostId,
+        target_id: target_id.to_string(),
+        category: SafetyCategory::Nsfw,
+        severity: Severity::High,
+        basis: Basis::ClassifierScore,
+        confidence: Some(confidence),
+        visibility: Visibility::Local,
+        expires_at: None,
+        appeal_status: Some(AppealStatus::None),
+    }
+}
+
+async fn count_signals(pool: &sqlx::PgPool, target_id: &str) -> Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM cn_safety.risk_signals WHERE target_id = $1",
+    )
+    .bind(target_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+#[tokio::test]
+async fn rescan_with_same_key_updates_signal_instead_of_inserting() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_signal_dedupe").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let issuer = signer().issuer_node_id().to_string();
+
+        let first = persist_risk_signal_deduplicated(
+            &pool,
+            &issuer,
+            &nsfw_signal("post-dup", 84),
+            Some("author-a"),
+        )
+        .await?;
+        assert!(first.newly_created);
+
+        // 申し立て中でも再 scan は行を増やさず、appeal_status を触らない。
+        dispute_risk_signal(&pool, &first.stored.id).await?;
+        let second = persist_risk_signal_deduplicated(
+            &pool,
+            &issuer,
+            &nsfw_signal("post-dup", 91),
+            Some("author-a"),
+        )
+        .await?;
+        assert!(!second.newly_created);
+        assert_eq!(second.stored.id, first.stored.id);
+        assert_eq!(second.stored.persisted_at, first.stored.persisted_at);
+        assert_eq!(second.stored.signal.confidence, Some(91));
+        assert_eq!(
+            second.stored.signal.appeal_status,
+            Some(AppealStatus::Disputed)
+        );
+        assert_eq!(count_signals(&pool, "post-dup").await?, 1);
+
+        // trust 入力も 1 件（同一投稿の寄与は signal 1 件分を超えない）。
+        let inputs = list_trust_risk_inputs(
+            &pool,
+            RiskSignalTarget::UserPubkey,
+            "author-a",
+            "2026-09-15T12:00:00Z",
+        )
+        .await?;
+        assert_eq!(inputs.relative.len(), 1);
+        assert!(inputs.absolute.is_empty());
+
+        // 別 category（別鍵）は別行になる。
+        let mut spam = nsfw_signal("post-dup", 70);
+        spam.category = SafetyCategory::Spam;
+        let third =
+            persist_risk_signal_deduplicated(&pool, &issuer, &spam, Some("author-a")).await?;
+        assert!(third.newly_created);
+        assert_eq!(count_signals(&pool, "post-dup").await?, 2);
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+#[tokio::test]
+async fn cleared_signal_with_same_key_is_not_resurrected() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_signal_cleared").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let issuer = signer().issuer_node_id().to_string();
+
+        let first = persist_risk_signal(&pool, &issuer, &nsfw_signal("post-cleared", 84)).await?;
+        dispute_risk_signal(&pool, &first.id).await?;
+        update_risk_signal_appeal_status(&pool, &first.id, AppealStatus::Cleared).await?;
+
+        let again = persist_risk_signal_deduplicated(
+            &pool,
+            &issuer,
+            &nsfw_signal("post-cleared", 95),
+            None,
+        )
+        .await?;
+        assert!(
+            !again.newly_created,
+            "cleared decision must not be overridden by a rescan"
+        );
+        assert_eq!(again.stored.id, first.id);
+        assert_eq!(
+            again.stored.signal.appeal_status,
+            Some(AppealStatus::Cleared)
+        );
+        assert_eq!(
+            again.stored.signal.confidence,
+            Some(84),
+            "cleared row is left untouched"
+        );
+        assert_eq!(count_signals(&pool, "post-cleared").await?, 1);
+
+        // cn-cli の再発行（旧行を失効 → 新行 insert）は引き続き通り、以後の再 scan は新行へ集約する。
+        let reissued = reissue_corrected_risk_signal(
+            &pool,
+            &first.id,
+            &kukuri_cn_core::RiskSignalCorrection {
+                category: None,
+                severity: Some(Severity::Low),
+                confidence: Some(10),
+                visibility: None,
+            },
+            "2026-09-15T12:00:00Z",
+            true,
+        )
+        .await?;
+        assert_ne!(reissued.id, first.id);
+        assert_eq!(count_signals(&pool, "post-cleared").await?, 2);
+        let merged = persist_risk_signal_deduplicated(
+            &pool,
+            &issuer,
+            &nsfw_signal("post-cleared", 60),
+            None,
+        )
+        .await?;
+        assert!(!merged.newly_created);
+        assert_eq!(merged.stored.id, reissued.id);
+        assert_eq!(count_signals(&pool, "post-cleared").await?, 2);
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+#[tokio::test]
+async fn postgres_store_reuses_verdict_and_does_not_duplicate_artifacts() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_verdict_reuse").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let signer = signer();
+        let issuer = signer.issuer_node_id().to_string();
+        let provider = MockSafetyProvider::with_capabilities(
+            "mock-general",
+            vec![SafetyProviderCapability::GeneralMediaModeration],
+        )
+        .with_score(
+            "post-reuse",
+            SafetyProviderCapability::GeneralMediaModeration,
+            SafetyCategory::Nsfw,
+            84,
+        );
+        let policy = SafetyPolicy {
+            require_known_csam: false,
+            ..SafetyPolicy::public_node_default()
+        };
+        let orchestrator = Arc::new(
+            SafetyOrchestrator::builder(
+                &issuer,
+                Arc::new(SystemScanClock),
+                Arc::new(UuidEventIdGenerator),
+            )
+            .policy(policy)
+            .provider(Arc::new(provider))
+            .build()?,
+        );
+        let store = Arc::new(PgSafetyArtifactStore::new(pool.clone()));
+        let service = SafetyScanService::builder(orchestrator, store)
+            .signer(Arc::new(signer))
+            .build()?;
+        let request = ProviderScanRequest::for_subject(SubjectKind::Post, "post-reuse")
+            .with_text("sexy test");
+
+        let first = service
+            .scan_or_reuse(&request, Some("author-a"), "state-hash-1")
+            .await?;
+        assert_eq!(first.disposition, ScanDisposition::Fresh);
+        assert!(first.signed_event.is_some());
+        let stored = get_scan_verdict(&pool, SubjectKind::Post, "post-reuse")
+            .await?
+            .expect("verdict persisted");
+        assert_eq!(stored.source_fingerprint.as_deref(), Some("state-hash-1"));
+        assert_eq!(
+            stored.scan_config_fingerprint.as_deref(),
+            Some(service.scan_config_fingerprint())
+        );
+
+        let second = service
+            .scan_or_reuse(&request, Some("author-b"), "state-hash-1")
+            .await?;
+        assert_eq!(second.disposition, ScanDisposition::Reused);
+        assert_eq!(second.verdict_id, first.verdict_id);
+        assert!(second.signed_event.is_none());
+
+        let events = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM cn_safety.signed_moderation_events WHERE target_id = $1",
+        )
+        .bind("post-reuse")
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(events, 1);
+        assert_eq!(count_signals(&pool, "post-reuse").await?, 1);
+        // 再利用でも 2 人目の著者は関連付けられる（共有 subject の trust 入力を落とさない）。
+        for author in ["author-a", "author-b"] {
+            let inputs = list_trust_risk_inputs(
+                &pool,
+                RiskSignalTarget::UserPubkey,
+                author,
+                "2026-09-15T12:00:00Z",
+            )
+            .await?;
+            assert_eq!(inputs.relative.len(), 1, "{author}");
+        }
         Ok::<(), anyhow::Error>(())
     }
     .await;

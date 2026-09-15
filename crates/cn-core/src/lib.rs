@@ -83,7 +83,8 @@ pub use consents::{
 };
 pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
-    initialize_database_for_runtime, migrate_postgres, seed_default_policies,
+    initialize_database_for_runtime, migrate_postgres, migrate_postgres_up_to,
+    seed_default_policies,
 };
 pub use dome_hosting::{
     COMMUNITY_NODE_DOME_BLOB_CACHE_CAPACITY_BYTES, DOME_BLOB_CACHE_GC_GRACE_MILLIS,
@@ -158,11 +159,12 @@ pub use safety_appeals::{
     update_risk_signal_appeal_status, validate_optional_confidence, validate_optional_expires_at,
 };
 pub use safety_events::{
-    DistributionAudience, StoredModerationEvent, StoredRiskSignal, get_risk_signal,
-    get_signed_moderation_event, list_distributable_moderation_events,
-    list_distributable_risk_signals, list_risk_signals, list_risk_signals_for_target,
-    list_risk_signals_for_user, list_signed_moderation_events, persist_risk_signal,
-    persist_risk_signal_with_author, persist_signed_moderation_event,
+    DistributionAudience, PersistedRiskSignal, StoredModerationEvent, StoredRiskSignal,
+    attribute_risk_signal_subject_author, get_risk_signal, get_signed_moderation_event,
+    list_distributable_moderation_events, list_distributable_risk_signals, list_risk_signals,
+    list_risk_signals_for_target, list_risk_signals_for_user, list_signed_moderation_events,
+    persist_risk_signal, persist_risk_signal_deduplicated, persist_risk_signal_with_author,
+    persist_signed_moderation_event,
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
 pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};

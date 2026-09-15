@@ -30,6 +30,7 @@ pub mod clock;
 pub mod error;
 pub mod id;
 pub mod orchestrator;
+pub mod reuse;
 pub mod service;
 pub mod signer;
 
@@ -37,7 +38,13 @@ pub use clock::{ScanClock, SystemScanClock};
 pub use error::SafetyRuntimeError;
 pub use id::{EventIdGenerator, UuidEventIdGenerator};
 pub use orchestrator::{
-    SafetyOrchestrator, SafetyOrchestratorBuilder, SafetyScanReport, map_scan_error,
+    SafetyOrchestrator, SafetyOrchestratorBuilder, SafetyScanReport,
+    compute_scan_config_fingerprint, map_scan_error,
+};
+pub use reuse::{
+    PersistedSignal, RescanReason, ReuseDecision, ReuseInputs, ScanDisposition,
+    StoredVerdictRecord, VerdictPersistMeta, decide as decide_verdict_reuse, is_reusable_verdict,
+    verdict_changed,
 };
 pub use service::{
     MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
