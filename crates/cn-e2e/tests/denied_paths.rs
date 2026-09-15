@@ -23,7 +23,7 @@ const PROJECTION_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn disallowed_content_never_surfaces_and_verdict_flip_hides_entries() -> Result<()> {
-    let Some(stack) = E2eStack::boot("denied").await? else {
+    let Some(mut stack) = E2eStack::boot("denied").await? else {
         return Ok(());
     };
 
@@ -143,6 +143,12 @@ async fn disallowed_content_never_surfaces_and_verdict_flip_hides_entries() -> R
             r#"{"categories":[{"category":"csam","score":0.97}],"tags":[]}"#,
         )
         .await;
+    // #1050: 内容と scan 構成が同じ間は保存済み verdict を再利用し、provider 応答を変えた
+    // だけでは再走査されない。運用と同じく scan 構成（閾値）を変えて起動し直し、次の
+    // 全件見直しで再走査させる。
+    stack
+        .restart_worker_with_suspected_threshold(Some(50))
+        .await?;
     let deadline = tokio::time::Instant::now() + PROJECTION_TIMEOUT;
     let mut hidden = false;
     while tokio::time::Instant::now() < deadline {

@@ -11,6 +11,8 @@
 //! 発火条件: `KUKURI_CN_RUN_E2E_TESTS=1`（`cargo xtask cn-e2e` が compose で
 //! ミドルウェアを用意して設定する）。未設定なら各テストは skip する。
 
+mod scan_stack;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,13 +28,12 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService};
 use kukuri_cn_core::{
-    ChannelSecretCipher, IndexScopeKind, JwtConfig, PgIndexEntryStore, PgSafetyArtifactStore,
-    TestDatabase, add_supported_topic, connect_postgres, initialize_database,
-    readiness_context_fingerprint, record_readiness_activation,
+    IndexScopeKind, JwtConfig, PgIndexEntryStore, TestDatabase, add_supported_topic,
+    connect_postgres, initialize_database, readiness_context_fingerprint,
+    record_readiness_activation,
 };
 use kukuri_cn_indexer::ArcadeDbProjection;
 use kukuri_cn_indexer::config::{ArcadeDbConfig, MediaFetchConfig};
-use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::media_fetcher::BlobMediaFetcher;
 use kukuri_cn_indexer::participant::IndexerParticipant;
 use kukuri_cn_indexer::projection::IndexProjection;
@@ -40,18 +41,7 @@ use kukuri_cn_indexer::state::{IndexerRuntimeState, IndexerStateSnapshot};
 use kukuri_cn_indexer::worker::{IndexerWorker, WorkerConfig, WorkerHandle};
 use kukuri_cn_iroh_relay::{IrohRelayConfig, SpawnedIrohRelay};
 use kukuri_cn_operator::READINESS_CHECK_IDS;
-use kukuri_cn_safety::SafetyProvider;
 use kukuri_cn_safety::provider::MediaFetcher;
-use kukuri_cn_safety_arachnid::{
-    ProjectArachnidShieldProvider, ShieldCredentials, ShieldProviderConfig,
-};
-use kukuri_cn_safety_runtime::{
-    SafetyRuntimeConfig, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
-    build_safety_scan_service,
-};
-use kukuri_cn_safety_vlm::{
-    CapabilityProfile, VlmCredentials, VlmModerationProvider, VlmProviderConfig, VlmResponseFormat,
-};
 use kukuri_cn_user_api::{UserApiConfig, app_router, build_state};
 use kukuri_core::{
     AssetRef, AssetRole, BlobHash, KukuriKeys, KukuriMediaManifestV1, MediaManifestItem,
@@ -67,27 +57,10 @@ use kukuri_transport::{
     DhtDiscoveryOptions, SeedPeer, TransportNetworkConfig, TransportRelayConfig,
 };
 
-/// 判定イベント署名鍵（テスト固定値。既知の有効な secp256k1 secret）。
-const TEST_SIGNER_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+use crate::scan_stack::{SyntheticBasicAuth, build_participant};
+
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 const DEFAULT_RENDEZVOUS_REDIS_URL: &str = "redis://127.0.0.1:16379/";
-
-/// wiremock の Arachnid 模擬が要求する資格情報（走行ごとに組み立てる合成値。実物ではない。
-/// リテラルの組で持たないのは secret 走査の誤検知を避けるため）。
-#[derive(Clone)]
-struct SyntheticBasicAuth {
-    user: String,
-    pass: String,
-}
-
-impl SyntheticBasicAuth {
-    fn generate(prefix: &str) -> Self {
-        Self {
-            user: format!("synthetic-{prefix}-user"),
-            pass: format!("synthetic-{prefix}-not-a-credential"),
-        }
-    }
-}
 
 /// E2E の発火判定。`KUKURI_CN_RUN_E2E_TESTS=1` のときだけ管理用 DB URL を返す。
 pub fn e2e_admin_database_url() -> Option<String> {
@@ -205,6 +178,7 @@ pub struct E2eStack {
     pub entries: Arc<PgIndexEntryStore>,
     pub api_base_url: String,
     arachnid_auth: SyntheticBasicAuth,
+    media_fetcher: Arc<dyn MediaFetcher>,
     participant: Arc<IndexerParticipant>,
     worker_docs: Arc<dyn DocsSync>,
     replica_query_failure: Arc<AtomicBool>,
@@ -266,39 +240,6 @@ async fn mount_default_allow_mocks(
         )
         .mount(vlm)
         .await;
-}
-
-/// 本物のプロバイダ実装を wiremock の URL へ向けて構築する。
-fn build_providers(
-    arachnid_url: &str,
-    vlm_url: &str,
-    auth: &SyntheticBasicAuth,
-    media_fetcher: Arc<dyn MediaFetcher>,
-) -> Result<Vec<Arc<dyn SafetyProvider>>> {
-    let arachnid = ProjectArachnidShieldProvider::with_credentials(
-        &ShieldProviderConfig {
-            api_base_url: arachnid_url.to_string(),
-            timeout: Duration::from_secs(5),
-            ..ShieldProviderConfig::default()
-        },
-        ShieldCredentials::new(auth.user.as_str(), auth.pass.as_str()),
-    )
-    .context("failed to build the arachnid provider against wiremock")?
-    .with_media_fetcher(Arc::clone(&media_fetcher));
-    let vlm = VlmModerationProvider::with_credentials(
-        &VlmProviderConfig {
-            api_base_url: vlm_url.to_string(),
-            api_key_env: "KUKURI_CN_E2E_VLM_API_KEY_UNUSED".to_string(),
-            model: "e2e/mock-model".to_string(),
-            response_format: VlmResponseFormat::Json,
-            timeout: Duration::from_secs(5),
-        },
-        VlmCredentials::anonymous(),
-        CapabilityProfile::General,
-    )
-    .context("failed to build the vlm provider against wiremock")?
-    .with_media_fetcher(media_fetcher);
-    Ok(vec![Arc::new(arachnid), Arc::new(vlm)])
 }
 
 /// ノードのピア接続チケット（`<endpoint_id>@<host:port>`）。ループバック割り当て前提。
@@ -401,33 +342,6 @@ impl E2eStack {
             BlobMediaFetcher::new(indexer_blob_service, media_fetch_config)
                 .with_metrics(Arc::clone(&runtime_state)),
         );
-        let providers =
-            build_providers(&arachnid.uri(), &vlm.uri(), &arachnid_auth, media_fetcher)?;
-        let safety_config = SafetyRuntimeConfig {
-            providers: SafetyRuntimeProvidersConfig {
-                known_csam: Some(SafetyRuntimeProviderEntry {
-                    provider: kukuri_cn_safety_arachnid::PROVIDER_NAME.to_string(),
-                    required: true,
-                }),
-                general: Some(SafetyRuntimeProviderEntry {
-                    provider: kukuri_cn_safety_vlm::PROVIDER_NAME.to_string(),
-                    required: true,
-                }),
-                unknown_csam: None,
-            },
-            signing_key: Some(TEST_SIGNER_SECRET.to_string()),
-            emit_signed_events: true,
-            issuer_node_id: None,
-            suspected_threshold: None,
-            suspected_signal_visibility: None,
-        };
-        let safety = build_safety_scan_service(
-            &safety_config,
-            providers,
-            Arc::new(PgSafetyArtifactStore::new(pool.clone())),
-        )?
-        .context("safety scan service must be constructed for the e2e stack")?;
-
         // 6. 索引の真実源（実 Postgres）と投影（実 ArcadeDB）。
         let entries = Arc::new(PgIndexEntryStore::new(pool.clone()));
         let projection = Arc::new(
@@ -439,24 +353,20 @@ impl E2eStack {
             .await
             .context("ArcadeDB is unreachable; run via `cargo xtask cn-e2e`")?;
 
-        // 7. 常駐ワーカー（本番と同じ participant / pipeline 構成）。
-        let pipeline = IngestPipeline::new(
-            Arc::clone(&worker_docs),
-            Arc::new(safety),
-            entries.clone(),
-            projection.clone(),
-        )
-        .with_metrics(Arc::clone(&runtime_state));
-        let participant = Arc::new(IndexerParticipant::new(
-            pool.clone(),
-            Arc::clone(&worker_docs),
-            entries.clone(),
-            projection.clone(),
-            pipeline,
-            ChannelSecretCipher::from_key_material(
-                "cn-e2e-harness-channel-secret-key-0123456789abcdef",
-            )?,
-        ));
+        // 7. 走査系（本物のプロバイダ実装 + wiremock、真実源は実 Postgres）と常駐ワーカー
+        //    （本番と同じ participant / pipeline 構成）。
+        let participant = build_participant(
+            &pool,
+            &worker_docs,
+            &entries,
+            &projection,
+            &runtime_state,
+            &arachnid.uri(),
+            &vlm.uri(),
+            &arachnid_auth,
+            Arc::clone(&media_fetcher),
+            None,
+        )?;
         let worker = IndexerWorker::new(
             Arc::clone(&participant),
             Arc::clone(&worker_docs),
@@ -547,6 +457,7 @@ impl E2eStack {
             entries,
             api_base_url,
             arachnid_auth,
+            media_fetcher,
             participant,
             worker_docs,
             replica_query_failure,
@@ -899,6 +810,33 @@ impl E2eStack {
         );
         self.worker = Some(worker.spawn());
         Ok(())
+    }
+
+    /// scan 構成（suspected 閾値）を変えて常駐ワーカーを起動し直す（#1050）。
+    ///
+    /// 内容と scan 構成が同じ subject は保存済み verdict を再利用するため、provider 応答の
+    /// 変化を既存 entry に反映させるには構成の変更（= fingerprint の変化）が要る。運用では
+    /// policy / provider 設定の更新と再起動に相当する。
+    pub async fn restart_worker_with_suspected_threshold(
+        &mut self,
+        threshold: Option<u8>,
+    ) -> Result<()> {
+        if let Some(worker) = self.worker.take() {
+            worker.shutdown().await;
+        }
+        self.participant = build_participant(
+            &self.pool,
+            &self.worker_docs,
+            &self.entries,
+            &self.projection,
+            &self.runtime_state,
+            &self.arachnid.uri(),
+            &self.vlm.uri(),
+            &self.arachnid_auth,
+            Arc::clone(&self.media_fetcher),
+            threshold,
+        )?;
+        self.restart_worker().await
     }
 
     /// E2E内のdocs replica query障害を有効化・解除する。
