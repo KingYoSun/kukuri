@@ -269,6 +269,17 @@ describe('MetaverseRoomView', () => {
     expect(removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
   });
 
+  test('a queued chat focus does not steal focus after the Column becomes inactive', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callbacks.push(callback); return callbacks.length; });
+    const props = viewProps({ initialChatOpen: true });
+    const active = { visible: true, active: true, audioFocused: false, suspended: false, requestAudioFocus: vi.fn(), releaseAudioFocus: vi.fn() };
+    const view = render(<ColumnRuntimeProvider value={active}><MetaverseRoomView {...props} /></ColumnRuntimeProvider>);
+    view.rerender(<ColumnRuntimeProvider value={{ ...active, active: false, visible: false, suspended: true }}><MetaverseRoomView {...props} /></ColumnRuntimeProvider>);
+    act(() => callbacks.forEach(callback => callback(0)));
+    expect(screen.getByLabelText('Room chat message')).not.toHaveFocus();
+  });
+
   test('suspends rendering and keyboard controls without removing room session UI', () => {
     render(
       <ColumnRuntimeProvider value={{

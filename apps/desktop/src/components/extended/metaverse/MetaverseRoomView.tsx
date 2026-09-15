@@ -175,6 +175,7 @@ export function MetaverseRoomView({
   useEffect(() => {
     if (!eligibleRef.current || overlay === 'closed') return;
     const frame = requestAnimationFrame(() => {
+      if (!eligibleRef.current) return;
       if (overlay === 'chat') messageInputRef.current?.focus();
       if (overlay === 'categories') stageRef.current?.querySelector<HTMLElement>(`.metaverse-category-menu [data-category="${category}"]`)?.focus();
       if (overlay === 'details') stageRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();

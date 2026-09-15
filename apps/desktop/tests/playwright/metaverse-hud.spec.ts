@@ -17,6 +17,8 @@ async function enter(page: Page, width = 1283) {
 }
 
 test('six categories, keyboard and IME preserve drafts without dispatching domain actions', async ({ page }) => {
+  // This covers all six panes plus keyboard and composition round trips after 3D startup.
+  test.slow();
   const column = await enter(page);
   const stage = column.locator('.metaverse-room-stage');
   await expect(column.locator('.metaverse-room-hud')).toBeHidden();

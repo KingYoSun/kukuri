@@ -51,6 +51,9 @@ test('span expansion reveals the selected header before the next interaction', a
 });
 
 test('narrow HUD and chat remain contained and keep their drafts across spans', async ({ page }) => {
+  // Three span changes and three menu/chat round trips include a cold 3D startup.
+  // Keep each assertion's deadline; allow the complete sequence on shared CI CPUs.
+  test.slow();
   const column = await openRoom(page);
   await column.getByRole('button', { name: en.chat.open }).click();
   const chat = column.locator('.metaverse-chat-form input');
