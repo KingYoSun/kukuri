@@ -513,26 +513,22 @@ impl AppService {
         &self,
         context: &SpatialContextV1,
     ) -> Result<ReplicaId> {
-        // Validate channel membership before starting any network subscription.
-        let replica = self.dome_connection_read_replica(context).await?;
-        self.ensure_topic_subscription(context.topic_id().as_str())
-            .await?;
-        Ok(replica)
-    }
-
-    async fn dome_connection_read_replica(&self, context: &SpatialContextV1) -> Result<ReplicaId> {
         let replica = match context {
             SpatialContextV1::Topic { topic_id } => topic_replica_id(topic_id.as_str()),
             SpatialContextV1::Channel {
                 topic_id,
                 channel_id,
             } => {
+                self.ensure_private_channel_access(topic_id.as_str(), channel_id)
+                    .await?;
                 let state = self
                     .private_channel_write_state(topic_id.as_str(), channel_id)
                     .await?;
                 current_private_channel_replica_id(&state)
             }
         };
+        self.ensure_topic_subscription(context.topic_id().as_str())
+            .await?;
         self.services.docs_sync.open_replica(&replica).await?;
         Ok(replica)
     }

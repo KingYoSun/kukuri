@@ -95,6 +95,17 @@ function actions(topology = emptyTopology()) {
 }
 
 describe('DomeConnectionPanel', () => {
+  test('a recreated Dome can propose into a slot with an old accepted record', async () => {
+    const topology = connectionFixtureTopology(); topology.connections[0].record.status = 'accepted';
+    const room = structuredClone(connectionFixtureRooms[0]); room.metaverse!.instance_generation = 2;
+    const roomActions = actions(topology); const user = userEvent.setup();
+    render(<DomeConnectionPanel room={room} rooms={[room, ...connectionFixtureRooms.slice(1)]} actions={roomActions}
+      localAuthorPubkey={room.host_pubkey} locale='en' />);
+    await user.click(screen.getByRole('button', { name: /^East/ }));
+    await user.selectOptions(await screen.findByRole('combobox'), 'd');
+    await user.click(screen.getByRole('button', { name: 'Propose Connection' }));
+    expect(roomActions.createConnectionProposal).toHaveBeenCalledWith(expect.any(String), room.metaverse!.spatial_context, 'a', 'd', 'east');
+  });
   test('a draining record overrides an older ready passage result', async () => {
     const topology = connectionFixtureTopology(); topology.connections[0].record.status = 'draining';
     const room = connectionFixtureRooms[0]; const user = userEvent.setup();

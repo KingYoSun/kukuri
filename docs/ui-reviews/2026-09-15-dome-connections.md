@@ -3,8 +3,8 @@
 - Status: current
 - Supersedes: None（#1024のカテゴリ・focus契約を維持し、接続pane内の4フォームだけを置換）
 - Superseded by: None
-- PR: Issue #1025の実装PR（作成後にリンク）
-- Preview: [変更前](../progress/assets/2026-09-15-1025-connections/windows-before.png)、[Ubuntu24の方向選択](../progress/assets/2026-09-15-1025-connections/linux-direction.png)
+- PR: [#1035](https://github.com/KingYoSun/kukuri/pull/1035)
+- Preview: [変更前](../progress/assets/2026-09-15-1025-connections/windows-before.png)、[Ubuntu24の方向選択](../progress/assets/2026-09-15-1025-connections/linux-direction.png)、[複数Dome・light](../progress/assets/2026-09-15-1025-connections/story-confirmed-light.png)、[dark](../progress/assets/2026-09-15-1025-connections/story-confirmed-dark.png)、[狭幅](../progress/assets/2026-09-15-1025-connections/story-narrow-light.png)。複数Dome画像はStorybook fixture。
 - Surface / user / purpose: 入室中の接続カテゴリと入室外の接続管理。参加者が現在地・方向・確認済み接続を把握し、ownerが既存actionで接続を管理する。
 - Summary: 現在Domeを中心にした方位button、component-local map、選択方向の詳細。未知・取得失敗と空きを区別する。3Dの壁を直接選択する案はcamera依存が増えるため不採用。
 - Conditions:

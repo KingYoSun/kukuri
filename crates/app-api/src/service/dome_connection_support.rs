@@ -83,6 +83,35 @@ pub(crate) fn verify_dome_proposal_terminal_event(
 }
 
 impl AppService {
+    /// Map reads must not redeem grants, rotate epochs, or start subscriptions.
+    pub(crate) async fn dome_connection_read_replica(
+        &self,
+        context: &SpatialContextV1,
+    ) -> Result<ReplicaId> {
+        let replica = match context {
+            SpatialContextV1::Topic { topic_id } => topic_replica_id(topic_id.as_str()),
+            SpatialContextV1::Channel {
+                topic_id,
+                channel_id,
+            } => {
+                let state = self
+                    .joined_private_channel_state(topic_id.as_str(), channel_id.as_str())
+                    .await
+                    .context("private channel is not joined")?;
+                if private_channel_rotation_is_pending(self.docs_sync(), self.keys(), &state)
+                    .await?
+                {
+                    anyhow::bail!(
+                        "private channel epoch handoff is pending; wait for automatic redemption or use a fresh access token"
+                    );
+                }
+                current_private_channel_replica_id(&state)
+            }
+        };
+        self.services.docs_sync.open_replica(&replica).await?;
+        Ok(replica)
+    }
+
     pub(crate) async fn terminate_dome_connection_with_reason(
         &self,
         spatial_context: &SpatialContextV1,

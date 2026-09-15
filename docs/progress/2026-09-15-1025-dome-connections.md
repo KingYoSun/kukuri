@@ -4,7 +4,7 @@
 - Scope revision: `2026-09-14-r1`、区分C。
 - 基準commit: `ad5c1e9aa61e370570b3ca6a79edaa375b9d4521`。
 - 2026-09-15に推奨案の実装、Issue更新、コミット、PR作成、CI後マージ、Windows／Ubuntu24のComputer Use確認を承認済み。
-- 状態: 実装・検証中。PR、独立監査、CI、マージ結果は確定後に追記する。
+- PR: [#1035](https://github.com/KingYoSun/kukuri/pull/1035)。実装・検証中。独立監査、CI、マージ結果は確定後に追記する。
 
 ## 設計判断と変更
 
@@ -48,10 +48,18 @@
 - Rust本体: 942件成功、既存skip 4。harness 23件成功。未知channelの全入口I/O禁止testも成功。
 - 接続／遷移scenario: `desktop_smoke_metaverse_dome_connections` 9 steps、`desktop_smoke_metaverse_dome_transition` 4 steps成功。in-processでpeer_count=0のため実P2P通信の証明ではない。
 - 追加再現: draining recordより古いready表示を優先するtestが失敗。terminal理由の優先後にPanel全8件成功。host read中の離脱後にaccess previewを開始するtestが失敗。取消再確認後にneighbor全4件成功。
-- oversized baseline: Connection readとmutationのguardを分ける最小変更で`dome_connections.rs`が1025→1029行となるため、理由を付けてbaselineを更新。生成時に既存のsession／noticeの減少も反映し、新規大型ファイルは追加しない。
+- oversized baseline: 初回は`dome_connections.rs`が1025→1029行となったが、監査修正でread専用helperを既存`service/dome_connection_support.rs`へ配置し、最終的に1025行を維持。生成時に既存のsession／noticeの減少も反映し、新規大型ファイル・許容上限増加は追加しない。
 - Windowsでは実行中xtask.exeの再リンクが拒否されたため、同じソースのxtask.exeをローカル別名で実行して検証。製品・検証処理や必須項目は変更しない。
 - 全体test、desktop-ui-check、Dome scenarios、Windows／Ubuntu24 after、独立監査、CI: 未完了。
 
 ## 監査・Close
+
+初回head `629939c816103182b7e98bb12f12feeae587c36f` の独立監査はFAIL（F1/F2）。F1は加入済みprivateのwrite_state helperに購読・grant redemption・FriendOnly epoch rotationが含まれること、F2は旧generationのaccepted recordが現在slotの候補／解除を隠すこと。
+
+F1はrestore相当のFriendOnly owner＋mutual解消済みparticipantで、変更前に共有書込5→10を再現した。readはmemory上の加入stateとread-onlyのrotation pending検査を使い、既存write helperの自動更新は明示mutation側へ残した。変更後は接続backend 9件成功（共有書込・secret登録・subscription・epoch不変を含む）。F2は旧generationのacceptedでmodel testが失敗し、current endpoint／Context一致で絞り、acceptedをslot占有と扱わない修正後に関連frontend 25件成功。方位提案への到達もcomponent testで固定する。
+
+初回全体frontendは1721件中1717成功、topics／messagesの4件失敗。再実行と変更前commitの別worktreeでもtopicsのtimeout／後続Control Center不在を再現した。既存testのdeadlineやassertionは変更せず、CIの全suite結果と区別して記録する。
+
+Storybookの11状態×light/dark、計22条件でaxeの対象WCAG tag違反0。色transitionが終了してから検査する。20条件のcolor-contrastはincompleteが残るため、自動判定の完了やAccessibility適合の証明とは扱わない。文字色を既存Buttonから継承し、theme tokenでmap線と現在地を描く。[明色の確認済みmap](assets/2026-09-15-1025-connections/story-confirmed-light.png)／[暗色](assets/2026-09-15-1025-connections/story-confirmed-dark.png)／[狭幅](assets/2026-09-15-1025-connections/story-narrow-light.png)を確認した。
 
 固定PR headの独立監査を実装工程と分ける。IssueのAC／INVAR、上記入口と逆引きから再構築し、PASS、必須CI成功、merge tree整合またはdelta監査後にIssueをCloseする。未知の不具合の不存在や別Issueの新要件は条件へ追加しない。

@@ -7,9 +7,20 @@ struct ConnectionIoProbe {
     inner: MemoryDocsSync,
     io: AtomicUsize,
     writes: AtomicUsize,
+    secrets: AtomicUsize,
 }
 #[async_trait]
 impl DocsSync for ConnectionIoProbe {
+    async fn register_private_replica_secret(
+        &self,
+        replica: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.secrets.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .register_private_replica_secret(replica, namespace_secret_hex)
+            .await
+    }
     async fn open_replica(&self, replica: &ReplicaId) -> Result<()> {
         self.io.fetch_add(1, Ordering::SeqCst);
         self.inner.open_replica(replica).await
@@ -153,6 +164,116 @@ async fn connection_map_reads_do_not_start_subscriptions_even_for_unknown_channe
             "map read must not start network subscription"
         );
     }
+}
+
+#[tokio::test]
+async fn restored_friend_only_map_read_does_not_rotate_or_subscribe() {
+    let store = Arc::new(MemoryStore::default());
+    let docs = Arc::new(ConnectionIoProbe::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let app = app_service_from_dependencies(
+        store.clone(),
+        store,
+        transport,
+        Arc::new(NoopHintTransport),
+        docs.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:map-friend-only";
+    let channel = app
+        .create_private_channel(CreatePrivateChannelInput {
+            topic_id: TopicId::new(topic),
+            label: "map read".into(),
+            audience_kind: ChannelAudienceKind::FriendOnly,
+        })
+        .await
+        .unwrap();
+    let state = app
+        .joined_private_channel_state(topic, &channel.channel_id)
+        .await
+        .unwrap();
+    let peer = generate_keys();
+    persist_private_channel_participant(
+        docs.as_ref(),
+        &peer,
+        &PrivateChannelParticipantDocV1 {
+            channel_id: state.channel_id.clone(),
+            topic_id: TopicId::new(&state.topic_id),
+            epoch_id: state.current_epoch_id.clone(),
+            participant_pubkey: peer.public_key(),
+            joined_at: 1,
+            is_owner: false,
+            join_mode: None,
+            sponsor_pubkey: None,
+            share_token_id: None,
+            left_at: None,
+        },
+        &current_private_channel_replica_id(&state),
+    )
+    .await
+    .unwrap();
+    app.services
+        .projection_store
+        .rebuild_author_relationships(
+            &app.current_author_pubkey(),
+            vec![kukuri_store::AuthorRelationshipProjectionRow {
+                local_author_pubkey: app.current_author_pubkey(),
+                author_pubkey: peer.public_key_hex(),
+                following: false,
+                followed_by: true,
+                mutual: false,
+                friend_of_friend: false,
+                friend_of_friend_via_pubkeys: vec![],
+                derived_at: 1,
+            }],
+        )
+        .await
+        .unwrap();
+    assert!(
+        app.private_channel_diagnostics(&state)
+            .await
+            .unwrap()
+            .rotation_required
+    );
+    // Restore the existing capability without invoking subscription or grant redemption.
+    let reader = AppService::from_handles(app.services.clone());
+    reader.joined_private_channels.lock().await.insert(
+        joined_private_channel_key(topic, &channel.channel_id),
+        state.clone(),
+    );
+    let writes_before = docs.writes.load(Ordering::SeqCst);
+    let secrets_before = docs.secrets.load(Ordering::SeqCst);
+    reader
+        .list_dome_connection_topology(SpatialContextV1::Channel {
+            topic_id: TopicId::new(topic),
+            channel_id: state.channel_id.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        docs.writes.load(Ordering::SeqCst),
+        writes_before,
+        "viewing must not rotate the epoch or publish records"
+    );
+    assert_eq!(docs.secrets.load(Ordering::SeqCst), secrets_before);
+    assert!(
+        reader
+            .subscription_registry
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .is_empty()
+    );
+    assert!(!reader.has_topic_subscription(topic).await);
+    assert_eq!(
+        reader
+            .joined_private_channel_state(topic, &channel.channel_id)
+            .await
+            .unwrap()
+            .current_epoch_id,
+        state.current_epoch_id
+    );
 }
 use kukuri_core::{DomeDirection, DomeProposalDerivedStatusV1, SpatialContextV1};
 

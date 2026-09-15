@@ -48,7 +48,7 @@ function ConnectionControls({ actions, room, rooms, localAuthorPubkey, locale, c
   const slot = topology ? connectionSlot(topology, room, direction) : null;
   const target = targets[direction] ?? '';
   const candidate = candidates.find(r => r.metaverse!.instance_id === target);
-  const occupied = slot?.connection && ['active', 'draining', 'accepted'].includes(slot.connection.record.status);
+  const occupied = slot?.connection && ['active', 'draining'].includes(slot.connection.record.status);
   const current = slot?.connection && [slot.connection.record.agreement.proposer, slot.connection.record.agreement.receiver]
     .some(e => endpointIsCurrent(e, room));
   const busy = pending || !ready;
@@ -109,7 +109,7 @@ function ConnectionControls({ actions, room, rooms, localAuthorPubkey, locale, c
             ? slot.connection.record.agreement.receiver.instance_id : slot.connection.record.agreement.proposer.instance_id) })}</p>
           {slot.connection.record.lifecycle_reason && <p>{t(`connections.reasons.${slot.connection.record.lifecycle_reason}`)}</p>}
           {slot.connection.record.lifecycle_deadline_at && <p>{t('connections.map.drainUntil', { time: new Date(slot.connection.record.lifecycle_deadline_at).toLocaleTimeString(locale) })}</p>}
-          {owner && current && occupied && <Button type='button' variant='secondary' disabled={busy} onClick={() => void run(() => actions.revokeConnection(dome.spatial_context, slot.connection!.record.agreement.connection_id))}>{t('connections.revoke')}</Button>}
+          {owner && current && slot.connection.record.status !== 'revoked' && <Button type='button' variant='secondary' disabled={busy} onClick={() => void run(() => actions.revokeConnection(dome.spatial_context, slot.connection!.record.agreement.connection_id))}>{t('connections.revoke')}</Button>}
         </>}
         {!owner && <p>{t('connections.map.ownerOnly')}</p>}
         {owner && topology && !occupied && (candidates.length ? <div className='composer composer-compact'>

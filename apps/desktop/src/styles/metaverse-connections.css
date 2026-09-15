@@ -6,7 +6,7 @@
 .connection-compass-center strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .connection-compass-center { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }
 .connection-direction { flex-direction: column; height: auto; min-height: 44px; padding: var(--space-xs); white-space: normal; overflow-wrap: anywhere; }
-.connection-direction small { font-size: .7rem; font-weight: normal; }
+.metaverse-connections-card .connection-direction small { font-size: .7rem; font-weight: normal; color: inherit; }
 .connection-direction-north { grid-area: north; }
 .connection-direction-east { grid-area: east; }
 .connection-direction-south { grid-area: south; }
@@ -25,6 +25,7 @@
 .connection-map svg .connection-map-current circle { stroke: var(--foreground); stroke-width: 4; }
 .connection-map svg text { fill: currentColor; font-size: 13px; }
 .connection-map ol, .connection-map-edges { padding-inline-start: 1.5rem; font-size: .8rem; overflow-wrap: anywhere; }
+.connection-map ol { list-style: decimal; }
 @container (max-width: 520px) {
   .connection-workspace { grid-template-columns: minmax(0, 1fr); }
   .connection-detail { border-inline-start: none; border-top: 1px solid var(--border-subtle); padding-inline-start: 0; padding-top: var(--space-sm); }

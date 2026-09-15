@@ -3,6 +3,12 @@ import { connectionMap, connectionRooms, connectionSlot } from './DomeConnection
 import { connectionFixtureRooms as rooms, connectionFixtureTopology } from './DomeConnectionFixtures';
 
 describe('confirmed component map', () => {
+  test('old-generation accepted records do not occupy a recreated Dome slot', () => {
+    const topology = connectionFixtureTopology(); topology.connections[0].record.status = 'accepted';
+    const current = structuredClone(rooms[0]); current.metaverse!.instance_generation = 2;
+    expect(connectionSlot(topology, current, 'east').connection).toBeUndefined();
+    expect(connectionSlot(topology, current, 'east').status).toBe('open');
+  });
   test('centers the current Dome, preserves north and excludes other components', () => {
     const map = connectionMap(connectionFixtureTopology(), rooms[1], rooms);
     expect(map.nodes.map(n => [n.id, n.x, n.z])).toEqual([['a', -1, 0], ['b', 0, 0], ['c', 0, -1]]);

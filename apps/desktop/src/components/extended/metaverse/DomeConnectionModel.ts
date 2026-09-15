@@ -16,14 +16,15 @@ export function endpointIsCurrent(endpoint: DomeConnectionEndpointV1, room: Game
 
 export function connectionSlot(topology: DomeConnectionTopologyView, room: GameRoomView, direction: DomeDirection) {
   const currentId = room.metaverse!.instance_id;
-  const matching = topology.connections.filter(({ record }) => [record.agreement.proposer, record.agreement.receiver]
-    .some(endpoint => endpoint.instance_id === currentId && endpoint.direction === direction));
+  const context = connectionContextKey(room.metaverse?.spatial_context);
+  const matching = topology.connections.filter(({ record }) => connectionContextKey(record.agreement.spatial_context) === context
+    && [record.agreement.proposer, record.agreement.receiver].some(endpoint => endpointIsCurrent(endpoint, room) && endpoint.direction === direction));
   const effective = new Set(topology.resolution.topology.active_connection_ids);
   const connection = matching.find(({ record }) => effective.has(record.agreement.connection_id) && ['active', 'draining'].includes(record.status))
     ?? matching.find(({ record }) => record.status === 'accepted')
     ?? [...matching].sort((a, b) => b.record.lifecycle_generation - a.record.lifecycle_generation)[0];
-  const proposals = topology.proposals.filter(({ proposal }) => [proposal.proposer, proposal.receiver]
-    .some(endpoint => endpoint.instance_id === currentId && endpoint.direction === direction));
+  const proposals = topology.proposals.filter(({ proposal }) => connectionContextKey(proposal.spatial_context) === context
+    && [proposal.proposer, proposal.receiver].some(endpoint => endpointIsCurrent(endpoint, room) && endpoint.direction === direction));
   const currentKnown = topology.resolution.topology.components.some(component => component.instance_ids.includes(currentId));
   const status = connection ? connection.record.status === 'revoked'
     ? connection.record.lifecycle_reason === 'owners_blocked' ? 'blocked' : 'closed'
