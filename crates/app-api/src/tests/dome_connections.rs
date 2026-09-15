@@ -1,4 +1,159 @@
 use super::*;
+use kukuri_docs_sync::{DocEventStream, DocFetchPolicy};
+use std::sync::atomic::AtomicUsize;
+
+#[derive(Default)]
+struct ConnectionIoProbe {
+    inner: MemoryDocsSync,
+    io: AtomicUsize,
+    writes: AtomicUsize,
+}
+#[async_trait]
+impl DocsSync for ConnectionIoProbe {
+    async fn open_replica(&self, replica: &ReplicaId) -> Result<()> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.open_replica(replica).await
+    }
+    async fn apply_doc_op(&self, replica: &ReplicaId, op: DocOp) -> Result<()> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        self.inner.apply_doc_op(replica, op).await
+    }
+    async fn query_replica_with_policy(
+        &self,
+        replica: &ReplicaId,
+        query: DocQuery,
+        policy: DocFetchPolicy,
+    ) -> Result<Vec<DocRecord>> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .query_replica_with_policy(replica, query, policy)
+            .await
+    }
+    async fn subscribe_replica(&self, replica: &ReplicaId) -> Result<DocEventStream> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.subscribe_replica(replica).await
+    }
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[tokio::test]
+async fn unknown_connection_context_rejects_all_actions_before_io_and_projection() {
+    let store = Arc::new(MemoryStore::default());
+    let docs = Arc::new(ConnectionIoProbe::default());
+    let transport = Arc::new(FakeTransport::new(
+        "connection-guard",
+        FakeNetwork::default(),
+    ));
+    let app = app_service_from_dependencies(
+        store.clone(),
+        store.clone(),
+        transport.clone(),
+        transport,
+        docs.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:connection-guard";
+    let context = SpatialContextV1::Channel {
+        topic_id: TopicId::new(topic),
+        channel_id: kukuri_core::ChannelId::new("unknown"),
+    };
+    assert!(
+        app.list_dome_connection_topology(context.clone())
+            .await
+            .is_err()
+    );
+    assert!(
+        app.create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+            proposal_id: "test-proposal".into(),
+            spatial_context: context.clone(),
+            proposer_instance_id: "a".into(),
+            receiver_instance_id: "b".into(),
+            proposer_direction: DomeDirection::East,
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "test-proposal".into()
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.withdraw_dome_connection_proposal(WithdrawDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "test-proposal".into()
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.revoke_dome_connection(RevokeDomeConnectionInput {
+            spatial_context: context.clone(),
+            connection_id: "test-connection".into()
+        })
+        .await
+        .is_err()
+    );
+    assert_eq!(docs.io.load(Ordering::SeqCst), 0);
+    assert_eq!(docs.writes.load(Ordering::SeqCst), 0);
+    assert!(!app.has_topic_subscription(topic).await);
+    assert!(
+        store
+            .get_dome_connection_projection(&context.canonical_id())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // A permitted local read may refresh the derived projection, but never writes shared docs.
+    let public = SpatialContextV1::Topic {
+        topic_id: TopicId::new(topic),
+    };
+    app.list_dome_connection_topology(public.clone())
+        .await
+        .unwrap();
+    assert_eq!(docs.writes.load(Ordering::SeqCst), 0);
+    assert!(!app.has_topic_subscription(topic).await);
+    assert!(
+        store
+            .get_dome_connection_projection(&public.canonical_id())
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn connection_map_reads_do_not_start_subscriptions_even_for_unknown_channels() {
+    let app = AppService::new(
+        Arc::new(MemoryStore::default()),
+        Arc::new(FakeTransport::new("map-reader", FakeNetwork::default())),
+    );
+    for channel in [None, Some("unknown-channel")] {
+        let topic = format!("kukuri:topic:map-read-{}", channel.unwrap_or("public"));
+        let context = match channel {
+            Some(channel_id) => SpatialContextV1::Channel {
+                topic_id: TopicId::new(&topic),
+                channel_id: kukuri_core::ChannelId::new(channel_id),
+            },
+            None => SpatialContextV1::Topic {
+                topic_id: TopicId::new(&topic),
+            },
+        };
+        let result = app.list_dome_connection_topology(context).await;
+        assert_eq!(result.is_ok(), channel.is_none());
+        assert!(
+            !app.has_topic_subscription(&topic).await,
+            "map read must not start network subscription"
+        );
+    }
+}
 use kukuri_core::{DomeDirection, DomeProposalDerivedStatusV1, SpatialContextV1};
 
 fn app_with_shared_dome_services(

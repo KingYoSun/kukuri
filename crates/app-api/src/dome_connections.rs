@@ -12,9 +12,7 @@ impl AppService {
         &self,
         spatial_context: SpatialContextV1,
     ) -> Result<DomeConnectionTopologyView> {
-        let replica = self
-            .dome_connection_context_replica(&spatial_context)
-            .await?;
+        let replica = self.dome_connection_read_replica(&spatial_context).await?;
         let instances = self.list_context_dome_instances(&replica).await?;
         let proposal_states = self.list_dome_proposal_states(&replica).await?;
         let selections = self.list_dome_selections(&replica).await?;
@@ -515,8 +513,14 @@ impl AppService {
         &self,
         context: &SpatialContextV1,
     ) -> Result<ReplicaId> {
+        // Validate channel membership before starting any network subscription.
+        let replica = self.dome_connection_read_replica(context).await?;
         self.ensure_topic_subscription(context.topic_id().as_str())
             .await?;
+        Ok(replica)
+    }
+
+    async fn dome_connection_read_replica(&self, context: &SpatialContextV1) -> Result<ReplicaId> {
         let replica = match context {
             SpatialContextV1::Topic { topic_id } => topic_replica_id(topic_id.as_str()),
             SpatialContextV1::Channel {

@@ -6,6 +6,7 @@ import type {
   DomeHostingView,
   GameRoomView,
 } from '@/lib/api';
+import { connectionContextKey } from './useDomeConnections';
 
 import {
   DOME_APEX_HEIGHT_CM,
@@ -73,7 +74,7 @@ export function resolveActiveDomeNeighbors(
   const activeIds = new Set(topology.resolution.topology.active_connection_ids);
   const byInstance = new Map(
     rooms
-      .filter((room) => room.metaverse)
+      .filter((room) => room.metaverse && connectionContextKey(room.metaverse.spatial_context) === connectionContextKey(currentRoom.metaverse?.spatial_context))
       .map((room) => [room.metaverse!.instance_id, room])
   );
 
@@ -94,7 +95,7 @@ export function resolveActiveDomeNeighbors(
       const target = source === proposer ? receiver : proposer;
       const room = byInstance.get(target.instance_id);
       const coordinate = component?.coordinates_cm[target.instance_id];
-      if (!room) return [];
+      if (!room || source.instance_generation !== currentRoom.metaverse?.instance_generation || target.instance_generation !== room.metaverse?.instance_generation) return [];
       let boundaryState: DomeBoundaryStateV1 = record.status === 'draining'
         ? 'draining'
         : record.status === 'revoked'

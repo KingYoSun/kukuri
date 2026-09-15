@@ -159,11 +159,48 @@
       "discarded": "已丢弃",
       "active": "活动",
       "draining": "正在断开",
-      "revoked": "已撤销"
+      "revoked": "已撤销",
+      "blocked": "已屏蔽",
+      "closed": "已关闭",
+      "unknown": "尚未接收"
     },
     "errors": {
       "load": "无法加载穹顶连接",
       "action": "无法更新连接"
+    },
+    "map": {
+      "scope": "仅显示本设备已确认的同一所属范围的连接。未接收区域可能还有其他Dome。",
+      "title": "已确认的连接地图",
+      "here": "当前位置",
+      "unknown": "尚未接收",
+      "directions": "选择方向",
+      "detail": "{{direction}}方向的连接",
+      "loading": "正在加载连接…",
+      "refreshing": "正在刷新连接…",
+      "stale": "显示上次确认的信息。",
+      "passage": "通行状态",
+      "drainUntil": "断开处理中，截止{{time}}",
+      "ownerOnly": "只有Dome所有者可以管理连接。",
+      "noCandidates": "已接收的信息中没有可用的连接候选。"
+    },
+    "reasons": {
+      "owner_revoked": "所有者已断开连接。",
+      "proposer_withdrew": "提案已撤回。",
+      "proposer_slot_occupied": "提案方的方向已被占用。",
+      "instance_detached": "Dome所属范围已更改。",
+      "instance_deleted": "Dome已删除。",
+      "owners_blocked": "所有者之间存在屏蔽。"
+    },
+    "passage": {
+      "ready": "可以通行",
+      "unhosted": "主机已停止",
+      "full": "已满员",
+      "loading": "正在检查通行状态",
+      "error": "检查通行失败，请刷新重试。",
+      "offline": "主机离线",
+      "draining": "正在断开，无法通行",
+      "blocked": "已屏蔽，无法通行",
+      "closed": "已关闭，无法通行"
     }
   },
   "hud": {

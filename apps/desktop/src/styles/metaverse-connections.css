@@ -1,0 +1,31 @@
+.connection-scope-note { color: var(--muted-foreground); font-size: .875rem; }
+.metaverse-connections-card { container-type: inline-size; }
+.connection-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-md); }
+.connection-workspace > * { min-width: 0; }
+.connection-compass { display: grid; grid-template: ' . north . ' minmax(44px, auto) 'west center east' minmax(44px, auto) '. south .' minmax(44px, auto) / minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--space-xs); align-items: stretch; }
+.connection-compass-center strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.connection-compass-center { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 0; overflow-wrap: anywhere; font-size: .8rem; }
+.connection-direction { flex-direction: column; height: auto; min-height: 44px; padding: var(--space-xs); white-space: normal; overflow-wrap: anywhere; }
+.connection-direction small { font-size: .7rem; font-weight: normal; }
+.connection-direction-north { grid-area: north; }
+.connection-direction-east { grid-area: east; }
+.connection-direction-south { grid-area: south; }
+.connection-direction-west { grid-area: west; }
+.connection-detail { display: grid; align-content: start; gap: var(--space-sm); border-inline-start: 1px solid var(--border-subtle); padding-inline-start: var(--space-md); overflow-wrap: anywhere; }
+.connection-detail h4, .connection-detail p { margin: 0; }
+.connection-detail label { display: grid; gap: var(--space-xs); }
+.connection-detail select { width: 100%; min-width: 0; }
+.connection-proposal { display: grid; gap: var(--space-xs); border-top: 1px solid var(--border-subtle); padding-top: var(--space-sm); }
+.connection-map { margin: var(--space-md) 0 0; }
+.connection-map figcaption { font-weight: 600; }
+.connection-map svg { width: 100%; max-height: 230px; color: var(--foreground); }
+.connection-map svg line { stroke: var(--muted-foreground); stroke-width: 3; }
+.connection-map svg .connection-edge-draining { stroke-dasharray: 5 4; }
+.connection-map svg circle { fill: var(--surface-panel-solid); stroke: var(--muted-foreground); stroke-width: 2; }
+.connection-map svg .connection-map-current circle { stroke: var(--foreground); stroke-width: 4; }
+.connection-map svg text { fill: currentColor; font-size: 13px; }
+.connection-map ol, .connection-map-edges { padding-inline-start: 1.5rem; font-size: .8rem; overflow-wrap: anywhere; }
+@container (max-width: 520px) {
+  .connection-workspace { grid-template-columns: minmax(0, 1fr); }
+  .connection-detail { border-inline-start: none; border-top: 1px solid var(--border-subtle); padding-inline-start: 0; padding-top: var(--space-sm); }
+}

@@ -1,0 +1,57 @@
+# #1025 接続方位と確認済みマップ
+
+- Issue: [#1025](https://github.com/KingYoSun/kukuri/issues/1025)
+- Scope revision: `2026-09-14-r1`、区分C。
+- 基準commit: `ad5c1e9aa61e370570b3ca6a79edaa375b9d4521`。
+- 2026-09-15に推奨案の実装、Issue更新、コミット、PR作成、CI後マージ、Windows／Ubuntu24のComputer Use確認を承認済み。
+- 状態: 実装・検証中。PR、独立監査、CI、マージ結果は確定後に追記する。
+
+## 設計判断と変更
+
+3D内の既存「接続」カテゴリに方位図、現在componentの相対マップ、選択方向の詳細を置く案を採用した。3Dの壁を直接選択する案はcamera／occlusion／pointer lockの追加依存があり、今回の目的に不要なため見送った。既存カテゴリ、入室外導線、4つの接続actionを使い、wire／physics／署名方式を変更しない。
+
+マップのデータは取得済みContextだけに限定し、取得失敗と未取得を空きと扱わない。入室中はsessionとpaneのtopology取得を共有する。通行可否の取得失敗をclosedへ変換せず、draining／blocked等の既存理由を保つ。access拒否時は隣接assetを取得しない。
+
+提案再試行のIDを保持し、write成功後のrefresh失敗を独立表示する。対象が変われば選択と古いresponseを破棄する。backendのlistにあった購読開始を除き、mutationもprivate Context検査後にだけ購読を開始する。許可されたreadによる端末内projection更新は維持する。
+
+## 修正前の証拠
+
+- 既存のPanel、TransitionModel、RoomPanel、RoomView: 4 files／49 tests成功。
+- 追加した初回取得失敗／mutation後refresh失敗のtestは変更前に2件失敗、既存1件成功。
+- backendのmap read購読開始禁止testは変更前に失敗。修正後の既存接続contractを含む7件成功。
+- Windows Tauri/WebView、1283×871、ja、light、world version 7、既存owner Domeの[変更前フォーム](assets/2026-09-15-1025-connections/windows-before.png)。Issue起票時の旧画像とは別の現行HEAD観測。
+- 取得controllerの追加で空の隣接array更新が初回イベントreadを中断する回帰を既存testが検出。空→空の不要更新を抑えて修正し、関連5 files／47 tests成功。
+- browserで詳細paneの方位末尾が初期表示外になることを確認。paneの既存scrollを使う到達性を実操作で検証し、controllerを保持したまま狭幅で縦配置する。全方位の24px以上の幅・44px以上の高さ、keyboard、カテゴリ往復、禁止action 0回を確認。
+
+## AC／INVARとinventory
+
+| 条件・入口 | 実装 | test／証拠 |
+| --- | --- | --- |
+| AC-1、INV-2、TR-2 | Panel→MetaverseRoomActions→shell/actions/metaverse→runtimeApi→live_game→runtime/private_channels_game_api→app-api/dome_connections | Panelの提案／再試行／承諾／撤回／解除／非owner test、既存backend round tripとactor制限 |
+| AC-2、INV-1、TR-1 | useDomeConnections、DomeConnectionModel／Map | 現在地・方位、別component除外、欠けた／他Context endpoint、未知slot、draining後の分裂 |
+| AC-3、INV-1/3、TR-1/3 | 取得controller、neighbor hook、DomeTransitionModel | 初回失敗、更新失敗、access denied／error、draining理由、再試行 |
+| AC-4、INV-1、TR-1/2 | HTML方位button、既存カテゴリpane | keyboard方向選択と候補保持、1283／390px browser、HUD／IME回帰 |
+| INVAR-1/2、INV-1/2、TR-3 | Connection read replica、既存owner／Context guard、scope破棄 | map read購読0、未知channelの全5入口でdocs I/O・書込0／projectionなし、許可readで共有docs書込0、late response／混在Context |
+
+入口からsink: UIの4actionとlistは `shell/actions/metaverse.ts` → `lib/api/commands/runtimeApi.ts` → Tauri `commands/live_game.rs` → runtime `private_channels_game_api.rs` → app-api。変更するreadは`dome_connection_read_replica` → private state検査 → docs open/query → projection upsert。writeはContext検査 → subscription →既存署名／persist_connection_envelope・proposal／selection／connection state → docs apply_doc_op、topology hint。
+
+共有callerの範囲: Connection list／create／accept／withdraw／terminal／revoke、`service/dome_connection_support`のblock reconciliation、`dome_delete`、`dome_hosting`のtransition、runtimeとCLIのlive_metaverse、およびtests。UIの別入口は入室外Panel、入室中connections、session neighbor。変更前後でdomain action追加・削除は0。新規入口は端末内の方位選択とマップ表示だけ。
+
+## 検証状況
+
+実行ログはローカル `.codex/plans/issue-1025-*.log`。成功・未実行・途中失敗を区別し、最終結果を追記する。
+
+- targeted frontend: 5 files／47 tests成功。追加neighbor testと全suiteは後続確認。
+- browser: 接続2条件＋既存HUD2件、計4件成功。
+- Storybook build: 成功。確認済み／partial／loading／失敗／候補なし／offline／draining／blocked／closed／非owner／狭幅を追加。
+- check: 初回fmt、次回frontend typecheckの違反（ES target、Button variant、boundary union）を修正。typecheck単体は成功。全entrypointの再実行中。
+- Rust本体: 942件成功、既存skip 4。harness 23件成功。未知channelの全入口I/O禁止testも成功。
+- 接続／遷移scenario: `desktop_smoke_metaverse_dome_connections` 9 steps、`desktop_smoke_metaverse_dome_transition` 4 steps成功。in-processでpeer_count=0のため実P2P通信の証明ではない。
+- 追加再現: draining recordより古いready表示を優先するtestが失敗。terminal理由の優先後にPanel全8件成功。host read中の離脱後にaccess previewを開始するtestが失敗。取消再確認後にneighbor全4件成功。
+- oversized baseline: Connection readとmutationのguardを分ける最小変更で`dome_connections.rs`が1025→1029行となるため、理由を付けてbaselineを更新。生成時に既存のsession／noticeの減少も反映し、新規大型ファイルは追加しない。
+- Windowsでは実行中xtask.exeの再リンクが拒否されたため、同じソースのxtask.exeをローカル別名で実行して検証。製品・検証処理や必須項目は変更しない。
+- 全体test、desktop-ui-check、Dome scenarios、Windows／Ubuntu24 after、独立監査、CI: 未完了。
+
+## 監査・Close
+
+固定PR headの独立監査を実装工程と分ける。IssueのAC／INVAR、上記入口と逆引きから再構築し、PASS、必須CI成功、merge tree整合またはdelta監査後にIssueをCloseする。未知の不具合の不存在や別Issueの新要件は条件へ追加しない。
