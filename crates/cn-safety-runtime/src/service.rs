@@ -630,7 +630,9 @@ impl SafetyScanService {
             if let (ReuseDecision::Reuse, Some(stored)) =
                 (decide(stored.as_ref(), &inputs), &stored)
             {
-                if !stored.verdict.is_indexable()
+                // risk signal を持つ verdict（非 allow、またはラベル付き allow）の再利用では、
+                // 共有 subject の 2 人目以降の著者も trust 入力へ関連付ける（#1050 TR-9 / #1054）。
+                if (!stored.verdict.is_indexable() || stored.verdict.is_labeled_allow())
                     && let Some(author) = subject_author
                 {
                     self.store

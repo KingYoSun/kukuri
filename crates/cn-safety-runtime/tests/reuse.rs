@@ -653,9 +653,10 @@ async fn reused_labeled_allow_restores_advisories_without_artifacts() {
         .expect("stored verdict");
     assert_eq!(stored.advisories, first.advisories);
 
-    // 2 巡目: provider 呼び出し 0、artifact 増えず、advisory は復元される。
+    // 2 巡目: provider 呼び出し 0、artifact 増えず、advisory は復元される。共有 subject の
+    // 2 人目の著者も（ラベル付き allow は signal を持つので）trust 入力へ関連付けられる。
     let second = service
-        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+        .scan_or_reuse(&post_request("post-1"), Some("author-b"), "state-hash-1")
         .await
         .expect("second pass");
     assert_eq!(second.disposition, ScanDisposition::Reused);
@@ -665,6 +666,17 @@ async fn reused_labeled_allow_restores_advisories_without_artifacts() {
     assert_eq!(provider.calls(), 1);
     assert_eq!(store.signals().len(), 1);
     assert_eq!(store.events().len(), 1);
+    let authors = store.signal_subject_authors();
+    for author in ["author-a", "author-b"] {
+        assert!(
+            authors.contains(&(
+                RiskSignalTarget::PostId,
+                "post-1".to_string(),
+                author.to_string()
+            )),
+            "{author}: {authors:?}"
+        );
+    }
 
     // indexer が post 行へ blob 分を含む和集合を確定させても、自 subject 分だけが復元される。
     let blob_advisory = kukuri_cn_safety::ContentAdvisory {
