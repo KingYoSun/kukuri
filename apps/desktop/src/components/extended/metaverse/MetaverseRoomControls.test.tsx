@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { createRef, useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -47,14 +47,18 @@ function renderControls(
     pending: false,
     isOwner: true,
     hudOpen: true,
-    hudDebugOpen: false,
+    overlay: 'details',
+    category: 'avatar',
+    sessionIdentity: 'test-room',
+    onSelectCategory: vi.fn(),
+    onCategories: vi.fn(),
+    onCloseOverlay: vi.fn(),
     chatOpen: true,
     messages: [],
     messageDraft: '',
     messageInputRef: createRef<HTMLInputElement>(),
     onLeaveRoom: vi.fn(),
     onToggleHud: vi.fn(),
-    onToggleHudDebug: vi.fn(),
     onImportAvatar: vi.fn(),
     onImportDefaultAvatar: vi.fn(),
     onSaveCustomization: vi.fn(),
@@ -67,7 +71,11 @@ function renderControls(
     onSendMessage: vi.fn((event) => event.preventDefault()),
     ...overrides,
   };
-  return { ...render(<MetaverseRoomControls {...props} />), props };
+  function Controls() {
+    const [category, setCategory] = useState(props.category);
+    return <MetaverseRoomControls {...props} category={category} onSelectCategory={value => { setCategory(value); props.onSelectCategory(value); }} />;
+  }
+  return { ...render(<Controls />), props };
 }
 
 describe('MetaverseRoomControls', () => {
@@ -121,16 +129,16 @@ describe('MetaverseRoomControls', () => {
     const user = userEvent.setup();
     const onLeaveRoom = vi.fn();
     const onToggleHud = vi.fn();
-    const onToggleHudDebug = vi.fn();
+    const onSelectCategory = vi.fn();
     const onImportAvatar = vi.fn();
     const onImportDefaultAvatar = vi.fn();
     const onMoveSharedObject = vi.fn();
     const onInteractWithProp = vi.fn();
     renderControls({
-      hudDebugOpen: true,
+      category: 'diagnostics',
       onLeaveRoom,
       onToggleHud,
-      onToggleHudDebug,
+      onSelectCategory,
       onImportAvatar,
       onImportDefaultAvatar,
       onMoveSharedObject,
@@ -140,13 +148,14 @@ describe('MetaverseRoomControls', () => {
     expect(screen.getByText('Topic: demo')).toBeInTheDocument();
     expect(screen.getByText('Community assist: available')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Leave room' }));
-    await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+    await user.click(screen.getByRole('tab', { name: 'Avatar' }));
     await user.upload(
       screen.getByLabelText('VRM file'),
       new File(['avatar'], 'avatar.vrm', { type: 'model/vrm' })
     );
     await user.click(screen.getByRole('button', { name: 'Default' }));
+    await user.click(screen.getByRole('tab', { name: 'Shared objects' }));
     for (const name of ['Forward', 'Left', 'Right', 'Back']) {
       await user.click(screen.getByRole('button', { name }));
     }
@@ -156,7 +165,7 @@ describe('MetaverseRoomControls', () => {
 
     expect(onLeaveRoom).toHaveBeenCalledTimes(1);
     expect(onToggleHud).toHaveBeenCalledTimes(1);
-    expect(onToggleHudDebug).toHaveBeenCalledTimes(1);
+    expect(onSelectCategory.mock.calls).toEqual([['avatar'], ['objects']]);
     expect(onImportAvatar).toHaveBeenCalledWith(expect.objectContaining({ name: 'avatar.vrm' }));
     expect(onImportDefaultAvatar).toHaveBeenCalledTimes(1);
     expect(onMoveSharedObject.mock.calls).toEqual([

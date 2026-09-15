@@ -247,6 +247,11 @@ function renderPanel(api: DesktopApi, options: RenderPanelOptions = {}) {
   return render(panelElement(api, options));
 }
 
+async function openCategory(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+  await user.click(screen.getByRole('button', { name }));
+}
+
 describe('MetaverseRoomPanel animation sharing', () => {
   test('fullscreen tools preserve the admitted session and draft without repeating presence or host actions', async () => {
     const api = createDesktopMockApi();
@@ -258,6 +263,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     const element = panelElement(api);
     const view = render(<ColumnFullscreenContext.Provider value={false}>{element}</ColumnFullscreenContext.Provider>);
     const scene = await screen.findByLabelText('Metaverse room viewport');
+    await userEvent.click(screen.getByRole('button', { name: 'Open room chat' }));
     const input = screen.getByRole('textbox', { name: 'Room chat message' });
     await userEvent.type(input, 'unsent 1023');
     const beforeEvents = publish.mock.calls.length;
@@ -367,21 +373,17 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
-    expect(screen.queryByText(/Topic: demo/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Debug details' })).toHaveAttribute(
-      'aria-expanded',
-      'false'
-    );
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    expect(screen.getByText(/Topic: demo/)).not.toBeVisible();
+    await openCategory(user, 'Diagnostics');
     expect(screen.getByText(/Topic: demo/)).toBeInTheDocument();
 
     expect(document.querySelector('.metaverse-room-hud')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Expand room HUD' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Shrink room HUD' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));
-    expect(document.querySelector('.metaverse-room-hud')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Open room HUD' }));
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(document.querySelector('.metaverse-room-hud')).not.toBeVisible();
+    await openCategory(user, 'Diagnostics');
     expect(document.querySelector('.metaverse-room-hud')).toBeInTheDocument();
   });
 
@@ -395,10 +397,13 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Open room chat' }));
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
   });
 
@@ -411,6 +416,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
 
@@ -436,6 +442,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api, { rooms: [{ ...room, host_pubkey: 'e'.repeat(64) }] });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
     await user.click(screen.getByRole('button', { name: 'Create metaverse room' }));
     await user.click(screen.getByPlaceholderText('Atrium'));
@@ -598,7 +605,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    await openCategory(user, 'Diagnostics');
 
     await waitFor(() => {
       expect(screen.getByText(/idle-rem:idle/)).toBeInTheDocument();
@@ -623,7 +630,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    await openCategory(user, 'Diagnostics');
 
     await waitFor(() => {
       expect(screen.getByText('Remote animation: none')).toBeInTheDocument();
@@ -667,7 +674,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
     await user.click(screen.getByRole('button', { name: 'Mark animation fallback' }));
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    await openCategory(user, 'Diagnostics');
 
     expect(screen.getByLabelText('Metaverse room viewport')).toBeInTheDocument();
     expect(screen.getByText(/fallback-primitive/)).toBeInTheDocument();
@@ -693,6 +700,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await openCategory(user, 'Avatar');
     await user.upload(
       screen.getByLabelText('VRM file'),
       new File(['avatar'], 'avatar.vrm', { type: 'model/vrm' })
@@ -709,7 +717,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
       );
       expect(getBlobPreviewUrl).toHaveBeenCalledWith('avatar-blob-hash', 'model/vrm', 'vrm');
     });
-    await user.click(screen.getByRole('button', { name: 'Debug details' }));
+    await openCategory(user, 'Diagnostics');
     expect(screen.getByText('Blob asset resolve: avatar-blob-hash')).toBeInTheDocument();
   });
 
@@ -810,6 +818,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     renderPanel(api, { rooms: [roomWithHistory] });
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
 
+    if (!screen.queryByLabelText('ROOM Chat')) await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
     expect(screen.getByText('History Peer')).toBeInTheDocument();
     expect(screen.getByText('durable hello')).toBeInTheDocument();
@@ -847,6 +856,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await user.click(screen.getByRole('button', { name: 'Open room chat' }));
     await user.type(screen.getByPlaceholderText('Say something in the room'), 'hello room');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -873,6 +883,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
 
     renderPanel(api);
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
+    await openCategory(user, 'Shared objects');
     await user.click(screen.getByRole('button', { name: /Forward/ }));
 
     await waitFor(() => {
@@ -908,6 +919,7 @@ describe('MetaverseRoomPanel animation sharing', () => {
     await user.click(screen.getByRole('button', { name: 'Join Room' }));
     expect(screen.getByText('Shared object position: 0,50,-240')).toBeInTheDocument();
 
+    await openCategory(user, 'Shared objects');
     await user.click(screen.getByRole('button', { name: /Forward/ }));
 
     await waitFor(() => {

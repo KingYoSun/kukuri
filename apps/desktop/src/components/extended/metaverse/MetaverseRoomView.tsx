@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEventHandler,
@@ -26,6 +27,7 @@ import type {
   PeerPresence,
   RoomChatMessage,
 } from '../MetaverseSceneModel';
+import type { MetaverseCategory, MetaverseOverlay, MetaversePanels } from './MetaverseCategories';
 import { MetaverseRoomControls } from './MetaverseRoomControls';
 import { ONLINE_DOME_RECOVERY, type DomeRecoveryStatus } from './useMetaverseRoomSession';
 import { useColumnRuntime } from '@/shell/ColumnRuntimeContext';
@@ -63,7 +65,12 @@ export type MetaverseRoomViewProps = {
   isOwner: boolean;
   messages: RoomChatMessage[];
   messageDraft: string;
+  panels?: MetaversePanels;
+  hostingRequest?: number;
+  sessionIdentity?: string;
   initialHudOpen?: boolean;
+  initialOverlay?: MetaverseOverlay;
+  initialCategory?: MetaverseCategory;
   initialHudDebugOpen?: boolean;
   initialChatOpen?: boolean;
   onLocalTransform: (transform: AvatarTransform) => void;
@@ -119,9 +126,14 @@ export function MetaverseRoomView({
   isOwner,
   messages,
   messageDraft,
-  initialHudOpen = true,
+  panels,
+  hostingRequest = 0,
+  sessionIdentity,
+  initialHudOpen = false,
+  initialOverlay,
+  initialCategory,
   initialHudDebugOpen = false,
-  initialChatOpen = true,
+  initialChatOpen = false,
   onLocalTransform,
   onAvatarAssetStatus,
   onLeaveRoom,
@@ -137,41 +149,52 @@ export function MetaverseRoomView({
   microphoneEnabled = false,
   onToggleMicrophone,
 }: MetaverseRoomViewProps) {
-  const [hudOpen, setHudOpen] = useState(initialHudOpen);
-  const [hudDebugOpen, setHudDebugOpen] = useState(initialHudDebugOpen);
-  const [chatOpen, setChatOpen] = useState(initialChatOpen);
+  const [overlay, setOverlay] = useState<MetaverseOverlay>(initialOverlay ?? (initialChatOpen ? 'chat' : initialHudOpen ? 'details' : 'closed'));
+  const [category, setCategory] = useState<MetaverseCategory>(initialCategory ?? (initialHudDebugOpen ? 'diagnostics' : 'dome'));
+  const hudOpen = overlay === 'details';
+  const chatOpen = overlay === 'chat';
   const [sceneFocused, setSceneFocused] = useState(false);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const runtime = useColumnRuntime();
   const eligible = Boolean(room) && runtime.active && runtime.visible && !runtime.suspended;
+  const eligibleRef = useRef(eligible);
+  useLayoutEffect(() => { eligibleRef.current = eligible; }, [eligible]);
   const cameraState = useRef(createAvatarCameraState());
   const { mode, start, release } = useMetaverseSceneInput(stageRef, eligible, `${room?.room_id ?? ''}:${room?.metaverse?.instance_generation ?? ''}`);
-  const controlsEnabled = eligible && sceneFocused && (mode === 'locked' || mode === 'unavailable');
-  const startScene = () => { setHudOpen(false); setChatOpen(false); start(); };
-  const cameraCommand = (command: CameraCommand) => { if (eligible) applyCameraCommand(cameraState.current, command); };
-  const closeChat = () => {
-    setChatOpen(false);
-    if (!hudOpen) start();
-    else release();
-  };
-  const toggleHud = () => {
-    setHudOpen(!hudOpen);
-    if (hudOpen && !chatOpen) start();
-    else release();
-  };
+  const controlsEnabled = eligible && overlay === 'closed' && sceneFocused && (mode === 'locked' || mode === 'unavailable');
+  const startScene = () => { setOverlay('closed'); start(); };
+  const cameraCommand = (command: CameraCommand) => { if (eligible && overlay === 'closed') applyCameraCommand(cameraState.current, command); };
+  const closeOverlay = () => { setOverlay('closed'); start(); };
+  const openOverlay = (next: MetaverseOverlay) => { release(); setOverlay(next); };
+
+  useEffect(() => {
+    if (hostingRequest > 0) { release(); setCategory('hosting'); setOverlay('details'); }
+  }, [hostingRequest, release]);
+
+  useEffect(() => {
+    if (!eligibleRef.current || overlay === 'closed') return;
+    const frame = requestAnimationFrame(() => {
+      if (!eligibleRef.current) return;
+      if (overlay === 'chat') messageInputRef.current?.focus();
+      if (overlay === 'categories') stageRef.current?.querySelector<HTMLElement>(`.metaverse-category-menu [data-category="${category}"]`)?.focus();
+      if (overlay === 'details') stageRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [overlay, category]);
 
   useEffect(() => {
     if (!room || !eligible) {
       return;
     }
-    let focusFrameId = 0;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.defaultPrevented || event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'Escape' && (sceneFocused || (event.target instanceof Node && stageRef.current?.contains(event.target)))) {
+        if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+        event.preventDefault();
+        event.stopPropagation();
         release();
-        setChatOpen(false);
-        setHudOpen(false);
+        setOverlay('closed');
         stageRef.current?.focus({ preventScroll: true });
         return;
       }
@@ -186,23 +209,16 @@ export function MetaverseRoomView({
       }
       event.preventDefault();
       release();
-      const chat = event.key === 'Enter';
-      setChatOpen(chat);
-      setHudOpen(!chat);
-      if (focusFrameId) {
-        window.cancelAnimationFrame(focusFrameId);
-      }
-      focusFrameId = window.requestAnimationFrame(() => {
-        if (chat) messageInputRef.current?.focus();
-        else stageRef.current?.querySelector<HTMLElement>('.metaverse-room-hud button')?.focus();
-      });
+      setOverlay(event.key === 'Enter' ? 'chat' : 'categories');
     };
+    // Consume owned UI keys before the shell's window-level Escape cascade.
+    // The window fallback also handles the canvas Pointer Lock path.
+    const stage = stageRef.current;
+    stage?.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keydown', handleKeyDown);
     return () => {
+      stage?.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keydown', handleKeyDown);
-      if (focusFrameId) {
-        window.cancelAnimationFrame(focusFrameId);
-      }
     };
   }, [eligible, release, room, sceneFocused]);
 
@@ -277,23 +293,28 @@ export function MetaverseRoomView({
               pending={pending}
               isOwner={isOwner}
               hudOpen={hudOpen}
-              hudDebugOpen={hudDebugOpen}
+              overlay={overlay}
+              category={category}
+              panels={panels}
+              sessionIdentity={sessionIdentity ?? `${localPeerId}:${room.room_id}:${room.metaverse?.instance_generation}`}
+              onSelectCategory={(value) => { setCategory(value); openOverlay('details'); }}
+              onCategories={() => openOverlay('categories')}
+              onCloseOverlay={closeOverlay}
               chatOpen={chatOpen}
               messages={messages}
               messageDraft={messageDraft}
               messageInputRef={messageInputRef}
               onLeaveRoom={onLeaveRoom}
               onReturnHome={onReturnHome}
-              onToggleHud={toggleHud}
-              onToggleHudDebug={() => setHudDebugOpen((open) => !open)}
+              onToggleHud={() => openOverlay('categories')}
               onImportAvatar={onImportAvatar}
               onImportDefaultAvatar={onImportDefaultAvatar}
               onSaveCustomization={onSaveCustomization}
               onImportTexture={onImportTexture}
               onMoveSharedObject={onMoveSharedObject}
               onInteractWithProp={onInteractWithProp}
-              onCloseChat={closeChat}
-              onOpenChat={() => { release(); setChatOpen(true); }}
+              onCloseChat={closeOverlay}
+              onOpenChat={() => openOverlay('chat')}
               onMessageDraftChange={onMessageDraftChange}
               onSendMessage={onSendMessage}
               microphoneEnabled={microphoneEnabled}

@@ -1,5 +1,8 @@
 {
-  "fullscreen": { "openTools": "Dome 管理与连接", "closeTools": "关闭管理与连接" },
+  "fullscreen": {
+    "openTools": "Dome 管理与连接",
+    "closeTools": "关闭管理与连接"
+  },
   "title": "元宇宙房间",
   "rooms": {
     "summary_one": "此话题中有 {{count}} 个房间",
@@ -206,10 +209,10 @@
     "floorMaterial": "地面材质",
     "wallTexture": "内壁纹理",
     "floorTexture": "地面纹理",
-    "keyLight": "主光（千分之一单位）",
-    "ambient": "环境光（千分之一单位）",
-    "fog": "雾密度（百万分之一单位）",
-    "gravity": "重力（千分之一 m/s² 单位）",
+    "keyLight": "主光照（倍）",
+    "ambient": "环境光（倍）",
+    "fog": "雾浓度（%）",
+    "gravity": "重力（m/s²）",
     "propInteractions": "持久道具交互",
     "visualOnly": "仅显示",
     "save": "保存 Dome",
@@ -311,6 +314,26 @@
       "locked": "角色操作中",
       "unavailable": "无法锁定指针。请使用视角调整按钮或恢复操作以重试。",
       "inactive": "角色操作已暂停"
+    }
+  },
+  "menu": {
+    "title": "Dome菜单",
+    "open": "菜单（Tab）",
+    "close": "关闭",
+    "details": "Dome详情",
+    "categoriesLabel": "类别",
+    "unavailable": "此Dome无法使用此功能。",
+    "slider": "滑块",
+    "conflict": "设置已更新。保存前请取消以重新加载。",
+    "hostChanges": "更改托管方式",
+    "hostChangesHelp": "移交或停止托管会影响此Dome中的参与者。",
+    "categories": {
+      "dome": "Dome设置",
+      "hosting": "托管管理",
+      "connections": "连接",
+      "avatar": "虚拟形象",
+      "objects": "共享物体",
+      "diagnostics": "诊断"
     }
   }
 }

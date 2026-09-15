@@ -104,6 +104,49 @@ afterEach(() => {
 });
 
 describe('MetaverseRoomView', () => {
+  test('starts with only discoverable chat and menu entries', () => {
+    render(<MetaverseRoomView {...viewProps()} />);
+    expect(screen.queryByLabelText('ROOM Chat')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Wall material')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: 'Menu (Tab)' })).toBeVisible();
+  });
+
+  test('category navigation and closing preserve an unsaved Dome draft without actions', async () => {
+    const props = viewProps();
+    const user = userEvent.setup();
+    const view = render(<MetaverseRoomView {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+    await user.click(screen.getByRole('button', { name: 'Dome settings' }));
+    await user.selectOptions(screen.getByLabelText('Wall material'), 'wood');
+    await user.click(screen.getByRole('tab', { name: 'Avatar' }));
+    await user.click(screen.getByRole('tab', { name: 'Dome settings' }));
+    expect(screen.getByLabelText('Wall material')).toHaveValue('wood');
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(view.container.querySelector('.metaverse-room-stage')).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+    await user.click(screen.getByRole('button', { name: 'Dome settings' }));
+    expect(screen.getByLabelText('Wall material')).toHaveValue('wood');
+    expect(props.onSaveCustomization).not.toHaveBeenCalled();
+    expect(props.onImportAvatar).not.toHaveBeenCalled();
+    expect(props.onLocalTransform).not.toHaveBeenCalled();
+  });
+
+  test('owned Escape is consumed before window navigation and a prevented Escape stays with its control', async () => {
+    const user = userEvent.setup();
+    render(<MetaverseRoomView {...viewProps()} />);
+    await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+    const target = screen.getByRole('button', { name: 'Dome settings' });
+    const consumed = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    consumed.preventDefault();
+    fireEvent(target, consumed);
+    expect(target).toBeVisible();
+    const shell = vi.fn();
+    window.addEventListener('keydown', shell);
+    fireEvent.keyDown(target, { key: 'Escape' });
+    expect(shell).not.toHaveBeenCalled();
+    expect(target).not.toBeVisible();
+    window.removeEventListener('keydown', shell);
+  });
   test('does not register document input ownership before a room is rendered', () => {
     const listen = vi.spyOn(document, 'addEventListener');
     render(<MetaverseRoomView {...viewProps({ room: null })} />);
@@ -133,8 +176,8 @@ describe('MetaverseRoomView', () => {
     expect(screen.getByText('Scene peer: local-peer')).toBeInTheDocument();
     expect(screen.getByText('Scene object: shared-object-1')).toBeInTheDocument();
     expect(screen.getByText('Scene connection: live')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hide room HUD' })).toBeInTheDocument();
-    expect(screen.getByLabelText('ROOM Chat')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu (Tab)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
   });
 
   test('opens chat and focuses its input when Enter is pressed outside an editable target', async () => {
@@ -163,13 +206,13 @@ describe('MetaverseRoomView', () => {
     const stage = view.container.querySelector<HTMLElement>('[data-column-gesture-owner]')!;
     act(() => stage.focus());
     fireEvent.keyDown(window, { key: 'Tab' });
-    const debug = await screen.findByRole('button', { name: 'Debug details' });
+    const debug = await screen.findByRole('button', { name: 'Dome settings' });
     await waitFor(() => expect(debug).toHaveFocus());
     await user.tab();
     expect(debug).not.toHaveFocus();
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     expect(stage).toHaveFocus();
-    expect(screen.queryByRole('button', { name: 'Debug details' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dome settings' })).not.toBeInTheDocument();
   });
 
   test('chat Escape keeps the draft, ignores IME confirmation and causes no domain actions', async () => {
@@ -197,14 +240,14 @@ describe('MetaverseRoomView', () => {
     const user = userEvent.setup();
     const props = viewProps();
     const view = render(<MetaverseRoomView {...props} />);
-    await user.click(screen.getByRole('button', { name: 'Hide room HUD' }));
-    await user.click(screen.getByRole('button', { name: 'Hide room chat' }));
+    await user.click(screen.getByRole('button', { name: 'Menu (Tab)' }));
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     view.rerender(<MetaverseRoomView {...props} room={null} />);
     expect(screen.queryByLabelText('Metaverse room viewport')).not.toBeInTheDocument();
     view.rerender(<MetaverseRoomView {...props} />);
 
-    expect(screen.getByRole('button', { name: 'Open room HUD' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menu (Tab)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open room chat' })).toBeInTheDocument();
   });
 
@@ -221,9 +264,20 @@ describe('MetaverseRoomView', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
     view.unmount();
 
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrame).toHaveBeenCalled();
     expect(cancelAnimationFrame).toHaveBeenCalledWith(17);
     expect(removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
+  });
+
+  test('a queued chat focus does not steal focus after the Column becomes inactive', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callbacks.push(callback); return callbacks.length; });
+    const props = viewProps({ initialChatOpen: true });
+    const active = { visible: true, active: true, audioFocused: false, suspended: false, requestAudioFocus: vi.fn(), releaseAudioFocus: vi.fn() };
+    const view = render(<ColumnRuntimeProvider value={active}><MetaverseRoomView {...props} /></ColumnRuntimeProvider>);
+    view.rerender(<ColumnRuntimeProvider value={{ ...active, active: false, visible: false, suspended: true }}><MetaverseRoomView {...props} /></ColumnRuntimeProvider>);
+    act(() => callbacks.forEach(callback => callback(0)));
+    expect(screen.getByLabelText('Room chat message')).not.toHaveFocus();
   });
 
   test('suspends rendering and keyboard controls without removing room session UI', () => {

@@ -76,7 +76,7 @@ test('camera capture, real wheel and keyboard UI round trips preserve the Column
   await expect.poll(async () => (await moves()).at(-1)?.animation).toBe('walk');
   await page.keyboard.press('Tab');
   await expect(stage).toHaveAttribute('data-input-mode', 'idle');
-  await expect(stage.getByRole('button', { name: 'Debug details' })).toBeFocused();
+  await expect(stage.getByRole('button', { name: 'Dome settings' })).toBeFocused();
   expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
   // Opening UI clears held keys even if keyup arrives outside the canvas.
   await expect.poll(async () => (await moves()).at(-1)?.animation).toBe('idle');

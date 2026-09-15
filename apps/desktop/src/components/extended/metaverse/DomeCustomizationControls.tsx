@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Save, Undo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -23,6 +23,7 @@ type DomeCustomizationControlsProps = {
   locale: SupportedLocale;
   onSave: (customization: DomeCustomizationV1) => Promise<void>;
   onImportTexture: (file: File) => Promise<MetaverseAssetRef>;
+  renderSections?: (sections: { settings: ReactNode; objects: ReactNode; actions: ReactNode }) => ReactNode;
 };
 
 const MATERIAL_PRESETS: DomeMaterialPreset[] = ['concrete', 'stone', 'metal', 'wood'];
@@ -38,15 +39,33 @@ export function DomeCustomizationControls({
   locale,
   onSave,
   onImportTexture,
+  renderSections,
 }: DomeCustomizationControlsProps) {
   const { t } = useTranslation('metaverse', { lng: locale });
   const [draft, setDraft] = useState(() => cloneCustomization(customization));
+  const [baseline, setBaseline] = useState(() => JSON.stringify(customization));
+  const observed = useRef(baseline);
+  const dirty = JSON.stringify(draft) !== baseline;
+  const conflict = dirty && JSON.stringify(customization) !== baseline;
+  const alive = useRef(true);
+  const importVersion = useRef(0);
+  useEffect(() => {
+    alive.current = true;
+    const version = importVersion.current;
+    return () => { alive.current = false; importVersion.current = version + 1; };
+  }, []);
   const [feedback, setFeedback] = useState<'idle' | 'saving' | 'saved' | 'error' | 'invalid'>('idle');
 
   useEffect(() => {
-    setDraft(cloneCustomization(customization));
-    setFeedback('idle');
-  }, [customization]);
+    const value = JSON.stringify(customization);
+    if (value === observed.current) return;
+    observed.current = value;
+    if (!dirty) {
+      setDraft(cloneCustomization(customization));
+      setBaseline(JSON.stringify(customization));
+      setFeedback('idle');
+    }
+  }, [customization, dirty]);
 
   const firstProp = draft.persistent_props[0];
 
@@ -89,8 +108,10 @@ export function DomeCustomizationControls({
   }
 
   async function importTexture(target: TextureTarget, file: File) {
+    const version = importVersion.current;
     try {
       const asset = await onImportTexture(file);
+      if (!alive.current || version !== importVersion.current) return;
       setDraft((current) => ({
         ...current,
         surface: {
@@ -105,37 +126,36 @@ export function DomeCustomizationControls({
   }
 
   async function save() {
-    if (!isDomeCustomizationValid(draft)) {
+    if (!isOwner || pending || conflict) return;
+    if (!Object.values(draft.environment).every(Number.isFinite) || !isDomeCustomizationValid(draft)) {
       setFeedback('invalid');
       return;
     }
     setFeedback('saving');
     try {
       await onSave(draft);
+      if (!alive.current) return;
+      setBaseline(JSON.stringify(draft));
       setFeedback('saved');
     } catch {
       setFeedback('error');
     }
   }
 
-  if (!isOwner) {
-    return (
+  const settings = !isOwner ? (
       <section className='metaverse-dome-customization' aria-label={t('customization.title')}>
         <strong>{t('customization.title')}</strong>
         <span>{t('customization.readOnly')}</span>
         <small>{t('customization.gravitySummary', { value: customization.environment.gravity_milli / 1_000 })}</small>
       </section>
-    );
-  }
-
-  return (
-    <section className='metaverse-dome-customization' aria-label={t('customization.title')}>
+  ) : <section className='metaverse-dome-customization' aria-label={t('customization.title')}>
       <strong>{t('customization.title')}</strong>
       <div className='metaverse-customization-grid'>
         {(['wall', 'floor'] as const).map((target) => (
           <Label key={target}>
             <span>{t(`customization.${target}Material`)}</span>
             <select
+              aria-label={t(`customization.${target}Material`)}
               value={target === 'wall' ? draft.surface.wall_material : draft.surface.floor_material}
               disabled={pending}
               onChange={(event) => updateMaterial(target, event.target.value as DomeMaterialPreset)}
@@ -161,32 +181,25 @@ export function DomeCustomizationControls({
             />
           </Label>
         ))}
-        <Label>
-          <span>{t('customization.keyLight')}</span>
-          <Input type='number' min={0} max={4000} step={100} value={draft.environment.key_light_milli}
+        {([
+          ['key_light_milli', 'keyLight', 1000, 0, 4],
+          ['ambient_light_milli', 'ambient', 1000, 0, 2],
+          ['fog_density_micros', 'fog', 2000, 0, 100],
+          ['gravity_milli', 'gravity', 1000, 1, 30],
+        ] as const).map(([field, label, factor, min, max]) => <Label key={field}>
+          <span>{t(`customization.${label}`)}</span>
+          <Input type='number' min={min} max={max} step='any' aria-label={t(`customization.${label}`)}
+            value={Number.isFinite(draft.environment[field]) ? draft.environment[field] / factor : ''}
             disabled={pending}
-            onChange={(event) => updateEnvironment('key_light_milli', Number(event.target.value))} />
-        </Label>
-        <Label>
-          <span>{t('customization.ambient')}</span>
-          <Input type='number' min={0} max={2000} step={100} value={draft.environment.ambient_light_milli}
-            disabled={pending}
-            onChange={(event) => updateEnvironment('ambient_light_milli', Number(event.target.value))} />
-        </Label>
-        <Label>
-          <span>{t('customization.fog')}</span>
-          <Input type='number' min={0} max={200000} step={1000} value={draft.environment.fog_density_micros}
-            disabled={pending}
-            onChange={(event) => updateEnvironment('fog_density_micros', Number(event.target.value))} />
-        </Label>
-        <Label>
-          <span>{t('customization.gravity')}</span>
-          <Input type='number' min={1000} max={30000} step={100} value={draft.environment.gravity_milli}
-            disabled={pending}
-            onChange={(event) => updateEnvironment('gravity_milli', Number(event.target.value))} />
-        </Label>
+            onChange={event => updateEnvironment(field, event.target.value === '' ? Number.NaN : Math.round(Number(event.target.value) * factor))} />
+          <input type='range' aria-label={t(`customization.${label}`) + ' — ' + t('menu.slider')}
+            min={min} max={max} step={1 / factor} disabled={pending}
+            value={Number.isFinite(draft.environment[field]) ? draft.environment[field] / factor : min}
+            onChange={event => updateEnvironment(field, Math.round(Number(event.target.value) * factor))} />
+        </Label>)}
       </div>
-      {firstProp ? (
+    </section>;
+  const objects = isOwner && firstProp ? (
         <fieldset className='metaverse-interaction-options'>
           <legend>{t('customization.propInteractions')}</legend>
           {DOME_INTERACTIONS.map((interaction) => (
@@ -214,14 +227,18 @@ export function DomeCustomizationControls({
             <span>{t('customization.visualOnly')}</span>
           </Label>
         </fieldset>
-      ) : null}
+      ) : null;
+  const actions = isOwner ? <>
+      {conflict && <p role='status'>{t('menu.conflict')}</p>}
       <div className='metaverse-customization-actions'>
-        <Button type='button' size='sm' disabled={pending || feedback === 'saving'} onClick={() => void save()}>
+        <Button type='button' size='sm' disabled={pending || feedback === 'saving' || conflict} onClick={() => void save()}>
           <Save className='size-4' aria-hidden='true' />
           {t('customization.save')}
         </Button>
         <Button type='button' size='sm' variant='secondary' disabled={pending} onClick={() => {
+          importVersion.current++;
           setDraft(cloneCustomization(customization));
+          setBaseline(JSON.stringify(customization));
           setFeedback('idle');
         }}>
           <Undo2 className='size-4' aria-hidden='true' />
@@ -233,6 +250,6 @@ export function DomeCustomizationControls({
           {t(`customization.feedback.${feedback}`)}
         </span>
       ) : null}
-    </section>
-  );
+    </> : null;
+  return renderSections ? renderSections({ settings, objects, actions }) : <>{settings}{objects}{actions}</>;
 }

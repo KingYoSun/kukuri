@@ -26,6 +26,7 @@ OS取得のfrontend wrapperは `lib/api/systemLocale.ts`、読み取り専用IPC
 6. `mobile-column-workspace.css`: 759px以下の1 Column＝1 viewportとmobile input ownership
 7. `metaverse-camera.css`: Metaverse専用のアバター操作状態・視点調整ボタン・中央の目印
 8. `metaverse-layout.css`: Metaverseの実カラム幅に応じたフォーム・HUD・chatの配置。既存componentのDOM／stateを保持する
+9. `metaverse-hud.css`: Metaverseのカテゴリメニュー・詳細タブ・非表示paneとチャット入口の配置
 
 `css-vars.test.ts`は`index.css`のlocal `@import`を直接列挙し、同梱bundle内の未定義`var()`参照を検出する。stylesheetを追加・削除するときにtest側へ別の手動一覧を追加しない。
 
@@ -64,6 +65,12 @@ RadixのDialog、Tooltip、DropdownMenu、Popoverは`body`直下に描画され�
 - routingは共有target、workspace persistenceはlocal layoutを扱う。責務の詳細はADR 0031に従う。
 
 ## Review surfaceと検証
+
+### Metaverseのカテゴリ合成
+
+`MetaverseRoomView`が開閉・選択カテゴリ・focusを所有し、`MetaverseCategories`がサークルと詳細タブを描画する。`DomeCustomizationControls`は開閉より長い寿命でdraftを持ち、設定・共有物・保存操作の表示をrender propで合成する。別カテゴリへの切替でcontrollerを再mountしない。
+
+`DomeHostingPanel`も取得と既存actionを一つだけ所有し、稼働管理・共有物・診断の表示を`MetaverseRoomPanel`へ渡す。入室中は同一のView内、入室外は既存補助面に合成する。`DomeConnectionPanel`の既存pollingと`DomeManagementPanel`の明示管理flowを再利用する。backend API、Zustand store、wire shapeへ表示stateを追加しない。
 
 - `apps/desktop/src/stories/foundations/`: `tokens.css`を描画する確認面。設計値の正本ではない。
 - component story: variant、状態、overflow、keyboard／pointer確認の入口。

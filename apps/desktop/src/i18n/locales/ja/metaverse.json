@@ -1,5 +1,8 @@
 {
-  "fullscreen": { "openTools": "Domeの管理・接続", "closeTools": "管理・接続を閉じる" },
+  "fullscreen": {
+    "openTools": "Domeの管理・接続",
+    "closeTools": "管理・接続を閉じる"
+  },
   "title": "メタバースルーム",
   "rooms": {
     "summary_one": "このトピックに{{count}}件のルーム",
@@ -206,10 +209,10 @@
     "floorMaterial": "床マテリアル",
     "wallTexture": "内壁テクスチャ",
     "floorTexture": "床テクスチャ",
-    "keyLight": "キーライト（1/1000単位）",
-    "ambient": "環境光（1/1000単位）",
-    "fog": "霧の密度（1/1,000,000単位）",
-    "gravity": "重力（1/1000 m/s²単位）",
+    "keyLight": "主照明（倍率）",
+    "ambient": "環境光（倍率）",
+    "fog": "霧の濃さ（%）",
+    "gravity": "重力（m/s²）",
     "propInteractions": "永続オブジェクトの操作",
     "visualOnly": "表示のみ",
     "save": "Domeを保存",
@@ -311,6 +314,26 @@
       "locked": "アバター操作中",
       "unavailable": "ポインタを固定できません。視点の調整ボタンを使うか、再開を押して再試行してください。",
       "inactive": "アバター操作を一時停止"
+    }
+  },
+  "menu": {
+    "title": "Domeメニュー",
+    "open": "メニュー（Tab）",
+    "close": "閉じる",
+    "details": "Domeの詳細",
+    "categoriesLabel": "カテゴリ",
+    "unavailable": "このDomeでは利用できません。",
+    "slider": "スライダー",
+    "conflict": "設定が更新されました。保存する前に取消で最新の設定を読み込んでください。",
+    "hostChanges": "稼働方法の変更",
+    "hostChangesHelp": "移管や稼働終了は、このDomeの参加者に影響します。",
+    "categories": {
+      "dome": "Dome設定",
+      "hosting": "稼働管理",
+      "connections": "接続",
+      "avatar": "アバター",
+      "objects": "共有物",
+      "diagnostics": "診断"
     }
   }
 }

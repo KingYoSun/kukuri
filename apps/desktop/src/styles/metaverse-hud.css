@@ -1,0 +1,102 @@
+/* #1024: category presentation does not own the scene or session lifecycle. */
+.metaverse-category-menu[hidden],
+.metaverse-category-details[hidden],
+.metaverse-category-content[hidden] { display: none !important; }
+.metaverse-category-menu,
+.shell-phase1 .metaverse-category-menu {
+  position: absolute;
+  z-index: 4;
+  inset: 4.5rem 0 auto;
+  margin-inline: auto;
+  width: min(24rem, calc(100% - 1rem));
+  max-height: calc(100% - 5rem);
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel-solid);
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+.metaverse-category-menu h3 { margin: 0; text-align: center; font-size: 1rem; }
+.metaverse-category-circle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(3.5rem, auto));
+  align-items: center;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+}
+.metaverse-category-circle > .button {
+  white-space: normal;
+  min-height: 3.5rem;
+  height: auto;
+  flex-direction: column;
+  padding: var(--space-xs);
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  line-height: 1.15;
+  gap: 0.125rem;
+  border-radius: var(--radius-sm);
+}
+.metaverse-category-circle > .button svg { width: 1rem; height: 1rem; flex: none; }
+.metaverse-category-circle > :nth-child(1) { grid-area: 1 / 2; }
+.metaverse-category-circle > :nth-child(2) { grid-area: 2 / 3; }
+.metaverse-category-circle > :nth-child(3) { grid-area: 3 / 3; }
+.metaverse-category-circle > :nth-child(4) { grid-area: 4 / 2; }
+.metaverse-category-circle > :nth-child(5) { grid-area: 3 / 1; }
+.metaverse-category-circle > :nth-child(6) { grid-area: 2 / 1; }
+.metaverse-category-circle > .metaverse-category-center { grid-area: 2 / 2 / 4; }
+.metaverse-category-circle [data-selected] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.metaverse-viewport-shell .metaverse-category-details,
+.shell-phase1 .metaverse-viewport-shell .metaverse-category-details {
+  grid-area: auto;
+  position: absolute;
+  inset: 4.5rem 0.75rem auto auto;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  width: min(40rem, calc(100% - 1.5rem));
+  max-height: calc(100% - 8rem);
+  padding: var(--space-sm);
+  background: var(--surface-panel-solid);
+  overflow: hidden;
+  pointer-events: auto;
+}
+.metaverse-details-header { display: flex; justify-content: space-between; gap: var(--space-xs); flex: none; }
+.metaverse-category-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  padding: 0.25rem;
+}
+.metaverse-category-tabs [role='tab'] {
+  flex: none;
+  min-height: 2.75rem;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-solid);
+  color: var(--foreground);
+}
+.metaverse-category-tabs [aria-selected='true'] { border-color: var(--accent); font-weight: 700; }
+.metaverse-category-content {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-sm) 0.25rem;
+  display: grid;
+  gap: var(--space-sm);
+  touch-action: pan-y;
+}
+.metaverse-category-content .panel-subsection { max-width: 100%; }
+.metaverse-impact-actions { border: 1px solid var(--border-subtle); padding: var(--space-sm); display: grid; gap: var(--space-sm); }
+.metaverse-impact-actions legend { font-weight: 700; }
+.metaverse-delete-object { border-top: 1px solid var(--border-destructive); margin-top: var(--space-sm); }
+.metaverse-customization-grid input[type='range'] { width: 100%; min-height: 1.5rem; }
+.metaverse-hud-toolbar .metaverse-hud-icon-button:has(span) { width: auto; padding-inline: var(--space-sm); gap: var(--space-xs); }
+.metaverse-viewport-shell .metaverse-chat-toggle { position: absolute; inset: auto auto 0.75rem 0.75rem; z-index: 5; }
+@media (forced-colors: active) {
+  .metaverse-category-tabs [aria-selected='true'], .metaverse-category-circle [data-selected] { outline: 2px solid Highlight; }
+}

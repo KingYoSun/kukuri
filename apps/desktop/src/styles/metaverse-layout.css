@@ -179,7 +179,6 @@
   overflow-y: auto;
 }
 
-.metaverse-hud-scrollbar-indicator { display: none; }
 .metaverse-room-hud,
 .metaverse-room-chat-log,
 .metaverse-chat-list { touch-action: pan-y; }
