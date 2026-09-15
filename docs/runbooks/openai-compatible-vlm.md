@@ -18,7 +18,8 @@ kukuri 本体は endpoint / model / API key を同梱・共有・代理利用し
 - known-CSAM の確定判定は本 provider の役割ではない（`known_csam` slot には設定できない。
   known-match は #391 系 provider が担う）。
 - 同一 scan が moderation verdict と **descriptive 検索タグ**の両方を生成する（二重スキャン
-  しない。タグが index されるのは `allow` verdict の media のみ）。
+  しない。タグが index されるのは `allow` verdict の media のみ。nsfw / objectionable の suspected は
+  content advisory 付きの `allow` として index される（ADR 0028 §8。#1051 の実装後に有効））。
 
 ## 設定（env）
 
@@ -33,24 +34,27 @@ kukuri 本体は endpoint / model / API key を同梱・共有・代理利用し
 | `COMMUNITY_NODE_VLM_API_TIMEOUT_SECS` | - | HTTP timeout（既定 60） |
 | `COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD` | - | suspected 閾値 1-100（既定 70 = 0.7） |
 | `COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY` | - | suspected advisory の配布範囲 `local`（既定）/ `subscribed_nodes` / `public` |
+| `COMMUNITY_NODE_SAFETY_GENERAL_ACTION` | - | nsfw / objectionable suspected の扱い `label`（既定。content advisory 付きで index）/ `hold` / `exclude`。`allow`（ラベル無し）は受理しない。ADR 0028 §8.7（#1051 の実装後に有効） |
 | `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW` | - | operator レビュー（`cn-cli moderation edit/reissue`）の有効化（既定 false） |
 | `COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES` | - | media scan 用一時 fetch のサイズ上限（既定 33554432 = 32 MiB。超過は fail-closed） |
 | `COMMUNITY_NODE_MEDIA_FETCH_TIMEOUT_SECS` | - | media scan 用一時 fetch の timeout 秒（既定 30。超過は fail-closed） |
 
 operator-config.yaml では `safety.providers.general` / `safety.providers.unknown_csam` と
-`safety.moderation`（`suspected_threshold` / `suspected_signal_visibility` / `operator_review`）
-に対応する。readiness check `classifier_providers_resolvable` が実装名を静的検証する。
+`safety.moderation`（`suspected_threshold` / `suspected_signal_visibility` / `operator_review` /
+`general_action`）に対応する。readiness check `classifier_providers_resolvable` が実装名を静的検証する。
+provider entry の `on_high_confidence` は宣言のみで実効性が無く、#1051 で deprecated（読み捨て + 警告）とする。
 
 ## 応答形式の選び方
 
 - **`json`（既定）**: 指示追従できる汎用 VLM 向け。system prompt で
   `{"categories":[{"category":"csam|cse|grooming|nsfw|spam|malware|phishing","score":0-1}],"tags":[...]}`
   の厳密 JSON を要求する。critical カテゴリの判定とタグ生成が可能。未知カテゴリや解析不能
-  応答は fail-closed（hold）。
+  応答は fail-closed（hold）。#1051 の実装後は `objectionable` も受理する（ADR 0028 §8.2）。
 - **`guard`**: SingGuard 等の guard 系モデル（chat template が「1 行目 safe/unsafe +
   `<answer>` カテゴリ」を強制するもの）向け。確信度は先頭トークンの logprob から導く。
   guard の粗いカテゴリからは critical を断定できないため、**general カテゴリにのみ写像**する
   （A→nsfw / D→phishing / E→spam / B・C・G→nsfw / F=政治的内容は moderation 対象にしない）。
+  #1051 の実装後は B・C・G→objectionable に変わり、A のみが nsfw になる（ADR 0028 §8.2）。
   タグは生成されない。
 
 ## fail-closed の挙動
@@ -76,6 +80,7 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
 ```
 
 無害テキスト → allow、phishing/spam テキスト → 非 index、画像（data URL）scan の成功を確認する。
+#1051 の実装後は、nsfw 相当テキスト → content advisory 付き allow（`general_action=label` 時）も確認する。
 
 ## appeal / operator レビュー運用
 

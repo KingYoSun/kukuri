@@ -9,6 +9,11 @@ Draft
 現在の提供状態と配備ごとの公開条件は[ADR 0025](0025-community-node-indexing-foundation.md)の
 2026-08-16改訂を参照する。以下の当時の判断とcritical safetyの条件自体は変更しない。
 
+2026-09-15補足（#1051）: general route のうち nsfw と新設 `Objectionable` は `allow` verdict に
+`advisory_labels` を伴って index される（ADR 0028 §8）。本 ADR では `SafetyVerdict.advisory_labels` の追加、
+`SafetyCategory::Objectionable` の追加、label 付き `allow` の event action `RiskLabel` を §8 に追記する。
+`SafetyAction` の variant、`is_indexable()` の単一判定点、critical route の fail-closed は変更しない。
+
 ## Date
 2026-06-30
 
@@ -98,6 +103,7 @@ community node の moderation のうち **決定論的 moderation（既知 hash 
 ### 2.3 policy routing（critical と general の分離、純関数）
 - `route(&[ProviderScanResult], &SafetyPolicy, scanned_at) -> SafetyVerdict` は純関数。`SafetyPolicy::public_node_default()` を public-node 既定とする。
 - critical route（`SafetyCategory` の `Csam` / `Cse` / `Grooming` = `is_critical_safety`）と general route（`Nsfw` / `Spam` / `Malware` / `Phishing`）を分離する。同一 queue / reason code にまとめない。注: 「violence / hate / harassment」は provider が返し得る example label であり `SafetyCategory` の variant ではない（general moderation の入力例）。
+  （2026-09-15 補足: general route に `Objectionable` variant を追加し、hate / harassment / real-world crimes / animal abuse の傘とする。§8）
 - 本 ADR は critical / general の **route 分離**と決定論的 confirmed（known-hash）を owns する。grooming / CSE / 未知 CSAM の **suspected 検知は classifier ベース（非決定論）であり #411 が owns する**（本 ADR は route と fail-closed 枠組みのみを固定し、classifier 検知の詳細は持たない）。
 - **`require_known_csam=true`**: `KnownCsamHashMatch` capability の scan 結果が無い場合、general が clean でも `ProviderUnavailable` として fail-closed する（mandatory known-CSAM provider 欠落防止）。
 - **critical 取りこぼし防止**: critical capability / critical label を持つ `Completed` 検知は、閾値未満や `score=None` でも `Allow` / `Clean` に落とさない（`is_critical_detection` + 最終ガード）。suspected の実効スコアは `result.score` または critical label の最大 confidence（`effective_critical_score`）。
@@ -217,3 +223,24 @@ public-node profile が public indexing を有効化する前に満たすべき�
 - provider 実装名は `project-arachnid-shield`（operator-config の underscore 表記は正規化して受理）。
   known_csam slot 専用で、他 slot への指定は Err。
 - 運用手順は `docs/runbooks/project-arachnid-shield.md`。
+
+
+## 8. 補足（#1051、2026-09-15）: general route の advisory 化に伴う共通枠組みの追記
+
+本節は ADR 0028 §8 の決定が本 ADR の共通枠組み（verdict model / category / event / severity）に与える
+追記を記録する。決定論的 moderation と critical safety の条件は変更しない。
+
+- **§2.2 verdict model**: `SafetyVerdict` に `advisory_labels: Vec<SafetyLabel>` を追加する。`SafetyAction` の
+  variant は `allow` / `hold` / `quarantine` / `exclude` のまま増やさず、`SafetyVerdict::is_indexable()` は
+  `action == Allow` のみを indexable とする単一判定点で不変。label 付き `allow` は `allow` である。
+- **§2.3 category**: general route に `SafetyCategory::Objectionable`（非 critical。real-world crimes /
+  unethical・hate・harassment / animal abuse の傘）を追加する。critical route（`Csam` / `Cse` / `Grooming` =
+  `is_critical_safety`）との分離、`require_known_csam`、閾値未満 critical の取りこぼし防止は不変。
+- **§2.5 signed moderation event**: label 付き `allow` の event action は既存語彙の `RiskLabel` を使う。
+  `Exclude` / `Hold` / `Quarantine` の意味は変えない。
+- **§2.6 risk signal**: label 付き `allow` の signal は severity `Low`、basis `ClassifierScore`、visibility は
+  ADR 0028 §7.3 の `suspected_signal_visibility` に従う。trust への寄与は ADR 0026 §7（nsfw / objectionable は 0）。
+- **§2.8 explainability**: client が `content_advisories` を表示する際も issuer node / target / category /
+  severity / basis / confidence / visibility を説明でき、「network 全体が判定した」と誤認させない。
+- contract 追加: `objectionable_category_separated_from_nsfw`。維持: `only_allow_verdict_is_indexable`、
+  `critical_route_separated_from_general`、`fail_closed_never_allows`。
