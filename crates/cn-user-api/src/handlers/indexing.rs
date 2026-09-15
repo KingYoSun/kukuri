@@ -196,6 +196,9 @@ fn index_query_response(entries: Vec<kukuri_cn_indexer::IndexedEntry>) -> IndexQ
                 author_pubkey: entry.author_pubkey,
                 text: entry.text,
                 created_at: entry.created_at,
+                // 真実源の最新 verdict 由来（query gate が充填）。署名済み content_labels は
+                // 生成・改変しない（`content_advisories_are_separate_from_signed_content_labels`）。
+                content_advisories: entry.content_advisories,
             })
             .collect(),
     }

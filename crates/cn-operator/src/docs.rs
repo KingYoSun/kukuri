@@ -12,6 +12,7 @@ use std::fmt::Write as _;
 use crate::capability::{Availability, Capability, ExternalDestination};
 use crate::config::{LegalDocumentKind, ResolvedConfig};
 use crate::manifest::{build_manifest, render_manifest};
+use crate::safety_config::GeneralAction;
 
 /// すべての生成文書に付す共通の注記。
 const LEGAL_DISCLAIMER: &str = "> 注記: この文書は operator config から自動生成された下書きであり、法的助言ではありません。\n\
@@ -826,6 +827,29 @@ fn gen_moderation_policy(config: &ResolvedConfig) -> String {
         let _ = writeln!(
             s,
             "- 判定に基づく moderation event は署名付きで発行され、risk signal は根拠つきで保存されます。"
+        );
+        let general_action = config
+            .raw
+            .safety
+            .as_ref()
+            .and_then(|safety| safety.moderation.general_action)
+            .unwrap_or_default();
+        let _ = writeln!(
+            s,
+            "- 性的表現（nsfw）や real-world crimes・hate・harassment・animal abuse（objectionable）の疑いは、\
+             重大判定とは別に扱います。本ノードの扱い: {}。既定の `label` では索引から除外せず、\
+             利用者向けの content advisory（`adult` / `sensitive`）を付けて索引へ入れます。\
+             この advisory は本ノード単独の判定で、投稿の署名済みラベルではありません。",
+            match general_action {
+                GeneralAction::Label => "label（content advisory 付きで索引）",
+                GeneralAction::Hold => "hold（保留。索引に入れない）",
+                GeneralAction::Exclude => "exclude（除外。索引に入れない）",
+            }
+        );
+        let _ = writeln!(
+            s,
+            "- nsfw / objectionable の判定は trust の評価値に寄与しません（寄与 0）。利用者向けの trust 表示には\
+             根拠と申し立て状態を確認できる項目として残ります。"
         );
         let _ = writeln!(
             s,

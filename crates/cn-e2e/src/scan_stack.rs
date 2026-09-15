@@ -86,6 +86,7 @@ pub(crate) fn build_participant(
         issuer_node_id: None,
         suspected_threshold,
         suspected_signal_visibility: None,
+        general_action: None,
     };
     let safety = build_safety_scan_service(
         &safety_config,

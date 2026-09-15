@@ -49,8 +49,9 @@ pub use policy_descriptor::{
 pub use profile::Profile;
 pub use retention_config::RetentionConfig;
 pub use safety_config::{
-    ProviderHosting, SafetyConfig, SafetyErrorAction, SafetyEventsConfig, SafetyIndexingConfig,
-    SafetyProviderEntry, SafetyProvidersConfig, SafetyStorageConfig,
+    GeneralAction, ProviderHosting, SafetyConfig, SafetyErrorAction, SafetyEventsConfig,
+    SafetyIndexingConfig, SafetyProviderEntry, SafetyProvidersConfig, SafetyStorageConfig,
+    safety_config_warnings,
 };
 pub use safety_readiness::{
     PUBLIC_NODE_PROFILE, READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessReport,
@@ -176,8 +177,13 @@ safety:
     unknown_csam:
       provider: placeholder-unknown-csam
       required: false
-      # on_high_confidence は将来の runtime scan で使う宣言。現時点の readiness 判定では未使用。
-      on_high_confidence: quarantine
+  # 非決定論的 moderation（ADR 0028）。general_action は nsfw / objectionable の suspected の扱い
+  # （label = content advisory 付きで索引（既定）/ hold / exclude。allow は受理しない。#1051）。
+  # 未指定なら label のまま法務 snapshot は変わらない。provider entry の on_high_confidence は
+  # deprecated（受理するが読み捨てて警告）。
+  moderation:
+    operator_review: true
+    # general_action: label
 
 manifest:
   manifest_version: v1

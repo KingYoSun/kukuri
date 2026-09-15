@@ -507,6 +507,9 @@ impl IngestPipeline {
             }
         };
         let mut derived_tags: Vec<String> = report.derived_tags.clone();
+        // content advisory は本文 text と各 blob の和集合（ADR 0028 §8.3）。blob 単位の要素は
+        // `subject_kind = blob_cid` のまま post 行へ同梱し、client の hash 単位取得ゲートに使う。
+        let mut advisories = outcome.advisories.clone();
         for target in media_targets {
             let mut request =
                 ProviderScanRequest::for_subject(SubjectKind::Blob, target.hash.clone())
@@ -535,7 +538,17 @@ impl IngestPipeline {
                     derived_tags.push(tag.clone());
                 }
             }
+            for advisory in &media_outcome.advisories {
+                if !advisories.contains(advisory) {
+                    advisories.push(advisory.clone());
+                }
+            }
         }
+        // post の verdict 行に和集合を確定させる（値が同じなら store 側で no-op）。query 境界は
+        // この行から `content_advisories` を導出する（ADR 0025 §7.1）。
+        self.safety
+            .persist_advisories(SubjectKind::Post, object.object_id.as_str(), &advisories)
+            .await?;
 
         // ① index 真実源（Postgres）へ upsert する。verdict record への FK と CHECK 制約
         // （allow のみ / 非 critical のみ）が fail-closed を DB 層でも保証する（#404）。
@@ -574,6 +587,7 @@ impl IngestPipeline {
             text: text_with_tags(&text, &derived_tags),
             created_at: object.created_at,
             source_replica_id: replica_id.as_str().to_string(),
+            content_advisories: Vec::new(),
         };
         self.projection.upsert_entry(&entry).await?;
         if outcome.disposition == ScanDisposition::Fresh

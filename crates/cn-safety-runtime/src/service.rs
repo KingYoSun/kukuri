@@ -544,6 +544,21 @@ impl SafetyScanService {
         self.orchestrator.scan_config_fingerprint()
     }
 
+    /// subject の verdict 行に content advisory の集合を確定させる（ADR 0028 §8.3）。
+    ///
+    /// indexer が post 本文と参照 blob の advisory の和集合を post 行へ書くために使う。
+    pub async fn persist_advisories(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+        advisories: &[ContentAdvisory],
+    ) -> Result<()> {
+        self.store
+            .persist_advisories(subject_kind, subject_id, advisories)
+            .await
+            .context("failed to persist content advisories")
+    }
+
     pub async fn scan_and_record(
         &self,
         request: &ProviderScanRequest,

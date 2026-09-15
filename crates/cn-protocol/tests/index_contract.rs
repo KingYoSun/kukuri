@@ -80,6 +80,7 @@ fn index_query_response_wire_shape_is_stable() {
             author_pubkey: "author".to_string(),
             text: "body\nderived-tag".to_string(),
             created_at: 42,
+            content_advisories: Vec::new(),
         }],
     };
 
@@ -92,7 +93,8 @@ fn index_query_response_wire_shape_is_stable() {
                 "object_id": "post-1",
                 "author_pubkey": "author",
                 "text": "body\nderived-tag",
-                "created_at": 42
+                "created_at": 42,
+                "content_advisories": []
             }]
         })
     );

@@ -768,3 +768,159 @@ async fn relation_distance_optout_is_explicit_symmetric_and_reversible() -> Resu
 
     server.shutdown().await
 }
+
+/// ADR 0026 §7.2 contract: `trust_read_lists_advisory_only_basis_with_zero_contribution`。
+///
+/// nsfw / objectionable の signal は利用者向け read の basis に `raw_contribution = 0` /
+/// `contribution = 0` で残り（判定と appeal 状態を確認できる）、`relative` / `trust` は動かない。
+/// cross-node pull には（visibility が Public でも）出ない。
+#[tokio::test]
+async fn trust_read_lists_advisory_only_basis_with_zero_contribution() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api trust read test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let (trust, _relation) = memory_trust_state();
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_trust_read_advisory",
+        Some(trust),
+    )
+    .await?;
+    let pool = connect_postgres(server.database.database_url.as_str()).await?;
+    let client = Client::new();
+    let viewer_keys = generate_keys();
+    let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer_keys).await?;
+    let target = generate_keys().public_key_hex();
+
+    let mut nsfw = risk_signal(
+        target.as_str(),
+        SafetyCategory::Nsfw,
+        Severity::Low,
+        Basis::ClassifierScore,
+        Visibility::Public,
+    );
+    nsfw.confidence = Some(84);
+    let nsfw = persist_risk_signal(&pool, "issuer-node", &nsfw).await?;
+    let objectionable = persist_risk_signal(
+        &pool,
+        "issuer-node",
+        &risk_signal(
+            target.as_str(),
+            SafetyCategory::Objectionable,
+            Severity::Low,
+            Basis::ClassifierScore,
+            Visibility::Local,
+        ),
+    )
+    .await?;
+
+    let read_url = format!("{}/v1/trust/users/{target}", server.base_url);
+    let body = client
+        .get(read_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(body["absolute"].as_f64(), Some(0.0));
+    assert_eq!(
+        body["relative"].as_f64(),
+        Some(0.0),
+        "advisory-only は相対成分を動かさない"
+    );
+    assert_eq!(body["trust"].as_f64(), Some(0.0));
+    let basis = body["basis"].as_array().expect("basis");
+    assert_eq!(basis.len(), 2, "basis には判定として残る");
+    for entry in basis {
+        assert_eq!(entry["component"], "relative");
+        assert_eq!(entry["basis"], "classifier_score");
+        assert_eq!(entry["severity"], "low");
+        assert_eq!(entry["appeal_status"], "none");
+        assert_eq!(entry["raw_contribution"].as_f64(), Some(0.0));
+        assert_eq!(entry["contribution"].as_f64(), Some(0.0));
+        assert!(entry["issuer_node_id"].is_string());
+        assert!(entry["confidence"].is_number());
+    }
+    let categories: Vec<&str> = basis
+        .iter()
+        .map(|entry| entry["category"].as_str().unwrap())
+        .collect();
+    assert!(categories.contains(&"nsfw"));
+    assert!(categories.contains(&"objectionable"));
+
+    // spam（相対成分）を足すと値が動くが、advisory-only の 2 件は引き続き 0 のまま。
+    persist_risk_signal(
+        &pool,
+        "issuer-node",
+        &risk_signal(
+            target.as_str(),
+            SafetyCategory::Spam,
+            Severity::High,
+            Basis::ClassifierScore,
+            Visibility::Local,
+        ),
+    )
+    .await?;
+    let with_spam = client
+        .get(read_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert!(with_spam["relative"].as_f64().unwrap() < 0.0);
+    for entry in with_spam["basis"].as_array().unwrap() {
+        let id = entry["signal_id"].as_str().unwrap();
+        if id == nsfw.id || id == objectionable.id {
+            assert_eq!(entry["contribution"].as_f64(), Some(0.0));
+        } else {
+            assert!(entry["contribution"].as_f64().unwrap() < 0.0);
+        }
+    }
+
+    // Disputed → Cleared と遷移しても評価値は動かず、basis の状態表示だけが変わる（§7.3）。
+    dispute_risk_signal(&pool, nsfw.id.as_str()).await?;
+    let disputed = client
+        .get(read_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(disputed["relative"], with_spam["relative"]);
+    update_risk_signal_appeal_status(&pool, nsfw.id.as_str(), AppealStatus::Cleared).await?;
+    let cleared = client
+        .get(read_url.as_str())
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(cleared["relative"], with_spam["relative"]);
+    let nsfw_entry = cleared["basis"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["signal_id"] == nsfw.id)
+        .expect("cleared nsfw basis stays listed");
+    assert_eq!(nsfw_entry["appeal_status"], "cleared");
+    assert_eq!(nsfw_entry["contribution"].as_f64(), Some(0.0));
+
+    // cross-node pull（匿名）: advisory-only は Public visibility でも出ない（INVAR-4）。
+    let pulled = client
+        .get(format!("{}/v1/trust/pull/{target}", server.base_url))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+    assert!(pulled["basis"].as_array().unwrap().is_empty());
+    assert_eq!(pulled["absolute"].as_f64(), Some(0.0));
+
+    server.shutdown().await
+}

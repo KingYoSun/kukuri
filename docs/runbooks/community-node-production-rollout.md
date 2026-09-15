@@ -492,6 +492,47 @@ sudo docker exec "$PG_CONTAINER" sh -lc \
 `scans_fresh` が既存投稿数ぶん増え続ける場合は、対象verdictがholdのままか、policy / provider
 構成のfingerprintが起動ごとに変わっていないかをlogで確認する。
 
+### 5.7 content advisory 付き索引と trust 不変の確認（#1054）
+
+nsfw / objectionable の suspected は `allow` + content advisory で索引され（ADR 0028 §8）、trust の
+評価値には寄与しない。`policy_version` が `2026-09-public-node-v3` になり scan 構成 fingerprint が
+変わるため、反映直後の 1 巡だけ全件再 scan（`scans_fresh` が既存件数ぶん増える）が起き、これが
+過去に除外された投稿の backfill になる。2 巡目以降は `scans_reused` に戻る。
+
+1. `cn-migrate` 後に `cn_safety.scan_verdicts.advisory_labels` 列があり、既存行が `[]` であること。
+
+```bash
+sudo docker exec "$PG_CONTAINER" sh -lc \
+  "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -At -F '|' \
+   -c \"SELECT count(*) FILTER (WHERE advisory_labels <> '[]'::jsonb), count(*)
+       FROM cn_safety.scan_verdicts;\""
+```
+
+2. 初回 pass 完了後、nsfw 相当の benign 投稿（過去に `exclude` だったもの、または検証用の投稿）の
+   verdict が `action = allow` / `policy_version = 2026-09-public-node-v3` で、`advisory_labels` に
+   `category` / `label`（`adult` または `sensitive`）/ `signal_id` を持つこと。対応する
+   `cn_index.index_entries` 行があること。
+
+```bash
+sudo docker exec "$PG_CONTAINER" sh -lc \
+  "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -At -F '|' \
+   -c \"SELECT v.subject_id, v.action, v.policy_version, v.advisory_labels,
+              (SELECT count(*) FROM cn_index.index_entries e WHERE e.verdict_id = v.id)
+       FROM cn_safety.scan_verdicts v
+       WHERE v.advisory_labels <> '[]'::jsonb ORDER BY v.updated_at DESC LIMIT 5;\""
+```
+
+3. 認証・同意済み client から `GET /v1/index/search?scope_kind=public_topic&scope_id=<topic>&q=<語>`
+   を呼び、該当 entry の `content_advisories` が上の `advisory_labels` と一致し、`content_labels` が
+   応答に無いことを確認する（第 2 のラベル源であって署名済みラベルではない）。
+4. 著者の `GET /v1/trust/users/{pubkey}` で、nsfw / objectionable の basis 行が `contribution = 0` /
+   `raw_contribution = 0` で並び、`relative` / `trust` が反映前の値から動いていないこと。
+   `GET /v1/trust/pull/{pubkey}` の basis にこれらが出ないこと。
+5. `cn_safety.risk_signals` で対象投稿の signal が 1 件（`severity = low`、`basis = classifier_score`）
+   であること。2 巡以上経過後も件数が増えないこと（§5.6 の 4 と同じ）。
+6. `general_action` を `hold` / `exclude` へ厳格化した node では、同じ投稿が索引に入らないこと
+   （既定の `label` 運用では確認不要）。
+
 ## 6. 実クライアントのbenign media確認
 
 実在の違法mediaや疑わしいmediaを検証に使わない。権利上問題のない小さな画像をpublic topicへ投稿し、

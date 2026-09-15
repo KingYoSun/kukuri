@@ -21,7 +21,10 @@ use kukuri_cn_indexer::projection::{IndexProjection, IndexedEntry, MemoryIndexPr
 use kukuri_cn_indexer::query::FailClosedIndexQuery;
 use kukuri_cn_protocol::{CHANNEL_MEMBERSHIP_SECRET_HEADER, build_auth_envelope_json};
 use kukuri_cn_safety::provider::SubjectKind;
-use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety::{
+    AdvisorySubjectKind, Basis, ContentAdvisory, ReasonCode, SafetyAction, SafetyCategory,
+    SafetyLabel, SafetyVerdict,
+};
 use kukuri_cn_safety_runtime::{
     MemorySafetyArtifactStore, SafetyArtifactStore, VerdictPersistMeta,
 };
@@ -137,6 +140,69 @@ impl MemoryIndex {
                 text: text.to_string(),
                 created_at: 1_700_000_000,
                 source_replica_id: format!("topic::{scope_id}"),
+                content_advisories: Vec::new(),
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// ラベル付き allow（content advisory 付き）の entry を seed する（ADR 0028 §8.1）。
+    async fn seed_labeled_allow(
+        &self,
+        scope_id: &str,
+        object_id: &str,
+        author_pubkey: &str,
+        text: &str,
+        advisories: Vec<ContentAdvisory>,
+    ) -> Result<()> {
+        let mut labeled = verdict(SafetyAction::Allow, false);
+        labeled.reason_code = ReasonCode::GeneralModeration;
+        labeled.advisory_labels = advisories
+            .iter()
+            .filter(|advisory| advisory.subject_kind == AdvisorySubjectKind::PostId)
+            .map(|advisory| {
+                let mut label = SafetyLabel::new(advisory.category);
+                if let Some(confidence) = advisory.confidence {
+                    label = label.with_confidence(confidence);
+                }
+                label
+            })
+            .collect();
+        let verdict_id = self
+            .store
+            .persist_verdict(
+                SubjectKind::Post,
+                object_id,
+                &labeled,
+                &VerdictPersistMeta {
+                    advisories,
+                    ..VerdictPersistMeta::default()
+                },
+            )
+            .await?;
+        self.entries
+            .upsert_entry(&NewIndexEntry {
+                scope_kind: IndexScopeKind::PublicTopic,
+                scope_id: scope_id.to_string(),
+                object_id: object_id.to_string(),
+                author_pubkey: author_pubkey.to_string(),
+                created_at: 1_700_000_000,
+                source_replica_id: format!("topic::{scope_id}"),
+                verdict_id,
+                verdict_action: "allow".to_string(),
+                critical: false,
+            })
+            .await?;
+        self.projection
+            .upsert_entry(&IndexedEntry {
+                scope_kind: IndexScopeKind::PublicTopic,
+                scope_id: scope_id.to_string(),
+                object_id: object_id.to_string(),
+                author_pubkey: author_pubkey.to_string(),
+                text: text.to_string(),
+                created_at: 1_700_000_000,
+                source_replica_id: format!("topic::{scope_id}"),
+                content_advisories: Vec::new(),
             })
             .await?;
         Ok(())
@@ -359,6 +425,7 @@ async fn search_discovery_recommendation_return_gated_allow_entries_only() -> Re
             text: "tokio ghost residue".to_string(),
             created_at: 1_700_000_001,
             source_replica_id: "topic::rust".to_string(),
+            content_advisories: Vec::new(),
         })
         .await?;
 
@@ -692,6 +759,122 @@ async fn private_channel_reads_are_limited_to_members_with_secret_proof() -> Res
         let body = response.json::<serde_json::Value>().await?;
         assert_eq!(entry_ids(&body), vec!["post-private".to_string()], "{path}");
     }
+
+    server.shutdown().await
+}
+
+/// ADR 0025 §7.2 / ADR 0028 §8.6 contract: `content_advisories_are_separate_from_signed_content_labels`。
+///
+/// index query の応答は最新 verdict 由来の `content_advisories` を別欄で返し、署名済み
+/// `content_labels` を生成・改変しない（応答に `content_labels` は現れない）。advisory の無い
+/// entry は空配列。
+#[tokio::test]
+async fn content_advisories_are_separate_from_signed_content_labels() -> Result<()> {
+    let Some(admin_database_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-user-api index query test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let index = memory_index();
+    let author = generate_keys().public_key_hex();
+    index
+        .seed_allow("rust", "post-plain", author.as_str(), "tokio plain")
+        .await?;
+    let advisories = vec![
+        ContentAdvisory {
+            issuer_node_id: "issuer-node".to_string(),
+            subject_kind: AdvisorySubjectKind::PostId,
+            subject_id: "post-labeled".to_string(),
+            category: SafetyCategory::Nsfw,
+            label: "adult".to_string(),
+            confidence: Some(84),
+            signal_id: "signal-text".to_string(),
+            basis: Basis::ClassifierScore,
+        },
+        ContentAdvisory {
+            issuer_node_id: "issuer-node".to_string(),
+            subject_kind: AdvisorySubjectKind::BlobCid,
+            subject_id: "blob-1".to_string(),
+            category: SafetyCategory::Objectionable,
+            label: "sensitive".to_string(),
+            confidence: Some(80),
+            signal_id: "signal-blob".to_string(),
+            basis: Basis::ClassifierScore,
+        },
+    ];
+    index
+        .seed_labeled_allow(
+            "rust",
+            "post-labeled",
+            author.as_str(),
+            "tokio labeled",
+            advisories.clone(),
+        )
+        .await?;
+
+    let server = TestServer::spawn(
+        admin_database_url.as_str(),
+        "cn_index_query_advisory",
+        Some(index.query.clone()),
+    )
+    .await?;
+    let client = Client::new();
+    let keys = generate_keys();
+    let token = authenticate_and_consent(&client, &server.base_url, &keys).await?;
+
+    for path in [
+        "/v1/index/search?scope_kind=public_topic&scope_id=rust&q=tokio",
+        "/v1/index/discovery?scope_kind=public_topic&scope_id=rust",
+        "/v1/index/recommendations",
+    ] {
+        let response = client
+            .get(format!("{}{path}", server.base_url))
+            .bearer_auth(token.as_str())
+            .send()
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let body = response.json::<serde_json::Value>().await?;
+        let entries = body["entries"].as_array().expect("entries");
+        assert_eq!(entries.len(), 2, "{path}");
+        for entry in entries {
+            assert!(
+                entry.get("content_labels").is_none(),
+                "署名済み content_labels は index が生成しない: {path}"
+            );
+            let object_id = entry["object_id"].as_str().unwrap();
+            let got: Vec<ContentAdvisory> =
+                serde_json::from_value(entry["content_advisories"].clone())?;
+            match object_id {
+                "post-labeled" => assert_eq!(got, advisories, "{path}"),
+                "post-plain" => assert!(got.is_empty(), "{path}"),
+                other => panic!("unexpected entry {other}"),
+            }
+        }
+        let labeled = entries
+            .iter()
+            .find(|entry| entry["object_id"] == "post-labeled")
+            .unwrap();
+        assert_eq!(labeled["content_advisories"][0]["label"], "adult");
+        assert_eq!(
+            labeled["content_advisories"][0]["basis"],
+            "classifier_score"
+        );
+        assert_eq!(labeled["content_advisories"][1]["subject_kind"], "blob_cid");
+        assert_eq!(labeled["content_advisories"][1]["label"], "sensitive");
+    }
+
+    // verdict が exclude へ変われば advisory 付き entry ごと落ちる（INVAR-1）。
+    index.flip_to_excluded("post-labeled").await?;
+    let body = client
+        .get(format!(
+            "{}/v1/index/search?scope_kind=public_topic&scope_id=rust&q=tokio",
+            server.base_url
+        ))
+        .bearer_auth(token.as_str())
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+    assert_eq!(entry_ids(&body), vec!["post-plain".to_string()]);
 
     server.shutdown().await
 }

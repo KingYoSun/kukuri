@@ -6,6 +6,8 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub use kukuri_cn_safety::{AdvisorySubjectKind, ContentAdvisory};
+
 /// Scope kinds supported by the Community Node index.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -184,6 +186,9 @@ pub struct IndexQueryParams {
 /// One projected index result.
 ///
 /// `text` may contain derived tags and is not canonical post content.
+/// `content_advisories` は issuer node の node-local な content advisory（ADR 0028 §8.6 /
+/// ADR 0025 §7.2）。署名済み `content_labels` とは別欄で、canonical でも署名対象でもない。
+/// client は署名済み投稿を解決した後も第 2 のラベル源として保持する。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct IndexEntryView {
@@ -193,6 +198,8 @@ pub struct IndexEntryView {
     pub author_pubkey: String,
     pub text: String,
     pub created_at: i64,
+    #[serde(default)]
+    pub content_advisories: Vec<ContentAdvisory>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

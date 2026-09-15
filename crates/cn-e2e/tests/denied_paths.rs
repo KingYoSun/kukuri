@@ -61,6 +61,7 @@ async fn disallowed_content_never_surfaces_and_verdict_flip_hides_entries() -> R
             text: "tokio ghost residue".to_string(),
             created_at: 1_700_000_000,
             source_replica_id: format!("topic::{}", stack.topic_id),
+            content_advisories: Vec::new(),
         })
         .await?;
 

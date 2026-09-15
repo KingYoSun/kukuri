@@ -244,12 +244,13 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     };
+    // 相対成分の代表は spam（ADR 0026 §7 以降、nsfw / objectionable は advisory-only で寄与 0）。
     let relative_signal = persist_risk_signal(
         &stack.pool,
         "e2e-issuer-node",
         &user_risk_signal(
             pubkey_b.as_str(),
-            SafetyCategory::Nsfw,
+            SafetyCategory::Spam,
             Severity::High,
             Basis::ClassifierScore,
             Visibility::Local,

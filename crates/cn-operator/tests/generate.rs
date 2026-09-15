@@ -564,10 +564,25 @@ fn moderation_policy_describes_scan_flow_and_appeals() {
         "視覚言語モデル",
         "Match Data",
         "申し立て",
+        // #1054 / ADR 0028 §8: nsfw / objectionable は content advisory 付きで索引、trust 寄与 0。
+        "content advisory",
+        "label（content advisory 付きで索引）",
+        "寄与 0",
     ] {
         assert!(policy.contains(needle), "missing: {needle}");
     }
     assert!(!policy.contains("未提供"));
+
+    // operator が exclude に厳格化すると、文書もその扱いを表示する。
+    let strict = config_with_safety_providers(
+        "      hosting: self_host\n  moderation:\n    general_action: exclude\n",
+    );
+    let resolved = load_and_validate(&strict).unwrap();
+    let policy = doc(&generate_all(&resolved), "moderation-policy.md");
+    assert!(
+        policy.contains("exclude（除外。索引に入れない）"),
+        "{policy}"
+    );
 }
 
 #[test]

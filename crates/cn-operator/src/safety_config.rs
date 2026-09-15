@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub use kukuri_cn_safety::GeneralAction;
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SafetyConfig {
@@ -38,7 +40,8 @@ impl Default for SafetyConfig {
 ///
 /// runtime へは env（`COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD` /
 /// `COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY` /
-/// `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW`）として注入される宣言。
+/// `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW` / `COMMUNITY_NODE_SAFETY_GENERAL_ACTION`）として
+/// 注入される宣言。
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SafetyModerationConfig {
@@ -52,6 +55,14 @@ pub struct SafetyModerationConfig {
     /// operator レビュー（検知メタデータの直接編集）を有効化するか（既定 true。ADR 0028 §2.3）。
     #[serde(default = "default_operator_review")]
     pub operator_review: bool,
+    /// nsfw / objectionable の suspected に対する action（ADR 0028 §8.7）。
+    ///
+    /// `label`（既定。content advisory 付きで index）/ `hold` / `exclude`。ラベル無しの `allow` は
+    /// 値域に無く、parse で拒否される（`general_action_operator_tunable_stricter_only`）。
+    /// 未指定は法務 snapshot（`policy_snapshot_revision`）の canonical 入力に現れないため、
+    /// 既定のまま運用する限り再同意は発生しない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub general_action: Option<GeneralAction>,
 }
 
 impl Default for SafetyModerationConfig {
@@ -60,6 +71,7 @@ impl Default for SafetyModerationConfig {
             suspected_threshold: None,
             suspected_signal_visibility: None,
             operator_review: default_operator_review(),
+            general_action: None,
         }
     }
 }
@@ -142,10 +154,12 @@ pub struct SafetyProviderEntry {
     pub required: bool,
     #[serde(default)]
     pub credential_secret_id: Option<String>,
-    /// high-confidence 検知時の action 宣言。
+    /// high-confidence 検知時の action 宣言（**deprecated**。#1051 / ADR 0028 §8.7）。
     ///
-    /// 注意: 現段階（readiness + config schema）では宣言として受理・検証するのみで、
-    /// readiness 判定には使用しない。実際の効果は後続の runtime scan orchestration で適用する。
+    /// 宣言のみで runtime に実効性が無かったため、受理はするが読み捨てて警告する
+    /// （`ResolvedConfig::warnings`）。nsfw / objectionable の扱いは
+    /// `safety.moderation.general_action` で指定する。法務 snapshot の canonical 入力には
+    /// 従来どおり含めたままにし、既存 config の snapshot を変えない。
     #[serde(default)]
     pub on_high_confidence: Option<SafetyErrorAction>,
     /// プロバイダ基盤の区分（外部送信表示の生成に使う。#617）。
@@ -190,6 +204,35 @@ impl SafetyErrorAction {
             SafetyErrorAction::Exclude => "exclude",
         }
     }
+}
+
+/// 起動を止めない注意事項（deprecated key の使用など）。`validate-config` が表示する。
+pub fn safety_config_warnings(config: &SafetyConfig) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (field, entry) in [
+        (
+            "safety.providers.known_csam",
+            config.providers.known_csam.as_ref(),
+        ),
+        (
+            "safety.providers.general",
+            config.providers.general.as_ref(),
+        ),
+        (
+            "safety.providers.unknown_csam",
+            config.providers.unknown_csam.as_ref(),
+        ),
+    ] {
+        if let Some(action) = entry.and_then(|entry| entry.on_high_confidence) {
+            warnings.push(format!(
+                "{field}.on_high_confidence（{}）は deprecated です。runtime には反映されず読み捨てます。\
+                 nsfw / objectionable の扱いは safety.moderation.general_action（label / hold / exclude）で\
+                 指定してください（ADR 0028 §8.7）",
+                action.key()
+            ));
+        }
+    }
+    warnings
 }
 
 pub fn validate_safety_config(config: &SafetyConfig) -> Result<()> {

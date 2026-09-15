@@ -139,6 +139,7 @@ async fn index_query(
             author_pubkey,
             text: format!("{operation} preview\nderived-tag"),
             created_at: 42,
+            content_advisories: Vec::new(),
         }],
     })
     .into_response()

@@ -369,6 +369,7 @@ mod tests {
             issuer_node_id: Some("issuer-node-1".to_string()),
             suspected_threshold: None,
             suspected_signal_visibility: None,
+            general_action: None,
         }
     }
 

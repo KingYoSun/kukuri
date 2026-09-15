@@ -2,8 +2,8 @@ use std::fs;
 use std::process::Command;
 
 use kukuri_cn_operator::{
-    READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessStatus, SafetyErrorAction,
-    apply_runtime_checks, evaluate_public_node_readiness, load_and_validate,
+    GeneralAction, READINESS_CHECK_IDS, RUNTIME_CHECK_IDS, ReadinessCheck, ReadinessStatus,
+    SafetyErrorAction, apply_runtime_checks, evaluate_public_node_readiness, load_and_validate,
 };
 
 fn config_with_safety(safety: &str) -> String {
@@ -233,6 +233,62 @@ fn safety_moderation_section_parses_and_validates_threshold() {
         err.to_string().contains("suspected_threshold"),
         "unexpected error: {err}"
     );
+}
+
+#[test]
+fn general_action_operator_tunable_stricter_only() {
+    // ADR 0028 §8.7 / 契約 `general_action_operator_tunable_stricter_only`（operator config 面）:
+    // label（既定）/ hold / exclude を受理し、ラベル無しの allow と未知値は validate-config で拒否する。
+    let resolved = load_and_validate(&config_with_safety(complete_safety())).unwrap();
+    let moderation = &resolved.raw.safety.as_ref().unwrap().moderation;
+    assert_eq!(moderation.general_action, None, "未指定は既定（label）");
+    assert!(resolved.warnings().is_empty());
+
+    for (raw, expected) in [
+        ("label", GeneralAction::Label),
+        ("hold", GeneralAction::Hold),
+        ("exclude", GeneralAction::Exclude),
+    ] {
+        let safety = format!(
+            "{}  moderation:\n    general_action: {raw}\n",
+            complete_safety()
+        );
+        let resolved = load_and_validate(&config_with_safety(&safety)).unwrap();
+        assert_eq!(
+            resolved
+                .raw
+                .safety
+                .as_ref()
+                .unwrap()
+                .moderation
+                .general_action,
+            Some(expected),
+            "{raw}"
+        );
+    }
+
+    for raw in ["allow", "quarantine", "labelled"] {
+        let safety = format!(
+            "{}  moderation:\n    general_action: {raw}\n",
+            complete_safety()
+        );
+        let err = load_and_validate(&config_with_safety(&safety)).unwrap_err();
+        assert!(
+            err.to_string().contains("general_action"),
+            "{raw}: unexpected error: {err}"
+        );
+    }
+
+    // 旧 provider entry の on_high_confidence は受理するが警告になる（起動は止めない）。
+    let deprecated = format!(
+        "{}    unknown_csam:\n      provider: placeholder-unknown-csam\n      required: false\n      on_high_confidence: quarantine\n",
+        complete_safety()
+    );
+    let resolved = load_and_validate(&config_with_safety(&deprecated)).unwrap();
+    let warnings = resolved.warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("on_high_confidence"));
+    assert!(warnings[0].contains("general_action"));
 }
 
 #[test]
@@ -530,6 +586,7 @@ fn safety_moderation_env_wiring_reaches_compose_and_terraform() {
         "COMMUNITY_NODE_SAFETY_SUSPECTED_THRESHOLD",
         "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY",
         "COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW",
+        "COMMUNITY_NODE_SAFETY_GENERAL_ACTION",
     ] {
         assert!(
             compose.contains(env_name),
