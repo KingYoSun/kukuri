@@ -72,6 +72,7 @@ impl StoredScanVerdict {
             verdict: SafetyVerdict {
                 action: self.action,
                 labels: Vec::new(),
+                advisory_labels: Vec::new(),
                 critical: self.critical,
                 reason_code: self.reason_code,
                 confidence: self.confidence,

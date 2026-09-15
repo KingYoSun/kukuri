@@ -39,6 +39,7 @@ fn verdict(action: SafetyAction, critical: bool, reason_code: ReasonCode) -> Saf
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical,
         reason_code,
         confidence: None,

@@ -7,7 +7,9 @@
 
 use kukuri_cn_safety::provider::{ProviderScanResult, ScanOutcome};
 use kukuri_cn_safety::verdict::{SafetyCategory, SafetyLabel};
-use kukuri_cn_safety::{SafetyPolicy, SafetyProviderCapability, derived_tags_for_index, route};
+use kukuri_cn_safety::{
+    GeneralAction, SafetyPolicy, SafetyProviderCapability, derived_tags_for_index, route,
+};
 
 const SCANNED_AT: &str = "2026-07-30T00:00:00Z";
 
@@ -43,12 +45,31 @@ fn derived_tags_only_for_allow_media() {
         vec!["sunset".to_string(), "beach".to_string()]
     );
 
-    // 非 allow（general suspected → exclude）→ タグは空。
+    // 非 allow（general suspected → exclude。spam）→ タグは空。
     let mut flagged = tagged_general_result(&["sunset", "beach"]);
     flagged.score = Some(95);
-    flagged.labels = vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(95)];
+    flagged.labels = vec![SafetyLabel::new(SafetyCategory::Spam).with_confidence(95)];
     let outcomes = [known_csam_no_match(), flagged];
     let verdict = route(&outcomes, &policy, SCANNED_AT);
+    assert!(!verdict.is_indexable());
+    assert!(derived_tags_for_index(&verdict, &outcomes).is_empty());
+
+    // ラベル付き allow（nsfw suspected → label。ADR 0028 §8.8）→ media もタグ化する。
+    let mut labeled = tagged_general_result(&["sunset", "beach"]);
+    labeled.score = Some(95);
+    labeled.labels = vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(95)];
+    let outcomes = [known_csam_no_match(), labeled];
+    let verdict = route(&outcomes, &policy, SCANNED_AT);
+    assert!(verdict.is_labeled_allow());
+    assert_eq!(
+        derived_tags_for_index(&verdict, &outcomes),
+        vec!["sunset".to_string(), "beach".to_string()]
+    );
+
+    // operator が general_action = exclude に厳格化すれば従来どおりタグは空。
+    let mut strict = SafetyPolicy::public_node_default();
+    strict.general_action = GeneralAction::Exclude;
+    let verdict = route(&outcomes, &strict, SCANNED_AT);
     assert!(!verdict.is_indexable());
     assert!(derived_tags_for_index(&verdict, &outcomes).is_empty());
 

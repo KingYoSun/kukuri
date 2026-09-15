@@ -12,7 +12,7 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction};
 use kukuri_cn_safety::{
-    MockSigner, RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyPolicy,
+    GeneralAction, MockSigner, RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyPolicy,
     SafetyProviderCapability, SafetyVerdict,
 };
 use kukuri_cn_safety_runtime::{
@@ -165,6 +165,7 @@ fn verdict(action: SafetyAction, reason_code: ReasonCode) -> SafetyVerdict {
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: false,
         reason_code,
         confidence: None,
@@ -486,7 +487,7 @@ async fn identical_rescan_emits_no_new_event_but_verdict_change_does() {
     // 同じ鍵（nsfw / classifier_score）のまま action が変わる（policy で exclude → hold）
     // → signal は同じ行、event は新規発行。
     let mut hold_policy = general_policy();
-    hold_policy.on_high_confidence_nsfw = SafetyAction::Hold;
+    hold_policy.general_action = GeneralAction::Hold;
     let restarted = service_with(provider.clone(), hold_policy, store.clone());
     let third = restarted
         .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-2")

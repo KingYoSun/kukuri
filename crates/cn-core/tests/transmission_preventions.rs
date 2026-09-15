@@ -25,6 +25,7 @@ fn allow_verdict() -> SafetyVerdict {
     SafetyVerdict {
         action: SafetyAction::Allow,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: false,
         reason_code: ReasonCode::NoKnownMatch,
         confidence: None,

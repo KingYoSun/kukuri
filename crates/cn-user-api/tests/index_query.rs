@@ -64,6 +64,7 @@ fn verdict(action: SafetyAction, critical: bool) -> SafetyVerdict {
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical,
         reason_code: if action == SafetyAction::Allow {
             ReasonCode::NoKnownMatch

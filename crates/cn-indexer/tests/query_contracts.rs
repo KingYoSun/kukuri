@@ -120,6 +120,7 @@ fn exclude_critical_verdict() -> SafetyVerdict {
     SafetyVerdict {
         action: SafetyAction::Exclude,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: true,
         reason_code: ReasonCode::CsamConfirmed,
         confidence: None,
