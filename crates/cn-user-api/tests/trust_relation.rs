@@ -279,7 +279,9 @@ async fn trust_read_returns_components_with_basis_and_ignores_reports() -> Resul
     let token = authenticate_and_consent(&client, server.base_url.as_str(), &viewer_keys).await?;
     let target = generate_keys().public_key_hex();
 
-    // CSAM（critical safety, known-hash confirmed）→ 絶対成分。nsfw → 相対成分。
+    // CSAM（critical safety, known-hash confirmed）→ 絶対成分。spam → 相対成分
+    // （nsfw / objectionable は ADR 0026 §7 で advisory-only = 寄与 0。
+    //   `trust_read_lists_advisory_only_basis_with_zero_contribution` を参照）。
     persist_risk_signal(
         &pool,
         "issuer-node",
@@ -297,7 +299,7 @@ async fn trust_read_returns_components_with_basis_and_ignores_reports() -> Resul
         "issuer-node",
         &risk_signal(
             target.as_str(),
-            SafetyCategory::Nsfw,
+            SafetyCategory::Spam,
             Severity::High,
             Basis::ClassifierScore,
             Visibility::Local,
