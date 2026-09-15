@@ -11,7 +11,8 @@ use sqlx::PgPool;
 
 use kukuri_cn_safety::provider::{MediaFetcher, SubjectKind};
 use kukuri_cn_safety::{
-    RiskSignalTarget, SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
+    ContentAdvisory, RiskSignalTarget, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
+    SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
     PersistedSignal, SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
@@ -22,7 +23,7 @@ use crate::safety_events::{
     attribute_risk_signal_subject_author, persist_risk_signal_deduplicated,
     persist_signed_moderation_event,
 };
-use crate::scan_verdicts::{get_scan_verdict, upsert_scan_verdict};
+use crate::scan_verdicts::{get_scan_verdict, update_scan_verdict_advisories, upsert_scan_verdict};
 
 #[derive(Clone, Debug)]
 pub struct PgSafetyArtifactStore {
@@ -77,6 +78,15 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
         get_scan_verdict(&self.pool, subject_kind, subject_id)
             .await
             .map(|stored| stored.map(|stored| stored.to_record()))
+    }
+
+    async fn persist_advisories(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+        advisories: &[ContentAdvisory],
+    ) -> Result<()> {
+        update_scan_verdict_advisories(&self.pool, subject_kind, subject_id, advisories).await
     }
 
     async fn attribute_subject_author(

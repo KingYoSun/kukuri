@@ -41,7 +41,14 @@ pub fn confidence_factor(confidence: Option<u8>) -> f64 {
 }
 
 /// risk signal 1 件の生寄与（decay / relation 重み前）。負の evidence なので常に `<= 0`。
+///
+/// advisory-only category（nsfw / objectionable。ADR 0026 §7）は評価計算に入れず常に `0.0`。
+/// basis には残るため利用者は判定・appeal 状態を確認できるが、`relative` / `trust` は動かない
+/// （`general_advisory_contributes_zero_to_trust`）。
 pub fn signal_contribution(input: &TrustRiskInput) -> f64 {
+    if input.category.is_advisory_only() {
+        return 0.0;
+    }
     -(severity_magnitude(input.severity) * confidence_factor(input.confidence))
 }
 

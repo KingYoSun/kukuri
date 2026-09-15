@@ -80,6 +80,7 @@ fn render_appeal_action_forms(review: &AppealReview, csrf_token: &str) -> String
             "cse",
             "grooming",
             "nsfw",
+            "objectionable",
             "spam",
             "malware",
             "phishing",

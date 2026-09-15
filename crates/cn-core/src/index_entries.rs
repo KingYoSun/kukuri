@@ -23,7 +23,20 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use crate::index_scope::IndexScopeKind;
+use kukuri_cn_safety::ContentAdvisory;
 use kukuri_cn_safety_runtime::MemorySafetyArtifactStore;
+
+/// query 境界の突合結果 1 件（surfacing してよい entry と、最新 verdict 由来の content advisory）。
+///
+/// advisory は `cn_safety.scan_verdicts.advisory_labels`（post 行 = 本文 + 参照 blob の和集合）から
+/// 導出し、index entry 自体には持たせない（ADR 0025 §7.1
+/// `index_entry_advisories_derive_from_latest_verdict`）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SurfaceableEntry {
+    pub scope_id: String,
+    pub object_id: String,
+    pub content_advisories: Vec<ContentAdvisory>,
+}
 
 /// 真実源に upsert する index entry（`cn-indexer` の投影 entry と同じ内容 + verdict 参照）。
 ///
@@ -188,14 +201,14 @@ pub async fn filter_surfaceable_objects(
     pool: &PgPool,
     scope_kind: IndexScopeKind,
     candidates: &[(String, String)],
-) -> Result<Vec<(String, String)>> {
+) -> Result<Vec<SurfaceableEntry>> {
     if candidates.is_empty() {
         return Ok(Vec::new());
     }
     let scope_ids: Vec<&str> = candidates.iter().map(|(s, _)| s.as_str()).collect();
     let object_ids: Vec<&str> = candidates.iter().map(|(_, o)| o.as_str()).collect();
     let rows = sqlx::query(
-        "SELECT e.scope_id, e.object_id
+        "SELECT e.scope_id, e.object_id, v.advisory_labels
          FROM UNNEST($2::text[], $3::text[]) AS candidate (scope_id, object_id)
          JOIN cn_index.index_entries e
            ON e.scope_kind = $1
@@ -220,10 +233,12 @@ pub async fn filter_surfaceable_objects(
     .await?;
     rows.iter()
         .map(|row| {
-            Ok((
-                row.try_get::<String, _>("scope_id")?,
-                row.try_get::<String, _>("object_id")?,
-            ))
+            let advisory_labels: serde_json::Value = row.try_get("advisory_labels")?;
+            Ok(SurfaceableEntry {
+                scope_id: row.try_get::<String, _>("scope_id")?,
+                object_id: row.try_get::<String, _>("object_id")?,
+                content_advisories: serde_json::from_value(advisory_labels)?,
+            })
         })
         .collect()
 }
@@ -251,12 +266,13 @@ pub trait IndexEntryStore: Send + Sync {
     async fn remove_scope(&self, scope_kind: IndexScopeKind, scope_id: &str) -> Result<()>;
 
     /// 投影 hit 候補 `(scope_id, object_id)` のうち、いま surfacing してよいものだけを返す
-    /// （真実源に存在し、最新 verdict が `allow` かつ非 critical）。
+    /// （真実源に存在し、最新 verdict が `allow` かつ非 critical）。最新 verdict 由来の
+    /// content advisory を同伴する（ADR 0025 §7.1）。
     async fn filter_surfaceable(
         &self,
         scope_kind: IndexScopeKind,
         candidates: &[(String, String)],
-    ) -> Result<Vec<(String, String)>>;
+    ) -> Result<Vec<SurfaceableEntry>>;
 
     /// 真実源にいま entry が存在する scope の一覧（#613 T2）。
     ///
@@ -303,7 +319,7 @@ impl IndexEntryStore for PgIndexEntryStore {
         &self,
         scope_kind: IndexScopeKind,
         candidates: &[(String, String)],
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<SurfaceableEntry>> {
         filter_surfaceable_objects(&self.pool, scope_kind, candidates).await
     }
 
@@ -467,21 +483,24 @@ impl IndexEntryStore for MemoryIndexEntryStore {
         &self,
         scope_kind: IndexScopeKind,
         candidates: &[(String, String)],
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<SurfaceableEntry>> {
         let entries = self.entries.lock().expect("entries mutex poisoned");
         Ok(candidates
             .iter()
-            .filter(|(scope_id, object_id)| {
-                let Some(entry) = entries.get(&(scope_kind, scope_id.clone(), object_id.clone()))
-                else {
-                    return false;
-                };
+            .filter_map(|(scope_id, object_id)| {
+                let entry = entries.get(&(scope_kind, scope_id.clone(), object_id.clone()))?;
                 // Postgres 実装の join（verdict_id → 最新 verdict）と同じセマンティクス。
-                self.verdicts
-                    .verdict_by_id(entry.verdict_id.as_str())
-                    .is_some_and(|verdict| verdict.is_indexable() && !verdict.critical)
+                let stored = self
+                    .verdicts
+                    .stored_verdict_by_id(entry.verdict_id.as_str())?;
+                (stored.verdict.is_indexable() && !stored.verdict.critical).then(|| {
+                    SurfaceableEntry {
+                        scope_id: scope_id.clone(),
+                        object_id: object_id.clone(),
+                        content_advisories: stored.advisories.clone(),
+                    }
+                })
             })
-            .cloned()
             .collect())
     }
 

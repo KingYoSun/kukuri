@@ -9,7 +9,7 @@ use kukuri_cn_safety::{
 };
 use kukuri_cn_trust::{
     TrustComponentKind, TrustParams, TrustRiskInput, TrustRiskInputs, UniformRelationWeight,
-    build_trust_read, compose_trust, trust_component_for,
+    build_trust_read, compose_trust, signal_contribution, trust_component_for,
 };
 
 #[allow(clippy::unwrap_used)] // test fixture helper
@@ -55,15 +55,36 @@ fn csam_input(id: &str, persisted_at: DateTime<Utc>) -> TrustRiskInput {
     )
 }
 
-fn nsfw_input(id: &str, persisted_at: DateTime<Utc>) -> TrustRiskInput {
+/// 相対成分の代表入力（spam。ADR 0026 §7 以降、nsfw / objectionable は寄与 0 なので相対成分の
+/// 契約は spam / malware / phishing で固定する）。
+fn spam_input(id: &str, persisted_at: DateTime<Utc>) -> TrustRiskInput {
     input(
         id,
         TrustComponentKind::Relative,
-        SafetyCategory::Nsfw,
+        SafetyCategory::Spam,
         Severity::High,
         Some(100),
         persisted_at,
     )
+}
+
+/// advisory-only（nsfw / objectionable）の入力。ラベル付き allow の signal は severity Low /
+/// basis ClassifierScore。
+fn advisory_input(
+    id: &str,
+    category: SafetyCategory,
+    persisted_at: DateTime<Utc>,
+) -> TrustRiskInput {
+    let mut input = input(
+        id,
+        TrustComponentKind::Relative,
+        category,
+        Severity::Low,
+        Some(84),
+        persisted_at,
+    );
+    input.basis = Basis::ClassifierScore;
+    input
 }
 
 // --- 合成式（§6.2） ---
@@ -137,7 +158,7 @@ fn trust_composition_weights_are_operator_tunable() {
 fn trust_is_not_single_absolute_scalar() {
     let inputs = TrustRiskInputs {
         absolute: vec![csam_input("sig-abs", now())],
-        relative: vec![nsfw_input("sig-rel", now())],
+        relative: vec![spam_input("sig-rel", now())],
     };
     let view = build_trust_read(
         "pubkey-1",
@@ -156,7 +177,7 @@ fn trust_is_not_single_absolute_scalar() {
 
 #[test]
 fn trust_separates_absolute_and_relative_indicators() {
-    // CSAM（critical）は絶対成分のみ、nsfw は相対成分のみに効く。
+    // CSAM（critical）は絶対成分のみ、spam は相対成分のみに効く。
     let absolute_only = TrustRiskInputs {
         absolute: vec![csam_input("sig-abs", now())],
         relative: vec![],
@@ -173,7 +194,7 @@ fn trust_separates_absolute_and_relative_indicators() {
 
     let relative_only = TrustRiskInputs {
         absolute: vec![],
-        relative: vec![nsfw_input("sig-rel", now())],
+        relative: vec![spam_input("sig-rel", now())],
     };
     let view = build_trust_read(
         "pubkey-1",
@@ -197,12 +218,17 @@ fn trust_reflects_risk_signals_split_by_category() {
         assert_eq!(trust_component_for(category), TrustComponentKind::Absolute);
     }
     for category in [
-        SafetyCategory::Nsfw,
         SafetyCategory::Spam,
         SafetyCategory::Malware,
         SafetyCategory::Phishing,
     ] {
         assert_eq!(trust_component_for(category), TrustComponentKind::Relative);
+        assert!(!category.is_advisory_only());
+    }
+    // 3 分岐目（ADR 0026 §7.1）: nsfw / objectionable は wire 上 Relative のまま advisory-only。
+    for category in [SafetyCategory::Nsfw, SafetyCategory::Objectionable] {
+        assert_eq!(trust_component_for(category), TrustComponentKind::Relative);
+        assert!(category.is_advisory_only());
     }
 }
 
@@ -227,7 +253,7 @@ fn trust_absolute_indicators_not_relation_weighted() {
 fn trust_relative_indicators_are_relation_weighted() {
     let inputs = TrustRiskInputs {
         absolute: vec![],
-        relative: vec![nsfw_input("sig-rel", now())],
+        relative: vec![spam_input("sig-rel", now())],
     };
     let params = TrustParams::default();
     let full = build_trust_read("pk", &inputs, now(), &params, &UniformRelationWeight(1.0));
@@ -246,7 +272,7 @@ fn trust_resists_mass_report_bombing() {
     //  ならない — raw count が構造的に入り得ないことが第一の防壁。本テストは第二の防壁 =
     //  相対成分の relation 重み付けを固定する。）
     let bombed: Vec<TrustRiskInput> = (0..100)
-        .map(|i| nsfw_input(&format!("bomb-{i}"), now()))
+        .map(|i| spam_input(&format!("bomb-{i}"), now()))
         .collect();
     let inputs = TrustRiskInputs {
         absolute: vec![],
@@ -260,7 +286,7 @@ fn trust_resists_mass_report_bombing() {
         "pk",
         &TrustRiskInputs {
             absolute: vec![],
-            relative: vec![nsfw_input("single", now())],
+            relative: vec![spam_input("single", now())],
         },
         now(),
         &params,
@@ -314,7 +340,7 @@ fn trust_relative_component_decays_over_time() {
         "pk",
         &TrustRiskInputs {
             absolute: vec![],
-            relative: vec![nsfw_input("sig", now())],
+            relative: vec![spam_input("sig", now())],
         },
         now(),
         &params,
@@ -324,7 +350,7 @@ fn trust_relative_component_decays_over_time() {
         "pk",
         &TrustRiskInputs {
             absolute: vec![],
-            relative: vec![nsfw_input("sig", now() - Duration::days(30))],
+            relative: vec![spam_input("sig", now() - Duration::days(30))],
         },
         now(),
         &params,
@@ -345,7 +371,7 @@ fn trust_relative_component_decays_over_time() {
         "pk",
         &TrustRiskInputs {
             absolute: vec![],
-            relative: vec![nsfw_input("sig", now() - Duration::days(30))],
+            relative: vec![spam_input("sig", now() - Duration::days(30))],
         },
         now(),
         &short,
@@ -405,7 +431,7 @@ fn trust_appeal_accepted_excludes_contribution() {
 fn trust_read_is_explainable_with_basis() {
     let inputs = TrustRiskInputs {
         absolute: vec![csam_input("sig-abs", now())],
-        relative: vec![nsfw_input("sig-rel", now() - Duration::days(30))],
+        relative: vec![spam_input("sig-rel", now() - Duration::days(30))],
     };
     let view = build_trust_read(
         "pubkey-1",
@@ -463,7 +489,7 @@ fn csam_absolute_component_is_immune_to_relation_and_mass_signals() {
     // 大量の相対シグナルを足しても、relation 重みを変えても、絶対成分は同じ。
     let mut with_noise = base.clone();
     with_noise.relative = (0..50)
-        .map(|i| nsfw_input(&format!("noise-{i}"), now()))
+        .map(|i| spam_input(&format!("noise-{i}"), now()))
         .collect();
     let view_noisy = build_trust_read(
         "pk",

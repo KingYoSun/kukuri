@@ -9,13 +9,15 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, TestDatabase, connect_postgres,
-    filter_surfaceable_objects, get_index_entry, get_scan_verdict, initialize_database,
-    remove_index_entry, remove_index_scope, upsert_index_entry, upsert_scan_verdict,
+    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, SurfaceableEntry, TestDatabase,
+    connect_postgres, filter_surfaceable_objects, get_index_entry, get_scan_verdict,
+    initialize_database, remove_index_entry, remove_index_scope, update_scan_verdict_advisories,
+    upsert_index_entry, upsert_scan_verdict,
 };
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    MockSafetyProvider, ModerationEventSigner, ReasonCode, SafetyAction, SafetyVerdict,
+    AdvisorySubjectKind, Basis, ContentAdvisory, MockSafetyProvider, ModerationEventSigner,
+    ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict,
 };
 use kukuri_cn_safety_runtime::VerdictPersistMeta;
 use kukuri_cn_safety_runtime::{
@@ -319,7 +321,11 @@ async fn filter_surfaceable_objects_excludes_non_allow_and_unknown() -> Result<(
             filter_surfaceable_objects(&pool, IndexScopeKind::PublicTopic, &candidates).await?;
         assert_eq!(
             surfaceable,
-            vec![("rust".to_string(), "post-kept".to_string())]
+            vec![SurfaceableEntry {
+                scope_id: "rust".to_string(),
+                object_id: "post-kept".to_string(),
+                content_advisories: Vec::new(),
+            }]
         );
 
         // 空の候補は空を返す（クエリを発行しない）。
@@ -417,6 +423,7 @@ async fn scan_verdict_round_trips_fingerprints_and_derived_tags() -> Result<()> 
             source_fingerprint: Some("state-hash-1".to_string()),
             scan_config_fingerprint: Some("config-1".to_string()),
             derived_tags: vec!["beach".to_string(), "sunset".to_string()],
+            advisories: Vec::new(),
         };
         let stored = upsert_scan_verdict(
             &pool,

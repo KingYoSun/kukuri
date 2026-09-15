@@ -19,7 +19,9 @@ use sqlx::postgres::{PgPool, PgRow};
 use uuid::Uuid;
 
 use kukuri_cn_safety::provider::SubjectKind;
-use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety::{
+    AdvisorySubjectKind, ContentAdvisory, ReasonCode, SafetyAction, SafetyLabel, SafetyVerdict,
+};
 use kukuri_cn_safety_runtime::{StoredVerdictRecord, VerdictPersistMeta};
 
 use crate::safety_events::{from_db_enum, to_db_enum};
@@ -55,6 +57,8 @@ pub struct StoredScanVerdict {
     pub scan_config_fingerprint: Option<String>,
     /// 同じ scan で確定した descriptive 検索タグ（`allow` のみ非空。#1050）。
     pub derived_tags: Vec<String>,
+    /// content advisory（ADR 0028 §8.6。#1054）。post 行は本文 text と参照 blob の和集合。
+    pub advisory_labels: Vec<ContentAdvisory>,
 }
 
 impl StoredScanVerdict {
@@ -65,14 +69,43 @@ impl StoredScanVerdict {
         self.action.allows_indexing()
     }
 
+    /// この行の subject 自身の advisory（post 行に同梱された参照 blob 分を除く）。
+    pub fn own_advisories(&self) -> Vec<ContentAdvisory> {
+        let own_kind = match self.subject_kind {
+            SubjectKind::Post => AdvisorySubjectKind::PostId,
+            SubjectKind::Blob => AdvisorySubjectKind::BlobCid,
+            SubjectKind::User | SubjectKind::Peer => return Vec::new(),
+        };
+        self.advisory_labels
+            .iter()
+            .filter(|advisory| {
+                advisory.subject_kind == own_kind && advisory.subject_id == self.subject_id
+            })
+            .cloned()
+            .collect()
+    }
+
     /// 再利用判定の入力へ写す。labels / provider_capability は永続化していないため空になる。
+    /// `advisory_labels` は保存済み advisory の自 subject 分から復元する（再利用時も
+    /// `is_labeled_allow()` が成立する）。
     pub fn to_record(&self) -> StoredVerdictRecord {
+        let advisory_labels = self
+            .own_advisories()
+            .into_iter()
+            .map(|advisory| {
+                let mut label = SafetyLabel::new(advisory.category);
+                if let Some(confidence) = advisory.confidence {
+                    label = label.with_confidence(confidence);
+                }
+                label
+            })
+            .collect();
         StoredVerdictRecord {
             id: self.id.clone(),
             verdict: SafetyVerdict {
                 action: self.action,
                 labels: Vec::new(),
-                advisory_labels: Vec::new(),
+                advisory_labels,
                 critical: self.critical,
                 reason_code: self.reason_code,
                 confidence: self.confidence,
@@ -82,6 +115,7 @@ impl StoredScanVerdict {
                 scanned_at: self.scanned_at.clone(),
             },
             derived_tags: self.derived_tags.clone(),
+            advisories: self.advisory_labels.clone(),
             source_fingerprint: self.source_fingerprint.clone(),
             scan_config_fingerprint: self.scan_config_fingerprint.clone(),
         }
@@ -90,7 +124,7 @@ impl StoredScanVerdict {
 
 const SCAN_VERDICT_COLUMNS: &str = "id, subject_kind, subject_id, action, critical, reason_code, \
      confidence, provider, policy_version, scanned_at, updated_at, source_fingerprint, \
-     scan_config_fingerprint, derived_tags";
+     scan_config_fingerprint, derived_tags, advisory_labels";
 
 /// scan 対象の最新 verdict を upsert する（対象ごとに 1 行。id は初回採番のまま据え置き）。
 ///
@@ -107,11 +141,13 @@ pub async fn upsert_scan_verdict(
     }
     let id = Uuid::new_v4().to_string();
     let derived_tags = serde_json::to_value(&meta.derived_tags)?;
+    let advisory_labels = serde_json::to_value(&meta.advisories)?;
     let row = sqlx::query(&format!(
         "INSERT INTO cn_safety.scan_verdicts
             (id, subject_kind, subject_id, action, critical, reason_code, confidence, provider,
-             policy_version, scanned_at, source_fingerprint, scan_config_fingerprint, derived_tags)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             policy_version, scanned_at, source_fingerprint, scan_config_fingerprint, derived_tags,
+             advisory_labels)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (subject_kind, subject_id) DO UPDATE
          SET action = EXCLUDED.action,
              critical = EXCLUDED.critical,
@@ -123,6 +159,7 @@ pub async fn upsert_scan_verdict(
              source_fingerprint = EXCLUDED.source_fingerprint,
              scan_config_fingerprint = EXCLUDED.scan_config_fingerprint,
              derived_tags = EXCLUDED.derived_tags,
+             advisory_labels = EXCLUDED.advisory_labels,
              updated_at = NOW()
          RETURNING {SCAN_VERDICT_COLUMNS}"
     ))
@@ -139,9 +176,35 @@ pub async fn upsert_scan_verdict(
     .bind(meta.source_fingerprint.as_deref())
     .bind(meta.scan_config_fingerprint.as_deref())
     .bind(derived_tags)
+    .bind(advisory_labels)
     .fetch_one(pool)
     .await?;
     scan_verdict_from_row(&row)
+}
+
+/// scan 対象の最新 verdict 行の content advisory を差し替える（ADR 0028 §8.3。#1054）。
+///
+/// indexer が post 本文と参照 blob の advisory の和集合を post 行へ確定させるために使う。
+/// 値が同じなら書かない（`updated_at` も動かさない）。verdict 行が無ければ何もしない。
+pub async fn update_scan_verdict_advisories(
+    pool: &PgPool,
+    subject_kind: SubjectKind,
+    subject_id: &str,
+    advisories: &[ContentAdvisory],
+) -> Result<()> {
+    let advisory_labels = serde_json::to_value(advisories)?;
+    sqlx::query(
+        "UPDATE cn_safety.scan_verdicts
+         SET advisory_labels = $3
+         WHERE subject_kind = $1 AND subject_id = $2
+           AND advisory_labels IS DISTINCT FROM $3",
+    )
+    .bind(to_db_enum(&subject_kind)?)
+    .bind(subject_id)
+    .bind(advisory_labels)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// scan 対象の最新 verdict を取得する。
@@ -166,6 +229,8 @@ fn scan_verdict_from_row(row: &PgRow) -> Result<StoredScanVerdict> {
     let confidence: Option<i16> = row.try_get("confidence")?;
     let derived_tags: serde_json::Value = row.try_get("derived_tags")?;
     let derived_tags: Vec<String> = serde_json::from_value(derived_tags)?;
+    let advisory_labels: serde_json::Value = row.try_get("advisory_labels")?;
+    let advisory_labels: Vec<ContentAdvisory> = serde_json::from_value(advisory_labels)?;
     Ok(StoredScanVerdict {
         id: row.try_get("id")?,
         subject_kind: from_db_enum("subject_kind", &row.try_get::<String, _>("subject_kind")?)?,
@@ -181,5 +246,6 @@ fn scan_verdict_from_row(row: &PgRow) -> Result<StoredScanVerdict> {
         source_fingerprint: row.try_get("source_fingerprint")?,
         scan_config_fingerprint: row.try_get("scan_config_fingerprint")?,
         derived_tags,
+        advisory_labels,
     })
 }

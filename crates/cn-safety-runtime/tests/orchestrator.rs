@@ -12,11 +12,12 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction, SafetyLabel};
 use kukuri_cn_safety::{
-    Basis, MockSafetyProvider, RiskSignalTarget, SafetyCategory, SafetyPolicy,
-    SafetyProviderCapability, Visibility,
+    AdvisorySubjectKind, AppealStatus, Basis, GeneralAction, MockSafetyProvider, ModerationAction,
+    RiskSignalTarget, SafetyCategory, SafetyPolicy, SafetyProviderCapability, Severity, Visibility,
 };
 use kukuri_cn_safety_runtime::{
-    EventIdGenerator, SafetyOrchestrator, SafetyRuntimeError, ScanClock, map_scan_error,
+    EventIdGenerator, SafetyOrchestrator, SafetyRuntimeError, ScanClock, content_advisories_for,
+    map_scan_error,
 };
 
 const SCANNED_AT: &str = "2026-06-29T09:00:00Z";
@@ -200,21 +201,23 @@ async fn perceptual_match_confirmed_uses_provider_verdict_basis() {
 
 #[tokio::test]
 async fn general_moderation_uses_classifier_basis_and_local_visibility() {
-    // 一般判定(nsfw / spam 等)は分類器の推定であり「provider による断定」ではない。
+    // 一般判定(spam 等)は分類器の推定であり「provider による断定」ではない。
     // 根拠ラベルは ClassifierScore、既定の配布範囲は Local(自ノード内のみ)になる
     // (§2.2 / §2.6。confirmed 相当の根拠 + subscribed_nodes 配布にしない)。
+    // nsfw / objectionable は ADR 0028 §8 で advisory 付き allow になるため
+    // （`labeled_allow_emits_risk_label_event_and_signal`）、非 index の一般判定は spam で固定する。
     let result = ProviderScanResult {
         provider: "general".to_string(),
-        capability: SafetyProviderCapability::GeneralMediaModeration,
+        capability: SafetyProviderCapability::SpamAbuseModeration,
         outcome: ScanOutcome::Completed,
         derived_tags: Vec::new(),
         known_hash_match: false,
         score: Some(95),
-        labels: vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(95)],
+        labels: vec![SafetyLabel::new(SafetyCategory::Spam).with_confidence(95)],
     };
     let provider = Arc::new(StaticProvider {
         name: "general",
-        capabilities: vec![SafetyProviderCapability::GeneralMediaModeration],
+        capabilities: vec![SafetyProviderCapability::SpamAbuseModeration],
         result,
     });
     let mut policy = SafetyPolicy::public_node_default();
@@ -624,4 +627,153 @@ async fn report_round_trips_snake_case() {
 
     let back: kukuri_cn_safety_runtime::SafetyScanReport = serde_json::from_value(value).unwrap();
     assert_eq!(back, report);
+}
+
+// --- #1054: ラベル付き allow（content advisory）の artifact（ADR 0028 §8.4 / ADR 0027 §8） ---
+
+#[tokio::test]
+async fn labeled_allow_emits_risk_label_event_and_signal() {
+    // nsfw suspected は既定 policy（general_action = label）で Allow + advisory になり、
+    // それでも RiskLabel event と severity Low / basis ClassifierScore の risk signal を生成する
+    // （appeal 経路の入口）。visibility は suspected_signal_visibility に従う。
+    let result = ProviderScanResult {
+        provider: "general".to_string(),
+        capability: SafetyProviderCapability::GeneralMediaModeration,
+        outcome: ScanOutcome::Completed,
+        derived_tags: vec!["beach".to_string()],
+        known_hash_match: false,
+        score: Some(84),
+        labels: vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(84)],
+    };
+    let provider = Arc::new(StaticProvider {
+        name: "general",
+        capabilities: vec![SafetyProviderCapability::GeneralMediaModeration],
+        result,
+    });
+    let mut policy = SafetyPolicy::public_node_default();
+    policy.require_known_csam = false;
+    policy.suspected_signal_visibility = Visibility::SubscribedNodes;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(policy)
+        .provider(provider.clone())
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+
+    assert_eq!(report.verdict.action, SafetyAction::Allow);
+    assert!(report.verdict.is_indexable());
+    assert!(report.verdict.is_labeled_allow());
+    assert!(!report.verdict.critical);
+    assert_eq!(report.verdict.reason_code, ReasonCode::GeneralModeration);
+    // ラベル付き allow の media もタグ化する（ADR 0028 §8.8）。
+    assert_eq!(report.derived_tags, vec!["beach".to_string()]);
+
+    let event = report
+        .moderation_event
+        .expect("RiskLabel event for labeled allow");
+    assert_eq!(event.action, ModerationAction::RiskLabel);
+    assert_eq!(event.severity, Severity::Low);
+    assert_eq!(event.basis, Basis::ClassifierScore);
+    assert_eq!(event.visibility, Visibility::SubscribedNodes);
+    assert_eq!(event.target_type, SubjectKind::Blob);
+    assert_eq!(event.target_id, "blob-1");
+    // 署名対象 event の labels は検知ラベルであり、advisory の表示語彙を書かない。
+    assert_eq!(event.labels, report.verdict.labels);
+
+    let signal = report.risk_signal.expect("risk signal for labeled allow");
+    assert_eq!(signal.category, SafetyCategory::Nsfw);
+    assert_eq!(signal.severity, Severity::Low);
+    assert_eq!(signal.basis, Basis::ClassifierScore);
+    assert_eq!(signal.confidence, Some(84));
+    assert_eq!(signal.visibility, Visibility::SubscribedNodes);
+    assert_eq!(signal.target, RiskSignalTarget::BlobCid);
+    assert_eq!(signal.appeal_status, Some(AppealStatus::None));
+
+    // objectionable も同じ経路。category だけ異なる。
+    let mut objectionable = provider.result.clone();
+    objectionable.labels =
+        vec![SafetyLabel::new(SafetyCategory::Objectionable).with_confidence(84)];
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy({
+            let mut policy = SafetyPolicy::public_node_default();
+            policy.require_known_csam = false;
+            policy
+        })
+        .provider(Arc::new(StaticProvider {
+            name: "general",
+            capabilities: vec![SafetyProviderCapability::GeneralMediaModeration],
+            result: objectionable,
+        }))
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+    assert!(report.verdict.is_labeled_allow());
+    let signal = report.risk_signal.expect("signal");
+    assert_eq!(signal.category, SafetyCategory::Objectionable);
+    assert_eq!(signal.severity, Severity::Low);
+    assert_eq!(
+        report.moderation_event.expect("event").action,
+        ModerationAction::RiskLabel
+    );
+
+    // operator が exclude に厳格化すれば従来どおり Exclude / High。
+    let mut strict = SafetyPolicy::public_node_default();
+    strict.require_known_csam = false;
+    strict.general_action = GeneralAction::Exclude;
+    let orchestrator = SafetyOrchestrator::builder("node-1", clock(), ids())
+        .policy(strict)
+        .provider(provider)
+        .build()
+        .unwrap();
+    let report = orchestrator.scan_subject(&blob_request()).await;
+    assert!(!report.verdict.is_indexable());
+    assert!(report.verdict.advisory_labels.is_empty());
+    assert_eq!(
+        report.moderation_event.expect("event").action,
+        ModerationAction::Exclude
+    );
+    assert_eq!(report.risk_signal.expect("signal").severity, Severity::High);
+    assert!(report.derived_tags.is_empty());
+}
+
+#[test]
+fn content_advisories_carry_signal_id_and_display_label() {
+    // ADR 0028 §8.6: advisory 要素は issuer / subject / category / 表示語彙 / confidence /
+    // signal_id / basis（常に classifier_score）を持つ。post / blob 以外の subject には付けない。
+    let mut verdict = kukuri_cn_safety::route(
+        &[ProviderScanResult {
+            provider: "general".to_string(),
+            capability: SafetyProviderCapability::GeneralMediaModeration,
+            outcome: ScanOutcome::Completed,
+            derived_tags: Vec::new(),
+            known_hash_match: false,
+            score: Some(91),
+            labels: vec![SafetyLabel::new(SafetyCategory::Objectionable).with_confidence(91)],
+        }],
+        &SafetyPolicy {
+            require_known_csam: false,
+            ..SafetyPolicy::public_node_default()
+        },
+        SCANNED_AT,
+    );
+    assert!(verdict.is_labeled_allow());
+
+    let advisories =
+        content_advisories_for(&verdict, SubjectKind::Blob, "blob-9", "node-1", "signal-7");
+    assert_eq!(advisories.len(), 1);
+    let advisory = &advisories[0];
+    assert_eq!(advisory.issuer_node_id, "node-1");
+    assert_eq!(advisory.subject_kind, AdvisorySubjectKind::BlobCid);
+    assert_eq!(advisory.subject_id, "blob-9");
+    assert_eq!(advisory.category, SafetyCategory::Objectionable);
+    assert_eq!(advisory.label, "sensitive");
+    assert_eq!(advisory.confidence, Some(91));
+    assert_eq!(advisory.signal_id, "signal-7");
+    assert_eq!(advisory.basis, Basis::ClassifierScore);
+
+    assert!(content_advisories_for(&verdict, SubjectKind::User, "pk", "node-1", "s").is_empty());
+
+    // 非 index / advisory 無しの verdict からは作らない。
+    verdict.advisory_labels.clear();
+    assert!(content_advisories_for(&verdict, SubjectKind::Post, "p", "node-1", "s").is_empty());
 }

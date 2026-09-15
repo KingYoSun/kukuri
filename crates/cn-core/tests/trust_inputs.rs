@@ -114,11 +114,12 @@ fn critical_suspected_feeds_trust_absolute_component() {
 }
 
 #[test]
-fn general_moderation_feeds_trust_relative_component() {
-    // ADR 0028 §2.5 / ADR 0026 §2.3: general（nsfw / spam 等の文化圏依存）の suspected は
-    // relation で重み付けされる相対成分に入る。
+fn spam_malware_phishing_feed_trust_relative_component() {
+    // ADR 0028 §2.5 / ADR 0026 §2.3 / §7.1: spam / malware / phishing の suspected は
+    // relation で重み付けされる相対成分に入る（旧 `general_moderation_feeds_trust_relative_component`
+    // は nsfw を含んでいたが、nsfw / objectionable は ADR 0026 §7 で advisory-only = 寄与 0）。
     let signals = vec![
-        classifier_signal("sig-nsfw", SafetyCategory::Nsfw),
+        classifier_signal("sig-malware", SafetyCategory::Malware),
         classifier_signal("sig-spam", SafetyCategory::Spam),
         classifier_signal("sig-phishing", SafetyCategory::Phishing),
     ];
