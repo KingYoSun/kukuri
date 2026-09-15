@@ -1,4 +1,280 @@
 use super::*;
+use kukuri_docs_sync::{DocEventStream, DocFetchPolicy};
+use std::sync::atomic::AtomicUsize;
+
+#[derive(Default)]
+struct ConnectionIoProbe {
+    inner: MemoryDocsSync,
+    io: AtomicUsize,
+    writes: AtomicUsize,
+    secrets: AtomicUsize,
+}
+#[async_trait]
+impl DocsSync for ConnectionIoProbe {
+    async fn register_private_replica_secret(
+        &self,
+        replica: &ReplicaId,
+        namespace_secret_hex: &str,
+    ) -> Result<()> {
+        self.secrets.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .register_private_replica_secret(replica, namespace_secret_hex)
+            .await
+    }
+    async fn open_replica(&self, replica: &ReplicaId) -> Result<()> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.open_replica(replica).await
+    }
+    async fn apply_doc_op(&self, replica: &ReplicaId, op: DocOp) -> Result<()> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        self.inner.apply_doc_op(replica, op).await
+    }
+    async fn query_replica_with_policy(
+        &self,
+        replica: &ReplicaId,
+        query: DocQuery,
+        policy: DocFetchPolicy,
+    ) -> Result<Vec<DocRecord>> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .query_replica_with_policy(replica, query, policy)
+            .await
+    }
+    async fn subscribe_replica(&self, replica: &ReplicaId) -> Result<DocEventStream> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.subscribe_replica(replica).await
+    }
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.io.fetch_add(1, Ordering::SeqCst);
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[tokio::test]
+async fn unknown_connection_context_rejects_all_actions_before_io_and_projection() {
+    let store = Arc::new(MemoryStore::default());
+    let docs = Arc::new(ConnectionIoProbe::default());
+    let transport = Arc::new(FakeTransport::new(
+        "connection-guard",
+        FakeNetwork::default(),
+    ));
+    let app = app_service_from_dependencies(
+        store.clone(),
+        store.clone(),
+        transport.clone(),
+        transport,
+        docs.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:connection-guard";
+    let context = SpatialContextV1::Channel {
+        topic_id: TopicId::new(topic),
+        channel_id: kukuri_core::ChannelId::new("unknown"),
+    };
+    assert!(
+        app.list_dome_connection_topology(context.clone())
+            .await
+            .is_err()
+    );
+    assert!(
+        app.create_dome_connection_proposal(CreateDomeConnectionProposalInput {
+            proposal_id: "test-proposal".into(),
+            spatial_context: context.clone(),
+            proposer_instance_id: "a".into(),
+            receiver_instance_id: "b".into(),
+            proposer_direction: DomeDirection::East,
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.accept_dome_connection_proposal(AcceptDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "test-proposal".into()
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.withdraw_dome_connection_proposal(WithdrawDomeConnectionProposalInput {
+            spatial_context: context.clone(),
+            proposal_id: "test-proposal".into()
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        app.revoke_dome_connection(RevokeDomeConnectionInput {
+            spatial_context: context.clone(),
+            connection_id: "test-connection".into()
+        })
+        .await
+        .is_err()
+    );
+    assert_eq!(docs.io.load(Ordering::SeqCst), 0);
+    assert_eq!(docs.writes.load(Ordering::SeqCst), 0);
+    assert!(!app.has_topic_subscription(topic).await);
+    assert!(
+        store
+            .get_dome_connection_projection(&context.canonical_id())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    // A permitted local read may refresh the derived projection, but never writes shared docs.
+    let public = SpatialContextV1::Topic {
+        topic_id: TopicId::new(topic),
+    };
+    app.list_dome_connection_topology(public.clone())
+        .await
+        .unwrap();
+    assert_eq!(docs.writes.load(Ordering::SeqCst), 0);
+    assert!(!app.has_topic_subscription(topic).await);
+    assert!(
+        store
+            .get_dome_connection_projection(&public.canonical_id())
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn connection_map_reads_do_not_start_subscriptions_even_for_unknown_channels() {
+    let app = AppService::new(
+        Arc::new(MemoryStore::default()),
+        Arc::new(FakeTransport::new("map-reader", FakeNetwork::default())),
+    );
+    for channel in [None, Some("unknown-channel")] {
+        let topic = format!("kukuri:topic:map-read-{}", channel.unwrap_or("public"));
+        let context = match channel {
+            Some(channel_id) => SpatialContextV1::Channel {
+                topic_id: TopicId::new(&topic),
+                channel_id: kukuri_core::ChannelId::new(channel_id),
+            },
+            None => SpatialContextV1::Topic {
+                topic_id: TopicId::new(&topic),
+            },
+        };
+        let result = app.list_dome_connection_topology(context).await;
+        assert_eq!(result.is_ok(), channel.is_none());
+        assert!(
+            !app.has_topic_subscription(&topic).await,
+            "map read must not start network subscription"
+        );
+    }
+}
+
+#[tokio::test]
+async fn restored_friend_only_map_read_does_not_rotate_or_subscribe() {
+    let store = Arc::new(MemoryStore::default());
+    let docs = Arc::new(ConnectionIoProbe::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    let app = app_service_from_dependencies(
+        store.clone(),
+        store,
+        transport,
+        Arc::new(NoopHintTransport),
+        docs.clone(),
+        Arc::new(MemoryBlobService::default()),
+        generate_keys(),
+    );
+    let topic = "kukuri:topic:map-friend-only";
+    let channel = app
+        .create_private_channel(CreatePrivateChannelInput {
+            topic_id: TopicId::new(topic),
+            label: "map read".into(),
+            audience_kind: ChannelAudienceKind::FriendOnly,
+        })
+        .await
+        .unwrap();
+    let state = app
+        .joined_private_channel_state(topic, &channel.channel_id)
+        .await
+        .unwrap();
+    let peer = generate_keys();
+    persist_private_channel_participant(
+        docs.as_ref(),
+        &peer,
+        &PrivateChannelParticipantDocV1 {
+            channel_id: state.channel_id.clone(),
+            topic_id: TopicId::new(&state.topic_id),
+            epoch_id: state.current_epoch_id.clone(),
+            participant_pubkey: peer.public_key(),
+            joined_at: 1,
+            is_owner: false,
+            join_mode: None,
+            sponsor_pubkey: None,
+            share_token_id: None,
+            left_at: None,
+        },
+        &current_private_channel_replica_id(&state),
+    )
+    .await
+    .unwrap();
+    app.services
+        .projection_store
+        .rebuild_author_relationships(
+            &app.current_author_pubkey(),
+            vec![kukuri_store::AuthorRelationshipProjectionRow {
+                local_author_pubkey: app.current_author_pubkey(),
+                author_pubkey: peer.public_key_hex(),
+                following: false,
+                followed_by: true,
+                mutual: false,
+                friend_of_friend: false,
+                friend_of_friend_via_pubkeys: vec![],
+                derived_at: 1,
+            }],
+        )
+        .await
+        .unwrap();
+    assert!(
+        app.private_channel_diagnostics(&state)
+            .await
+            .unwrap()
+            .rotation_required
+    );
+    // Restore the existing capability without invoking subscription or grant redemption.
+    let reader = AppService::from_handles(app.services.clone());
+    reader.joined_private_channels.lock().await.insert(
+        joined_private_channel_key(topic, &channel.channel_id),
+        state.clone(),
+    );
+    let writes_before = docs.writes.load(Ordering::SeqCst);
+    let secrets_before = docs.secrets.load(Ordering::SeqCst);
+    reader
+        .list_dome_connection_topology(SpatialContextV1::Channel {
+            topic_id: TopicId::new(topic),
+            channel_id: state.channel_id.clone(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        docs.writes.load(Ordering::SeqCst),
+        writes_before,
+        "viewing must not rotate the epoch or publish records"
+    );
+    assert_eq!(docs.secrets.load(Ordering::SeqCst), secrets_before);
+    assert!(
+        reader
+            .subscription_registry
+            .private_channel_subscriptions
+            .lock()
+            .await
+            .is_empty()
+    );
+    assert!(!reader.has_topic_subscription(topic).await);
+    assert_eq!(
+        reader
+            .joined_private_channel_state(topic, &channel.channel_id)
+            .await
+            .unwrap()
+            .current_epoch_id,
+        state.current_epoch_id
+    );
+}
 use kukuri_core::{DomeDirection, DomeProposalDerivedStatusV1, SpatialContextV1};
 
 fn app_with_shared_dome_services(

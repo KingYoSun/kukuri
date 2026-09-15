@@ -278,6 +278,8 @@ export function MetaverseRoomPanel({
         onClose={() => { setManagedId(null); managementOrigin.current?.focus(); }}
       /> : null;
   const connectionPanel = <DomeConnectionPanel
+        connections={session.admittedRoom ? session.connections : undefined}
+        boundaries={session.admittedRoom ? session.transitionBoundaryStates : undefined}
         actions={actions}
         room={session.admittedRoom ?? (managedScope === scope && managedId ? managedRoom : session.selectedRoom)}
         rooms={rooms}

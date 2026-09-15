@@ -20,6 +20,7 @@ import type { MetaverseRoomActions } from './MetaverseRoomActions';
 import type { SessionPropView } from '../MetaverseScene';
 import { createDomeInteractionInput, persistentPropAsSharedObject } from './DomeSceneModel';
 import { useDomeTransitionNeighbors } from './useDomeTransitionNeighbors';
+import { useDomeConnections } from './useDomeConnections';
 import {
   DEFAULT_SHARED_OBJECT,
   METAVERSE_ROOM_HEARTBEAT_MS,
@@ -183,11 +184,13 @@ export function useMetaverseRoomSession({
     lastVisitedInstanceId: readLastVisitedDome(syncStatus.local_author_pubkey, entryContext),
     configuredEntryInstanceId,
   }), [configuredEntryInstanceId, entryContext, rooms, syncStatus.local_author_pubkey]);
+  const connections = useDomeConnections(actions, admittedRoom, syncStatus.local_author_pubkey);
   const [transitionNeighbors, setTransitionNeighbors] = useDomeTransitionNeighbors(
     actions,
     admittedRoom,
     rooms,
-    syncStatus.local_author_pubkey
+    syncStatus.local_author_pubkey,
+    connections
   );
 
   const {
@@ -1105,6 +1108,7 @@ export function useMetaverseRoomSession({
     sessionProps,
     transitionNeighbors,
     transitionBoundaryStates,
+    connections,
     handoffTransform,
     lastSentSeq,
     lastReceivedAt,

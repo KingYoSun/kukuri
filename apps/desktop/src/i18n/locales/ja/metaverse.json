@@ -159,11 +159,48 @@
       "discarded": "破棄済み",
       "active": "接続中",
       "draining": "解除中",
-      "revoked": "解除済み"
+      "revoked": "解除済み",
+      "blocked": "ブロック中",
+      "closed": "閉鎖",
+      "unknown": "情報未取得"
     },
     "errors": {
       "load": "Domeの接続を取得できませんでした",
       "action": "接続を更新できませんでした"
+    },
+    "map": {
+      "scope": "この端末で確認できた同じ所属先の接続です。未取得の範囲には他のDomeがある可能性があります。",
+      "title": "確認済みの接続マップ",
+      "here": "現在地",
+      "unknown": "情報未取得",
+      "directions": "方位を選択",
+      "detail": "{{direction}}の接続",
+      "loading": "接続を取得中…",
+      "refreshing": "接続を更新中…",
+      "stale": "最後に確認できた情報を表示しています。",
+      "passage": "通行状態",
+      "drainUntil": "{{time}}まで解除処理中",
+      "ownerOnly": "接続の管理はDomeの所有者のみ行えます。",
+      "noCandidates": "取得済みの情報に接続候補がありません。"
+    },
+    "reasons": {
+      "owner_revoked": "所有者が接続を解除しました。",
+      "proposer_withdrew": "提案が撤回されました。",
+      "proposer_slot_occupied": "提案元の方向は使用中です。",
+      "instance_detached": "Domeの所属先が変更されました。",
+      "instance_deleted": "Domeが削除されました。",
+      "owners_blocked": "所有者間でブロックされています。"
+    },
+    "passage": {
+      "ready": "通行可能",
+      "unhosted": "ホスト停止中",
+      "full": "満員",
+      "loading": "通行可否を確認中",
+      "error": "通行可否の取得に失敗しました。更新で再試行できます。",
+      "offline": "ホストがオフライン",
+      "draining": "解除処理中・通行不可",
+      "blocked": "ブロック中・通行不可",
+      "closed": "閉鎖・通行不可"
     }
   },
   "hud": {

@@ -159,11 +159,48 @@
       "discarded": "Discarded",
       "active": "Active",
       "draining": "Disconnecting",
-      "revoked": "Revoked"
+      "revoked": "Revoked",
+      "blocked": "Blocked",
+      "closed": "Closed",
+      "unknown": "Not received"
     },
     "errors": {
       "load": "Could not load Dome Connections",
       "action": "Could not update the Connection"
+    },
+    "map": {
+      "scope": "Connections confirmed on this device in this Context. Unreceived areas may contain more Domes.",
+      "title": "Confirmed connection map",
+      "here": "You are here",
+      "unknown": "Not received",
+      "directions": "Choose a direction",
+      "detail": "{{direction}} connection",
+      "loading": "Loading connections…",
+      "refreshing": "Refreshing connections…",
+      "stale": "Showing the last confirmed information.",
+      "passage": "Passage",
+      "drainUntil": "Disconnecting until {{time}}",
+      "ownerOnly": "Only the Dome owner can manage connections.",
+      "noCandidates": "No available candidates in the received information."
+    },
+    "reasons": {
+      "owner_revoked": "An owner disconnected this route.",
+      "proposer_withdrew": "The proposal was withdrawn.",
+      "proposer_slot_occupied": "The proposer slot is occupied.",
+      "instance_detached": "A Dome moved to another Context.",
+      "instance_deleted": "A Dome was deleted.",
+      "owners_blocked": "The owners are blocked."
+    },
+    "passage": {
+      "ready": "Ready to pass",
+      "unhosted": "Host stopped",
+      "full": "Dome is full",
+      "loading": "Checking passage",
+      "error": "Could not check passage. Refresh to retry.",
+      "offline": "Host offline",
+      "draining": "Disconnecting; passage is disabled",
+      "blocked": "Blocked; passage is disabled",
+      "closed": "Closed; passage is disabled"
     }
   },
   "hud": {

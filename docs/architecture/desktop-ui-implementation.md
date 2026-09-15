@@ -16,6 +16,8 @@ OS取得のfrontend wrapperは `lib/api/systemLocale.ts`、読み取り専用IPC
 
 ## Style bundle
 
+Metaverseの接続取得は`useDomeConnections`がscopeと遅着responseを管理する。入室中はsessionと接続paneが同じsnapshotを使い、隣接のhost／access／asset確認は`useDomeTransitionNeighbors`が所有する。入室外は接続paneに取得controllerを一つ置く。`DomeConnectionModel`は確認済みcomponentと方向を導出し、`DomeConnectionMap`と`DomeConnectionPanel`が表示・明示操作を担当する。専用styleは`metaverse-connections.css`を既存Metaverse stylesheetの後に読み込む。
+
 `apps/desktop/src/styles/index.css`がproductionとStorybookで共通の入口であり、local stylesheetを次の順で読み込む。この順序はcascade contractである。
 
 1. `tokens.css`: 実行されるcustom property、theme、Tailwind alias

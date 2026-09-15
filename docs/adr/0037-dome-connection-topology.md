@@ -69,6 +69,14 @@ active agreementを決定論的な因果順とdigest順で処理し、次だけ�
 
 ## Consequences
 
+### 確認済み接続の閲覧（#1025）
+
+接続マップは、許可されたSpatial Contextについて端末が確認したtopologyのうち現在Instanceを含むcomponentだけを表示する。応答成功はnetwork全体の完全取得を意味しない。未取得のendpoint名・範囲を推測せず、未知を未接続に変換しない。別componentのDomeは既存の同Context候補として扱い、global座標を導入しない。
+
+`list_dome_connection_topology`はAppServiceのtopic／private channel購読Taskを新規開始せず、許可済みreplicaの情報からlocal projectionを更新する。replicaのopen／queryに内在する既存docs同期は継続するため、すべてのnetwork I/Oが0という意味ではない。private channelはmemory上の加入stateとread-onlyのepoch handoff待ち検査を通してから読み、grant redemption・epoch rotationは閲覧から開始しない。明示mutationは加入検査を購読より先に行い、既存のwrite state更新契約を使う。署名・docs・hintの接続書込は既存の明示actionと正当なlifecycle処理に限定する。
+
+追加する方位選択、候補draft、loading／error、相対マップは端末内の一時状態であり、保存・外部送信しない。新しいprotocol、IPC payload、永続schema、audience、retentionは追加しない。既存projection cache、署名済みConnection、private channel replicaの分類を維持する。
+
 Issue #797の通常解除、draining deadline、安全上の即時terminal化は[ADR-0045](0045-dome-offline-draining-return-home.md)で追加定義する。
 
 - proposalの待機とConnectionの事実をDome assetから独立して保持できる。

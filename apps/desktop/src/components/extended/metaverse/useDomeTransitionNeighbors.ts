@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { GameRoomView, MetaverseAssetRef } from '@/lib/api';
 import type { MetaverseRoomActions } from './MetaverseRoomActions';
+import type { DomeConnectionsState } from './useDomeConnections';
 import {
   resolveActiveDomeNeighbors,
   type DomeNeighborTransitionView,
@@ -11,10 +12,12 @@ export function useDomeTransitionNeighbors(
   actions: MetaverseRoomActions,
   selectedRoom: GameRoomView | null,
   rooms: GameRoomView[],
-  participantPubkey: string
+  participantPubkey: string,
+  connections: DomeConnectionsState
 ) {
   const state = useState<DomeNeighborTransitionView[]>([]);
   const [, setNeighbors] = state;
+  const readFailed = connections.status === 'error';
 
   useEffect(() => {
     if (!selectedRoom?.metaverse) {
@@ -22,13 +25,18 @@ export function useDomeTransitionNeighbors(
       return;
     }
     let cancelled = false;
-    let intervalId = 0;
     const load = async () => {
       try {
-        const topology = await actions.listConnections(selectedRoom.metaverse!.spatial_context);
+        const topology = connections.topology;
+        if (!topology) { setNeighbors(current => current.length ? [] : current); return; }
+        if (readFailed) {
+          setNeighbors(current => current.map(neighbor => ({ ...neighbor, boundaryState: 'error' })));
+          return;
+        }
         const loading = resolveActiveDomeNeighbors(topology, selectedRoom, rooms, {}, {});
         if (cancelled) return;
-        setNeighbors(loading);
+        setNeighbors(current => loading.length || current.length ? loading : current);
+        const hostingErrors = new Set<string>();
         const hostingEntries = await Promise.all(loading.map(async (neighbor) => {
           try {
             return [neighbor.room.metaverse!.instance_id, await actions.getHosting(
@@ -36,10 +44,12 @@ export function useDomeTransitionNeighbors(
               neighbor.room.metaverse!.instance_id
             )] as const;
           } catch {
+            hostingErrors.add(neighbor.room.metaverse!.instance_id);
             return [neighbor.room.metaverse!.instance_id, undefined] as const;
           }
         }));
         const hosting = Object.fromEntries(hostingEntries);
+        if (cancelled) return;
         const accessEntries = await Promise.all(loading.map(async (neighbor) => {
           try {
             const decision = await actions.previewTransitionAccess({
@@ -55,15 +65,17 @@ export function useDomeTransitionNeighbors(
               direction: neighbor.direction,
               requested_at: Date.now(),
             });
-            return [neighbor.connectionId, decision.status === 'allowed'] as const;
+            return [neighbor.connectionId, decision.status === 'allowed' ? 'allowed' : 'denied'] as const;
           } catch {
-            return [neighbor.connectionId, false] as const;
+            return [neighbor.connectionId, 'error'] as const;
           }
         }));
         const accessByConnection = Object.fromEntries(accessEntries);
+        if (cancelled) return;
         const assetStates: Record<string, 'loading' | 'ready' | 'error'> = {};
         const textureUrls: Record<string, { wall: string | null; floor: string | null }> = {};
         await Promise.all(loading.map(async (neighbor) => {
+          if (cancelled || accessByConnection[neighbor.connectionId] !== 'allowed') return;
           const metaverse = neighbor.room.metaverse!;
           const refs = [
             ...metaverse.asset_refs,
@@ -98,16 +110,20 @@ export function useDomeTransitionNeighbors(
           }
         }));
         if (!cancelled) {
-          setNeighbors(resolveActiveDomeNeighbors(
+          const resolved: DomeNeighborTransitionView[] = resolveActiveDomeNeighbors(
             topology,
             selectedRoom,
             rooms,
             hosting,
             assetStates,
             textureUrls
-          ).map((neighbor) => accessByConnection[neighbor.connectionId]
-            ? neighbor
-            : { ...neighbor, boundaryState: 'closed' }));
+          ).map((neighbor): DomeNeighborTransitionView => {
+            if (['draining', 'blocked', 'closed'].includes(neighbor.boundaryState)) return neighbor;
+            if (hostingErrors.has(neighbor.room.metaverse!.instance_id) || accessByConnection[neighbor.connectionId] === 'error')
+              return { ...neighbor, boundaryState: 'error' };
+            return accessByConnection[neighbor.connectionId] === 'allowed' ? neighbor : { ...neighbor, boundaryState: 'closed' };
+          });
+          setNeighbors(current => resolved.length || current.length ? resolved : current);
         }
       } catch {
         if (!cancelled) {
@@ -119,12 +135,10 @@ export function useDomeTransitionNeighbors(
       }
     };
     void load();
-    intervalId = window.setInterval(() => void load(), 5_000);
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
     };
-  }, [actions, participantPubkey, rooms, selectedRoom, setNeighbors]);
+  }, [actions, participantPubkey, rooms, selectedRoom, setNeighbors, connections.topology, readFailed]);
 
   return state;
 }

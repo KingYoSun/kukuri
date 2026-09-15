@@ -12,9 +12,7 @@ impl AppService {
         &self,
         spatial_context: SpatialContextV1,
     ) -> Result<DomeConnectionTopologyView> {
-        let replica = self
-            .dome_connection_context_replica(&spatial_context)
-            .await?;
+        let replica = self.dome_connection_read_replica(&spatial_context).await?;
         let instances = self.list_context_dome_instances(&replica).await?;
         let proposal_states = self.list_dome_proposal_states(&replica).await?;
         let selections = self.list_dome_selections(&replica).await?;
@@ -515,20 +513,22 @@ impl AppService {
         &self,
         context: &SpatialContextV1,
     ) -> Result<ReplicaId> {
-        self.ensure_topic_subscription(context.topic_id().as_str())
-            .await?;
         let replica = match context {
             SpatialContextV1::Topic { topic_id } => topic_replica_id(topic_id.as_str()),
             SpatialContextV1::Channel {
                 topic_id,
                 channel_id,
             } => {
+                self.ensure_private_channel_access(topic_id.as_str(), channel_id)
+                    .await?;
                 let state = self
                     .private_channel_write_state(topic_id.as_str(), channel_id)
                     .await?;
                 current_private_channel_replica_id(&state)
             }
         };
+        self.ensure_topic_subscription(context.topic_id().as_str())
+            .await?;
         self.services.docs_sync.open_replica(&replica).await?;
         Ok(replica)
     }

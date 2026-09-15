@@ -1,0 +1,21 @@
+# 2026-09-15 Domeの方位操作と確認済み接続マップ
+
+- Status: current
+- Supersedes: None（#1024のカテゴリ・focus契約を維持し、接続pane内の4フォームだけを置換）
+- Superseded by: None
+- PR: [#1035](https://github.com/KingYoSun/kukuri/pull/1035)
+- Preview: [変更前](../progress/assets/2026-09-15-1025-connections/windows-before.png)、[Ubuntu24の方向選択](../progress/assets/2026-09-15-1025-connections/linux-direction.png)、[複数Dome・light](../progress/assets/2026-09-15-1025-connections/story-confirmed-light.png)、[dark](../progress/assets/2026-09-15-1025-connections/story-confirmed-dark.png)、[狭幅](../progress/assets/2026-09-15-1025-connections/story-narrow-light.png)。複数Dome画像はStorybook fixture。
+- Surface / user / purpose: 入室中の接続カテゴリと入室外の接続管理。参加者が現在地・方向・確認済み接続を把握し、ownerが既存actionで接続を管理する。
+- Summary: 現在Domeを中心にした方位button、component-local map、選択方向の詳細。未知・取得失敗と空きを区別する。3Dの壁を直接選択する案はcamera依存が増えるため不採用。
+- Conditions:
+  - Platform: Windows Tauri/WebView、Ubuntu24 Tauri/WebKitをRemote Desktop経由、Playwright Chromium。
+  - Viewport: Windows 1283×871、Ubuntu24アプリ1280×840相当、browser 1283×871／390×871。
+  - Theme: native light。browser fixtureのdarkとStorybookの全state。
+  - Locale: native ja、browser en。ja／en／zh-CNの翻訳を同期。
+  - State: confirmed／partial／loading／read error／no candidates／offline／draining／blocked／closed／visitor。
+- Accessibility / interaction: browserで方位buttonの24px以上の幅・44px以上の高さ、keyboard選択、詳細scroll、カテゴリ往復、write 0を確認。nativeで方位keyboardとpointerを確認。詳細はpane内scrollで全操作へ到達する。
+- Performance: sessionとmapでtopology取得を共有。選択・カテゴリ往復でdomain mutationを増やさず、新しいWebGL描画・遠方asset prefetchを追加しない。
+- Validation: [作業記録](../progress/2026-09-15-1025-dome-connections.md)にtest、実機、CIの最終結果を集約。
+- Not verified: 最終native fullscreen／戻る確認、200%／High Contrast／物理touch／screen reader、複数Domeの実P2P通行は未確認。22条件のaxe違反0だが20条件のcolor-contrast incompleteは自動判定未完了。browserやin-process scenarioの成功と区別する。
+- Review result: 承認済み案を実装。targeted component／browser／Storybook build成功、visual smoke 38件成功。コードの独立監査PASS。ユーザーは残りの追加実機確認を未確認として省略し、CI成功後のマージを明示承認した。
+- Exceptions: Windowsの許可画面を遠隔のユーザーが操作できないため、追加実機確認を省略。初期実装の両OS実機証拠を維持し、以後OS固有fullscreen／入力処理に変更がないことを照合した。未確認を成功と扱わず、AC／INVARと必須CI・独立監査は維持する。
