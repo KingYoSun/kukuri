@@ -41,8 +41,8 @@
 | Device backup / restore | landed | repo change | 使用中の1アカウントを1暗号化ファイルへ保存し、staging検証・rollback・再同意付きで復元 |
 | Windows release workflow | landed | repo change | tag / manual dispatch で NSIS asset を Release に載せる |
 | Linux共通基盤／常駐プロセス／CLI通信規約 | implemented | repo change | #886〜#888完了。GUIと分離したprofile・単一所有・版管理protocol・1入力1実行を維持 |
-| Linux AppImage／リリース統合 | in progress | repo change | #889完了、#890で公開統合中。Ubuntu 22.04 buildと代表実機証跡を採用し、追加OS／XWayland全件検証は延期。公開物の全件整合とCLI arch smokeを確認する |
-| Linux Deb配布／署名付き更新 | in progress | repo change | #905、#890の公開前追加依存。同一buildのamd64 Deb、形式別manifest、単一OS認証・取消停止、手持ちUbuntu Desktopでの保持確認を追加。公開済みとはしない |
+| Linux AppImage／リリース統合 | landed | repo change | #889・#890完了。Ubuntu 22.04 buildと代表実機証跡を採用し、追加OS／XWayland全件検証は延期。v0.2.0-preview.2以降の各Preview Releaseで公開物の全件整合とCLI arch smokeを確認済み（[#890記録](./2026-09-07-issue-890-linux-release-integration.md)、[v0.2.4-preview.1公開記録](./2026-09-15-v0.2.4-preview.1-release-rollout.md)） |
+| Linux Deb配布／署名付き更新 | landed | repo change | #905完了。同一buildのamd64 Deb、形式別manifest、単一OS認証・取消停止、手持ちUbuntu Desktopでの保持確認を追加し、v0.2.0-preview.2以降の各Preview Releaseで公開済み（[#905記録](./2026-09-07-issue-905-linux-deb-updater.md)） |
 | Seed content on hosted preview node | planned | launch op | project-owned author で preview topics を事前投入する |
 | GitHub feedback surface | planned | launch op | Discussions category か同等の GitHub feedback home を整備する |
 
@@ -66,7 +66,7 @@
 - [ ] hosted preview node 上で starter topic seed content を確認
 - [ ] GitHub feedback surface を preview copy から辿れるようにする
 - [ ] packaged Windows app で `launch -> ready -> post -> reply -> private channel` を手動確認
-- [ ] #885の全親AC／INVARと#905の追加条件を満たし、Linux AppImage／Debとx86_64／aarch64 CLIをWindows成果物と同じPreview Releaseへ完全に公開
+- [x] #885の全親AC／INVARと#905の追加条件を満たし、Linux AppImage／Debとx86_64／aarch64 CLIをWindows成果物と同じPreview Releaseへ完全に公開（v0.2.0-preview.2で初公開、以降の各Releaseで継続。[v0.2.4-preview.1公開記録](./2026-09-15-v0.2.4-preview.1-release-rollout.md)）
 
 ## Assumptions
 

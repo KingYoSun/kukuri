@@ -1,6 +1,6 @@
 # Linux CLIの利用
 
-Linux CLIの配布対象はx86_64／aarch64。[v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2)で両archを公開済み。
+Linux CLIの配布対象はx86_64／aarch64。[v0.2.0-preview.2](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.0-preview.2)以降の各Previewリリースで両archを[最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)に同時公開している。
 `kukuri-cli_<version>_<target>.tar.gz`を展開し、`bin/kukuri-cli --version`で版を確認する。
 別の版を使う場合も、取得先と提供archはそのReleaseの成果物一覧を確認する。
 
