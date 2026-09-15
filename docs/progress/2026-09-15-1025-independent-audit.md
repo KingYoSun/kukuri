@@ -209,4 +209,3 @@ CodeGraph callersと限定識別子検索を再実行し、read helperのcaller�
 - **許可docs readに内在する同期**: `IrohDocsSync::open_replica` / `query_replica_with_policy`は`ensure_replica`を通り、必要に応じて`doc_start_sync`や内部`doc.subscribe`を使用する（`crates/docs-sync/src/iroh_sync.rs:135`, `:252`, `:323`）。今回の境界は、AppService topic/private subscriptionの新規起動とdomain record／epoch／participantの共有writeを閲覧から起こさないこと。既知・許可Contextのdocs取得まで「通信0」「すべてlocal-only」「内部同期購読0」とは主張しない。readが内部同期を使う事実は既存の許可readの実装であり、Connectionやprivate epochを自動変更するF1とは区別する。
 - 新規blocker、未知Contextの追加探索、禁止されたConnection mutationは発見しなかった。一般的な将来hardeningをClose条件に追加していない。
 - 必須CI、desktop-ui-check、Windows実機の最終証拠、merge tree一致は本delta判定に含めていない。親担当が確定結果を追記するまでmerge/Close完了とは扱わない。
-
