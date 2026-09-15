@@ -16,11 +16,11 @@ use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::media_fetcher::BlobMediaFetcher;
 use kukuri_cn_indexer::participant::ScopeReplica;
 use kukuri_cn_indexer::projection::{IndexProjection, MemoryIndexProjection};
+use kukuri_cn_indexer::query::{FailClosedIndexQuery, IndexQuery};
 use kukuri_cn_indexer::state::IndexerRuntimeState;
 use kukuri_cn_safety::provider::{
     MediaFetcher, ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome, SubjectKind,
 };
-use kukuri_cn_indexer::query::{FailClosedIndexQuery, IndexQuery};
 use kukuri_cn_safety::{
     AdvisorySubjectKind, Basis, GeneralAction, MockSafetyProvider, ModerationAction,
     ModerationEventSigner, RiskSignalTarget, SafetyCategory, SafetyPolicy, SafetyProvider,
@@ -935,7 +935,10 @@ async fn general_nsfw_is_indexed_with_advisory_label() -> Result<()> {
     let stored = projection
         .entries_in_scope(IndexScopeKind::PublicTopic, "rust")
         .await;
-    assert!(stored[0].content_advisories.is_empty(), "投影は advisory を持たない");
+    assert!(
+        stored[0].content_advisories.is_empty(),
+        "投影は advisory を持たない"
+    );
 
     // 2 巡目（内容・構成不変）: provider 呼び出しなし、signal / event 増えず、advisory 不変（TR-10）。
     let second = pipeline
@@ -992,8 +995,8 @@ async fn labeled_allow_text_does_not_short_circuit_media_scan() -> Result<()> {
     let topic = TopicId::new("rust");
     let replica = topic_replica_id("rust");
     let object_id = persist_media_post(&docs, &replica, &topic, "spicy caption", true).await;
-    let known = MockSafetyProvider::known_csam("mock-known-csam")
-        .with_known_hash_match(media_blob_hash());
+    let known =
+        MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(media_blob_hash());
     let vlm = MockSafetyProvider::with_capabilities(
         "mock-vlm",
         vec![SafetyProviderCapability::GeneralMediaModeration],
@@ -1015,7 +1018,10 @@ async fn labeled_allow_text_does_not_short_circuit_media_scan() -> Result<()> {
     let post = store
         .stored_verdict_for(SubjectKind::Post, &object_id)
         .expect("post verdict");
-    assert!(post.verdict.is_labeled_allow(), "text はラベル付き allow として記録");
+    assert!(
+        post.verdict.is_labeled_allow(),
+        "text はラベル付き allow として記録"
+    );
     let blob = store
         .stored_verdict_for(SubjectKind::Blob, &media_blob_hash())
         .expect("media scan が実行され verdict が記録される（短絡しない）");
@@ -1086,7 +1092,11 @@ async fn labeled_allow_text_does_not_short_circuit_media_scan() -> Result<()> {
     // signal は text / blob それぞれ 1 件（Low）、advisory は各 signal を指す。
     let signals = store.signals_with_ids();
     assert_eq!(signals.len(), 2);
-    assert!(signals.iter().all(|(_, _, signal)| signal.severity == Severity::Low));
+    assert!(
+        signals
+            .iter()
+            .all(|(_, _, signal)| signal.severity == Severity::Low)
+    );
     for advisory in &post.advisories {
         assert!(signals.iter().any(|(id, _, _)| id == &advisory.signal_id));
     }
