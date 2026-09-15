@@ -537,3 +537,133 @@ async fn worker_restart_restores_supported_scopes() -> Result<()> {
     second_handle.shutdown().await;
     Ok(())
 }
+
+/// `objects/` prefix 全走査の回数を数える docs 同期（変更通知駆動の取り込みが key 単位である検証用）。
+struct CountingDocsSync {
+    inner: Arc<MemoryDocsSync>,
+    whole_scope_queries: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl DocsSync for CountingDocsSync {
+    async fn open_replica(&self, replica_id: &ReplicaId) -> anyhow::Result<()> {
+        self.inner.open_replica(replica_id).await
+    }
+
+    async fn apply_doc_op(&self, replica_id: &ReplicaId, op: DocOp) -> anyhow::Result<()> {
+        self.inner.apply_doc_op(replica_id, op).await
+    }
+
+    async fn query_replica_with_policy(
+        &self,
+        replica_id: &ReplicaId,
+        query: DocQuery,
+        policy: DocFetchPolicy,
+    ) -> anyhow::Result<Vec<DocRecord>> {
+        if matches!(&query, DocQuery::Prefix(prefix) if prefix == &stable_key("objects", "")) {
+            self.whole_scope_queries
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.inner
+            .query_replica_with_policy(replica_id, query, policy)
+            .await
+    }
+
+    async fn subscribe_replica(
+        &self,
+        replica_id: &ReplicaId,
+    ) -> anyhow::Result<kukuri_docs_sync::DocEventStream> {
+        self.inner.subscribe_replica(replica_id).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> anyhow::Result<()> {
+        self.inner.import_peer_ticket(ticket).await
+    }
+}
+
+#[tokio::test]
+async fn worker_event_ingest_processes_only_changed_object_and_records_metrics() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping worker contract test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_worker_key_scoped").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    initialize_database(&pool).await?;
+
+    add_supported_topic(&pool, IndexScopeKind::PublicTopic, "rust").await?;
+    let topic = TopicId::new("rust".to_string());
+    let replica = kukuri_docs_sync::topic_replica_id("rust");
+    let inner = Arc::new(MemoryDocsSync::default());
+    persist_post(inner.as_ref(), &replica, &topic, "first post").await;
+    let docs = Arc::new(CountingDocsSync {
+        inner: inner.clone(),
+        whole_scope_queries: std::sync::atomic::AtomicUsize::new(0),
+    });
+
+    let state = Arc::new(IndexerRuntimeState::default());
+    let projection = Arc::new(MemoryIndexProjection::default());
+    let (participant, entries) = participant_with_docs(&pool, docs.clone(), &projection, &state);
+    let worker = IndexerWorker::new(
+        participant,
+        docs.clone(),
+        Arc::clone(&state),
+        fast_config(Duration::from_secs(120)),
+    );
+    let handle = worker.spawn();
+
+    wait_until("initial ingest", || {
+        let projection = projection.clone();
+        async move {
+            projection
+                .count_scope(IndexScopeKind::PublicTopic, "rust")
+                .await
+                .unwrap_or(0)
+                == 1
+        }
+    })
+    .await;
+    let whole_scope_after_startup = docs
+        .whole_scope_queries
+        .load(std::sync::atomic::Ordering::SeqCst);
+    assert!(
+        whole_scope_after_startup >= 1,
+        "startup pass scans the whole scope"
+    );
+    let snapshot = state.snapshot();
+    assert!(snapshot.last_pass_duration_ms.is_some());
+    assert_eq!(snapshot.scans_fresh, 1);
+    assert_eq!(snapshot.scans_reused, 0);
+    assert!(snapshot.last_index_lag_secs.is_some());
+
+    // 変更通知で 2 件目だけが取り込まれ、`objects/` prefix の全走査は増えない。
+    let second = persist_post(inner.as_ref(), &replica, &topic, "event driven post").await;
+    wait_until("event driven ingest", || {
+        let projection = projection.clone();
+        let second = second.clone();
+        async move {
+            projection
+                .contains_object(IndexScopeKind::PublicTopic, "rust", second.as_str())
+                .await
+                .unwrap_or(false)
+        }
+    })
+    .await;
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", second.as_str()));
+    assert_eq!(
+        docs.whole_scope_queries
+            .load(std::sync::atomic::Ordering::SeqCst),
+        whole_scope_after_startup,
+        "event-driven ingest must not rescan the whole scope"
+    );
+    let snapshot = state.snapshot();
+    assert!(snapshot.last_event_ingest_duration_ms.is_some());
+    assert_eq!(
+        snapshot.scans_fresh, 2,
+        "only the new object reached the provider"
+    );
+    assert_eq!(snapshot.scans_reused, 0);
+
+    handle.shutdown().await;
+    Ok(())
+}

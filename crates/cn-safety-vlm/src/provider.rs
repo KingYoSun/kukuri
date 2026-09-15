@@ -137,6 +137,15 @@ impl SafetyProvider for VlmModerationProvider {
         self.profile.capabilities()
     }
 
+    /// model / 応答形式 / profile が変わると保存済み verdict を再利用しない（#1050）。
+    fn config_fingerprint(&self) -> String {
+        format!(
+            "{PROVIDER_NAME}|{:?}|{}",
+            self.profile,
+            self.client.config_fingerprint()
+        )
+    }
+
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
         let text = request
             .text

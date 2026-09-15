@@ -51,6 +51,16 @@ impl Default for WorkerConfig {
     }
 }
 
+/// 購読タスクから run loop へ流す変更通知（replica id, 変更された key）。
+type ReplicaEvent = (String, String);
+
+/// 取り込み対象（全件 or 変更 key に対応する object だけ）。
+#[derive(Clone, Copy, Debug)]
+enum IngestTarget<'a> {
+    Scope,
+    Keys(&'a [String]),
+}
+
 /// scope 単位の再試行状態。
 #[derive(Debug)]
 struct BackoffEntry {
@@ -119,8 +129,8 @@ impl IndexerWorker {
         self.state.set_worker_running(true);
         info!("indexer worker started");
 
-        // 変更通知の集約チャネル（値は replica id）。購読タスクがここへ流す。
-        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<String>();
+        // 変更通知の集約チャネル（値は replica id と変更された key）。購読タスクがここへ流す。
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<ReplicaEvent>();
         // replica id → 購読タスク。
         let mut subscriptions: HashMap<String, JoinHandle<()>> = HashMap::new();
         // replica id → 取り込み対象 scope（直近の全件見直し時点）。
@@ -129,8 +139,11 @@ impl IndexerWorker {
         let mut backoff: HashMap<String, BackoffEntry> = HashMap::new();
 
         'main: loop {
+            let pass_started = tokio::time::Instant::now();
             self.full_pass(&mut active, &mut subscriptions, &event_tx, &mut backoff)
                 .await;
+            self.state
+                .record_pass_duration(pass_started.elapsed().as_millis() as u64);
 
             // 次の全件見直しまで、変更通知を処理しながら待つ。
             let next_pass = tokio::time::Instant::now() + self.config.poll_interval;
@@ -143,10 +156,11 @@ impl IndexerWorker {
                     }
                     _ = tokio::time::sleep_until(next_pass) => break,
                     received = event_rx.recv() => {
-                        let Some(replica_id) = received else { break };
-                        // まとめ待ち: 待機中に届いた通知を 1 回の取り込みにまとめる。
-                        let mut pending: HashSet<String> = HashSet::new();
-                        pending.insert(replica_id);
+                        let Some((replica_id, key)) = received else { break };
+                        // まとめ待ち: 待機中に届いた通知を replica ごとに 1 回の取り込みにまとめる。
+                        // 取り込み対象は変更された key に対応する object だけ（#1050 AC-4）。
+                        let mut pending: HashMap<String, HashSet<String>> = HashMap::new();
+                        pending.entry(replica_id).or_default().insert(key);
                         let debounce_end =
                             tokio::time::sleep(self.config.event_debounce);
                         tokio::pin!(debounce_end);
@@ -160,15 +174,28 @@ impl IndexerWorker {
                                 _ = &mut debounce_end => break,
                                 more = event_rx.recv() => {
                                     match more {
-                                        Some(id) => { pending.insert(id); }
+                                        Some((id, key)) => {
+                                            pending.entry(id).or_default().insert(key);
+                                        }
                                         None => break,
                                     }
                                 }
                             }
                         }
-                        for replica_id in pending {
+                        for (replica_id, keys) in pending {
                             if let Some(scope) = active.get(&replica_id).cloned() {
-                                self.ingest_scope_with_backoff(&scope, &mut backoff).await;
+                                let mut keys: Vec<String> = keys.into_iter().collect();
+                                keys.sort();
+                                let started = tokio::time::Instant::now();
+                                self.ingest_with_backoff(
+                                    &scope,
+                                    IngestTarget::Keys(&keys),
+                                    &mut backoff,
+                                )
+                                .await;
+                                self.state.record_event_ingest_duration(
+                                    started.elapsed().as_millis() as u64,
+                                );
                             }
                         }
                     }
@@ -193,7 +220,7 @@ impl IndexerWorker {
         &self,
         active: &mut HashMap<String, ScopeReplica>,
         subscriptions: &mut HashMap<String, JoinHandle<()>>,
-        event_tx: &mpsc::UnboundedSender<String>,
+        event_tx: &mpsc::UnboundedSender<ReplicaEvent>,
         backoff: &mut HashMap<String, BackoffEntry>,
     ) {
         // 1. 対象であるべき scope。
@@ -287,7 +314,9 @@ impl IndexerWorker {
         // 4. 各 scope の取り込み。
         let mut all_scopes_ingested = !opened.is_empty();
         for scope in &opened {
-            all_scopes_ingested &= self.ingest_scope_with_backoff(scope, backoff).await;
+            all_scopes_ingested &= self
+                .ingest_with_backoff(scope, IngestTarget::Scope, backoff)
+                .await;
         }
         if all_scopes_ingested {
             self.state
@@ -295,10 +324,14 @@ impl IndexerWorker {
         }
     }
 
-    /// scope を 1 つ取り込む。再試行間隔中なら何もしない。
-    async fn ingest_scope_with_backoff(
+    /// scope を取り込む（全件、または変更された key の object だけ）。再試行間隔中なら何もしない。
+    ///
+    /// 変更通知駆動の取り込みも同じ backoff に従う。間隔中に届いた通知の取りこぼしは、次の
+    /// 全件見直し（冪等）が回収する。
+    async fn ingest_with_backoff(
         &self,
         scope: &ScopeReplica,
+        target: IngestTarget<'_>,
         backoff: &mut HashMap<String, BackoffEntry>,
     ) -> bool {
         let key = scope.replica_id.as_str();
@@ -308,7 +341,11 @@ impl IndexerWorker {
             debug!(replica_id = %key, "scope is backing off; skipping this round");
             return false;
         }
-        match self.participant.ingest_scope(scope).await {
+        let result = match target {
+            IngestTarget::Scope => self.participant.ingest_scope(scope).await,
+            IngestTarget::Keys(keys) => self.participant.ingest_changed_keys(scope, keys).await,
+        };
+        match result {
             Ok(summary) => {
                 backoff.remove(key);
                 self.state
@@ -317,6 +354,8 @@ impl IndexerWorker {
                     replica_id = %key,
                     scanned = summary.scanned,
                     indexed = summary.indexed,
+                    scans_fresh = summary.scans_fresh,
+                    scans_reused = summary.scans_reused,
                     "scope ingested"
                 );
                 true
@@ -350,11 +389,12 @@ impl IndexerWorker {
         }
     }
 
-    /// scope の変更通知を購読し、届いた通知を集約チャネルへ流すタスクを起動する。
+    /// scope の変更通知を購読し、届いた通知（replica id + 変更 key）を集約チャネルへ流す
+    /// タスクを起動する。
     fn spawn_subscription(
         &self,
         scope: &ScopeReplica,
-        event_tx: mpsc::UnboundedSender<String>,
+        event_tx: mpsc::UnboundedSender<ReplicaEvent>,
     ) -> JoinHandle<()> {
         let docs_sync = Arc::clone(&self.docs_sync);
         let replica_id = scope.replica_id.clone();
@@ -362,7 +402,10 @@ impl IndexerWorker {
             match docs_sync.subscribe_replica(&replica_id).await {
                 Ok(mut stream) => {
                     while let Some(event) = stream.next().await {
-                        if event.is_ok() && event_tx.send(replica_id.as_str().to_string()).is_err()
+                        let Ok(event) = event else { continue };
+                        if event_tx
+                            .send((replica_id.as_str().to_string(), event.key))
+                            .is_err()
                         {
                             break;
                         }

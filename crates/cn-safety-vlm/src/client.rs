@@ -113,6 +113,11 @@ impl std::fmt::Debug for VlmClient {
 }
 
 impl VlmClient {
+    /// 判定に影響する構成（model / 応答形式）の識別子。base URL / credentials は含めない。
+    pub(crate) fn config_fingerprint(&self) -> String {
+        format!("{}|{:?}", self.model, self.response_format)
+    }
+
     /// 設定と credentials から client を組み立てる。
     pub fn new(
         config: &VlmProviderConfig,

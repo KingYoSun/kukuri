@@ -212,7 +212,7 @@ fn moderation_action_for(action: SafetyAction) -> Option<ModerationAction> {
 }
 
 /// subject kind を risk signal の target 種別に写像する。
-fn risk_target_for(kind: SubjectKind) -> RiskSignalTarget {
+pub(crate) fn risk_target_for(kind: SubjectKind) -> RiskSignalTarget {
     match kind {
         SubjectKind::Post => RiskSignalTarget::PostId,
         SubjectKind::Blob => RiskSignalTarget::BlobCid,

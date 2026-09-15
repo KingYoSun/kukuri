@@ -21,7 +21,9 @@ use kukuri_cn_safety::{
 };
 use kukuri_cn_safety_runtime::clock::SystemScanClock;
 use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
-use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore, SafetyScanService};
+use kukuri_cn_safety_runtime::{
+    MemorySafetyArtifactStore, SafetyArtifactStore, SafetyScanService, VerdictPersistMeta,
+};
 use kukuri_cn_safety_runtime::{SafetyOrchestrator, Secp256k1ModerationEventSigner};
 use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
 use kukuri_docs_sync::{
@@ -180,6 +182,7 @@ async fn search_discovery_recommendation_excludes_non_allow() -> Result<()> {
             SubjectKind::Post,
             flipped.as_str(),
             &exclude_critical_verdict(),
+            &VerdictPersistMeta::default(),
         )
         .await?;
 

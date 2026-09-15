@@ -404,8 +404,14 @@ async fn mixed_scope_reingest_never_fetches_withdrawn_prevented_deleted_or_inval
             io.ephemeral,
             vec![blob_hash(b"valid body").as_str().to_string()]
         );
-        assert_eq!(io.scans.len(), 1);
-        assert_eq!(io.scans[0].subject_id.as_deref(), Some(valid.id.as_str()));
+        // #1050: 内容と scan 構成が不変の valid post は保存済み verdict を再利用し、provider には
+        // 届かない（初回 ingest で 1 回 scan 済み）。本文の一時取得は再利用判定より前に行う。
+        assert!(
+            io.scans.is_empty(),
+            "unchanged valid post must not reach the provider on re-ingest"
+        );
+        assert_eq!(summary.scans_reused, 1);
+        assert_eq!(summary.scans_fresh, 0);
         assert_eq!(io.entry_upserts, vec![valid.id.clone()]);
         assert_eq!(io.projection_upserts, vec![valid.id.clone()]);
         io.entry_removes.sort();

@@ -22,6 +22,23 @@ pub async fn migrate_postgres(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// 指定 version 以下の migration だけを適用する（migration test 用）。
+///
+/// データ変換を伴う migration（例: #1050 の risk signal 圧縮）を、その直前の schema に seed した
+/// 状態から検証するために使う。残りは後続の `migrate_postgres` が適用する。
+pub async fn migrate_postgres_up_to(pool: &PgPool, max_version: i64) -> Result<()> {
+    let mut migrator = sqlx::migrate!("./migrations");
+    let migrations = migrator
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= max_version)
+        .cloned()
+        .collect::<Vec<_>>();
+    migrator.migrations = std::borrow::Cow::Owned(migrations);
+    migrator.run(pool).await?;
+    Ok(())
+}
+
 pub async fn initialize_database(pool: &PgPool) -> Result<()> {
     migrate_postgres(pool).await?;
     seed_default_policies(pool).await?;

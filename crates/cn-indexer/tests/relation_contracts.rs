@@ -14,7 +14,9 @@ use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, MemoryIndexEntryStore, New
 use kukuri_cn_indexer::{ArcadeDbConfig, ArcadeDbRelationGraph, analyze_relations, topic_cluster};
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
-use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyArtifactStore};
+use kukuri_cn_safety_runtime::{
+    MemorySafetyArtifactStore, SafetyArtifactStore, VerdictPersistMeta,
+};
 use kukuri_cn_trust::relation_testing::assert_relation_store_contracts;
 use kukuri_cn_trust::{
     FEATURE_CO_PARTICIPATION_EVENTS, FEATURE_SHARED_TOPICS, MemoryRelationStore, RelationStore,
@@ -60,7 +62,12 @@ async fn seeded_entries() -> Result<MemoryIndexEntryStore> {
     ];
     for (i, (scope_kind, scope_id, object_id, author)) in seed.iter().enumerate() {
         let verdict_id = verdicts
-            .persist_verdict(SubjectKind::Post, &format!("subject-{i}"), &allow_verdict())
+            .persist_verdict(
+                SubjectKind::Post,
+                &format!("subject-{i}"),
+                &allow_verdict(),
+                &VerdictPersistMeta::default(),
+            )
             .await?;
         store
             .upsert_entry(&NewIndexEntry {

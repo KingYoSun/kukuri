@@ -8,10 +8,15 @@ use async_trait::async_trait;
 
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    ModerationEventSigner, RiskSignalTarget, SafetyPolicy, SafetyProvider, SafetyRiskSignal,
-    SafetyVerdict, SignedModerationEvent, Visibility, issue_signed_event,
+    AppealStatus, ModerationEventSigner, RiskSignalTarget, SafetyPolicy, SafetyProvider,
+    SafetyRiskSignal, SafetyVerdict, SignedModerationEvent, Visibility, issue_signed_event,
 };
 
+use crate::artifacts::risk_target_for;
+use crate::reuse::{
+    PersistedSignal, ReuseDecision, ReuseInputs, ScanDisposition, StoredVerdictRecord,
+    VerdictPersistMeta, decide, verdict_changed,
+};
 use crate::{
     SAFETY_SIGNING_KEY_ENV, SafetyOrchestrator, SafetyScanReport, Secp256k1ModerationEventSigner,
     SystemScanClock, UuidEventIdGenerator,
@@ -104,31 +109,69 @@ pub fn resolve_safety_policy(config: &SafetyRuntimeConfig) -> Result<SafetyPolic
     Ok(policy)
 }
 
+/// scan 結果（verdict / risk signal / signed event）の永続化境界。
+///
+/// #1050 以降は読み戻し（`load_verdict`）と集約（`persist_signal` の dedupe、
+/// `attribute_subject_author`）も含む。実装は cn-core の Postgres store と、テスト用の
+/// [`MemorySafetyArtifactStore`]。
 #[async_trait]
 pub trait SafetyArtifactStore: Send + Sync {
     async fn persist_event(&self, event: &SignedModerationEvent) -> Result<()>;
 
+    /// risk signal を保存する。
+    ///
+    /// 同一鍵 `(issuer_node_id, target, target_id, category, basis)` の活性 signal
+    /// （`appeal_status != cleared` かつ `expires_at` 無し）が既にあれば新規行を作らず、
+    /// severity / confidence / visibility を更新して既存 id を返す（`newly_created = false`）。
+    /// 活性行が無く、失効していない `cleared` 行があれば、その判定を尊重して新規行を作らない。
     async fn persist_signal(
         &self,
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
         subject_author: Option<&str>,
-    ) -> Result<String>;
+    ) -> Result<PersistedSignal>;
 
+    /// subject の最新 verdict を upsert する（対象ごと 1 行、id は据え置き）。
     async fn persist_verdict(
         &self,
         subject_kind: SubjectKind,
         subject_id: &str,
         verdict: &SafetyVerdict,
+        meta: &VerdictPersistMeta,
     ) -> Result<String>;
+
+    /// subject の保存済み verdict を読み戻す（再利用判定の入力）。
+    async fn load_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+    ) -> Result<Option<StoredVerdictRecord>>;
+
+    /// content target の risk signal を著者へ関連付ける（既にあれば何もしない）。
+    ///
+    /// 保存済み verdict を再利用したときも、共有 blob の 2 人目の著者が trust 入力から漏れない
+    /// ようにするために使う。
+    async fn attribute_subject_author(
+        &self,
+        target: RiskSignalTarget,
+        target_id: &str,
+        author: &str,
+    ) -> Result<()>;
+}
+
+#[derive(Clone, Debug)]
+struct MemorySignal {
+    id: String,
+    issuer_node_id: String,
+    signal: SafetyRiskSignal,
 }
 
 #[derive(Debug, Default)]
 pub struct MemorySafetyArtifactStore {
     events: Mutex<Vec<SignedModerationEvent>>,
-    signals: Mutex<Vec<(String, SafetyRiskSignal)>>,
+    signals: Mutex<Vec<MemorySignal>>,
     signal_subject_authors: Mutex<Vec<(RiskSignalTarget, String, String)>>,
-    verdicts: Mutex<HashMap<(String, String), (String, SafetyVerdict)>>,
+    verdicts: Mutex<HashMap<(String, String), StoredVerdictRecord>>,
 }
 
 impl MemorySafetyArtifactStore {
@@ -140,8 +183,42 @@ impl MemorySafetyArtifactStore {
         self.events.lock().expect("events mutex poisoned").clone()
     }
 
+    /// 保存済み signal を `(issuer_node_id, signal)` で返す（保存順）。
     pub fn signals(&self) -> Vec<(String, SafetyRiskSignal)> {
-        self.signals.lock().expect("signals mutex poisoned").clone()
+        self.signals
+            .lock()
+            .expect("signals mutex poisoned")
+            .iter()
+            .map(|entry| (entry.issuer_node_id.clone(), entry.signal.clone()))
+            .collect()
+    }
+
+    /// 保存済み signal を `(id, issuer_node_id, signal)` で返す（保存順）。
+    pub fn signals_with_ids(&self) -> Vec<(String, String, SafetyRiskSignal)> {
+        self.signals
+            .lock()
+            .expect("signals mutex poisoned")
+            .iter()
+            .map(|entry| {
+                (
+                    entry.id.clone(),
+                    entry.issuer_node_id.clone(),
+                    entry.signal.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// テスト用: 保存済み signal の appeal 状態を差し替える（審査結果の再現）。
+    pub fn set_signal_appeal_status(&self, signal_id: &str, status: AppealStatus) -> bool {
+        let mut signals = self.signals.lock().expect("signals mutex poisoned");
+        match signals.iter_mut().find(|entry| entry.id == signal_id) {
+            Some(entry) => {
+                entry.signal.appeal_status = Some(status);
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn signal_subject_authors(&self) -> Vec<(RiskSignalTarget, String, String)> {
@@ -160,6 +237,19 @@ impl MemorySafetyArtifactStore {
             .lock()
             .expect("verdicts mutex poisoned")
             .get(&(subject_kind_key(subject_kind), subject_id.to_string()))
+            .map(|record| (record.id.clone(), record.verdict.clone()))
+    }
+
+    /// 保存済み verdict を fingerprint / タグ込みで返す。
+    pub fn stored_verdict_for(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+    ) -> Option<StoredVerdictRecord> {
+        self.verdicts
+            .lock()
+            .expect("verdicts mutex poisoned")
+            .get(&(subject_kind_key(subject_kind), subject_id.to_string()))
             .cloned()
     }
 
@@ -168,9 +258,20 @@ impl MemorySafetyArtifactStore {
             .lock()
             .expect("verdicts mutex poisoned")
             .values()
-            .find(|(id, _)| id == verdict_id)
-            .map(|(_, verdict)| verdict.clone())
+            .find(|record| record.id == verdict_id)
+            .map(|record| record.verdict.clone())
     }
+}
+
+fn same_signal_key(a: &SafetyRiskSignal, b: &SafetyRiskSignal) -> bool {
+    a.target == b.target
+        && a.target_id == b.target_id
+        && a.category == b.category
+        && a.basis == b.basis
+}
+
+fn is_active_signal(signal: &SafetyRiskSignal) -> bool {
+    signal.appeal_status.unwrap_or_default() != AppealStatus::Cleared && signal.expires_at.is_none()
 }
 
 fn subject_kind_key(subject_kind: SubjectKind) -> String {
@@ -198,17 +299,53 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
         subject_author: Option<&str>,
-    ) -> Result<String> {
-        let mut signals = self.signals.lock().expect("signals mutex poisoned");
-        let id = format!("memory-signal-{}", signals.len() + 1);
-        signals.push((issuer_node_id.to_string(), signal.clone()));
-        if let Some(author) = subject_author {
-            self.signal_subject_authors
-                .lock()
-                .expect("signal subject authors mutex poisoned")
-                .push((signal.target, signal.target_id.clone(), author.to_string()));
+    ) -> Result<PersistedSignal> {
+        if signal.target_id.trim().is_empty() {
+            bail!("risk signal target_id must not be empty");
         }
-        Ok(id)
+        let persisted = {
+            let mut signals = self.signals.lock().expect("signals mutex poisoned");
+            let existing_active = signals.iter_mut().find(|entry| {
+                entry.issuer_node_id == issuer_node_id
+                    && same_signal_key(&entry.signal, signal)
+                    && is_active_signal(&entry.signal)
+            });
+            if let Some(entry) = existing_active {
+                entry.signal.severity = signal.severity;
+                entry.signal.confidence = signal.confidence;
+                entry.signal.visibility = signal.visibility;
+                PersistedSignal {
+                    id: entry.id.clone(),
+                    newly_created: false,
+                }
+            } else if let Some(cleared) = signals.iter().rev().find(|entry| {
+                entry.issuer_node_id == issuer_node_id
+                    && same_signal_key(&entry.signal, signal)
+                    && entry.signal.appeal_status == Some(AppealStatus::Cleared)
+                    && entry.signal.expires_at.is_none()
+            }) {
+                PersistedSignal {
+                    id: cleared.id.clone(),
+                    newly_created: false,
+                }
+            } else {
+                let id = format!("memory-signal-{}", signals.len() + 1);
+                signals.push(MemorySignal {
+                    id: id.clone(),
+                    issuer_node_id: issuer_node_id.to_string(),
+                    signal: signal.clone(),
+                });
+                PersistedSignal {
+                    id,
+                    newly_created: true,
+                }
+            }
+        };
+        if let Some(author) = subject_author {
+            self.attribute_subject_author(signal.target, &signal.target_id, author)
+                .await?;
+        }
+        Ok(persisted)
     }
 
     async fn persist_verdict(
@@ -216,6 +353,7 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         subject_kind: SubjectKind,
         subject_id: &str,
         verdict: &SafetyVerdict,
+        meta: &VerdictPersistMeta,
     ) -> Result<String> {
         if subject_id.trim().is_empty() {
             bail!("scan verdict subject_id must not be empty");
@@ -223,11 +361,49 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         let mut verdicts = self.verdicts.lock().expect("verdicts mutex poisoned");
         let key = (subject_kind_key(subject_kind), subject_id.to_string());
         let next_id = format!("memory-verdict-{}", verdicts.len() + 1);
-        let (id, stored) = verdicts
-            .entry(key)
-            .or_insert_with(|| (next_id, verdict.clone()));
-        *stored = verdict.clone();
-        Ok(id.clone())
+        let record = verdicts.entry(key).or_insert_with(|| StoredVerdictRecord {
+            id: next_id,
+            verdict: verdict.clone(),
+            derived_tags: Vec::new(),
+            source_fingerprint: None,
+            scan_config_fingerprint: None,
+        });
+        record.verdict = verdict.clone();
+        record.derived_tags = meta.derived_tags.clone();
+        record.source_fingerprint = meta.source_fingerprint.clone();
+        record.scan_config_fingerprint = meta.scan_config_fingerprint.clone();
+        Ok(record.id.clone())
+    }
+
+    async fn load_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+    ) -> Result<Option<StoredVerdictRecord>> {
+        Ok(self.stored_verdict_for(subject_kind, subject_id))
+    }
+
+    async fn attribute_subject_author(
+        &self,
+        target: RiskSignalTarget,
+        target_id: &str,
+        author: &str,
+    ) -> Result<()> {
+        if author.trim().is_empty() {
+            bail!("risk signal subject author must not be empty");
+        }
+        if !matches!(target, RiskSignalTarget::PostId | RiskSignalTarget::BlobCid) {
+            bail!("only post_id/blob_cid risk signals can be attributed to an author");
+        }
+        let mut authors = self
+            .signal_subject_authors
+            .lock()
+            .expect("signal subject authors mutex poisoned");
+        let entry = (target, target_id.to_string(), author.to_string());
+        if !authors.contains(&entry) {
+            authors.push(entry);
+        }
+        Ok(())
     }
 }
 
@@ -237,6 +413,8 @@ pub struct SafetyScanOutcome {
     pub signed_event: Option<SignedModerationEvent>,
     pub persisted_signal_id: Option<String>,
     pub verdict_id: Option<String>,
+    /// provider を呼んだか、保存済み verdict を再利用したか（#1050）。
+    pub disposition: ScanDisposition,
 }
 
 pub struct SafetyScanService {
@@ -272,11 +450,16 @@ impl SafetyScanService {
         &self.issuer_node_id
     }
 
+    /// 構築時に確定した scan 構成の fingerprint（#1050）。
+    pub fn scan_config_fingerprint(&self) -> &str {
+        self.orchestrator.scan_config_fingerprint()
+    }
+
     pub async fn scan_and_record(
         &self,
         request: &ProviderScanRequest,
     ) -> Result<SafetyScanOutcome> {
-        self.scan_and_record_inner(request, None).await
+        self.scan_and_record_inner(request, None, None).await
     }
 
     pub async fn scan_and_record_for_author(
@@ -287,7 +470,29 @@ impl SafetyScanService {
         if subject_author.trim().is_empty() {
             bail!("scan subject author must not be empty");
         }
-        self.scan_and_record_inner(request, Some(subject_author))
+        self.scan_and_record_inner(request, Some(subject_author), None)
+            .await
+    }
+
+    /// 保存済み verdict を再利用できるなら provider を呼ばずに返し、できなければ scan する
+    /// （#1050）。
+    ///
+    /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
+    /// blob = blob hash）。再利用時は artifact を生成せず、`verdict_id` に保存済み行の id を
+    /// 返す。非 allow の再利用で `subject_author` があれば著者関連付けだけ行う。
+    pub async fn scan_or_reuse(
+        &self,
+        request: &ProviderScanRequest,
+        subject_author: Option<&str>,
+        source_fingerprint: &str,
+    ) -> Result<SafetyScanOutcome> {
+        if subject_author.is_some_and(|author| author.trim().is_empty()) {
+            bail!("scan subject author must not be empty");
+        }
+        if source_fingerprint.trim().is_empty() {
+            bail!("scan source fingerprint must not be empty");
+        }
+        self.scan_and_record_inner(request, subject_author, Some(source_fingerprint))
             .await
     }
 
@@ -295,18 +500,76 @@ impl SafetyScanService {
         &self,
         request: &ProviderScanRequest,
         subject_author: Option<&str>,
+        source_fingerprint: Option<&str>,
     ) -> Result<SafetyScanOutcome> {
-        let report = self.orchestrator.scan_subject(request).await;
-        let verdict_id = match (request.subject_kind, request.subject_id.as_deref()) {
-            (Some(kind), Some(subject_id)) if !subject_id.trim().is_empty() => Some(
-                self.store
-                    .persist_verdict(kind, subject_id, &report.verdict)
-                    .await
-                    .context("failed to persist scan verdict state")?,
-            ),
+        let subject = match (request.subject_kind, request.subject_id.as_deref()) {
+            (Some(kind), Some(subject_id)) if !subject_id.trim().is_empty() => {
+                Some((kind, subject_id))
+            }
             _ => None,
         };
-        let persisted_signal_id = match report.risk_signal.as_ref() {
+        let stored = match subject {
+            Some((kind, subject_id)) => self
+                .store
+                .load_verdict(kind, subject_id)
+                .await
+                .context("failed to load stored scan verdict")?,
+            None => None,
+        };
+
+        if let (Some(source_fingerprint), Some((kind, subject_id))) = (source_fingerprint, subject)
+        {
+            let inputs = ReuseInputs {
+                source_fingerprint,
+                scan_config_fingerprint: self.orchestrator.scan_config_fingerprint(),
+            };
+            if let (ReuseDecision::Reuse, Some(stored)) =
+                (decide(stored.as_ref(), &inputs), &stored)
+            {
+                if !stored.verdict.is_indexable()
+                    && let Some(author) = subject_author
+                {
+                    self.store
+                        .attribute_subject_author(risk_target_for(kind), subject_id, author)
+                        .await
+                        .context("failed to attribute reused risk signal to author")?;
+                }
+                return Ok(SafetyScanOutcome {
+                    report: SafetyScanReport {
+                        verdict: stored.verdict.clone(),
+                        scan_results: Vec::new(),
+                        moderation_event: None,
+                        risk_signal: None,
+                        derived_tags: stored.derived_tags.clone(),
+                    },
+                    signed_event: None,
+                    persisted_signal_id: None,
+                    verdict_id: Some(stored.id.clone()),
+                    disposition: ScanDisposition::Reused,
+                });
+            }
+        }
+
+        let report = self.orchestrator.scan_subject(request).await;
+        let verdict_id = match subject {
+            Some((kind, subject_id)) => {
+                let meta = VerdictPersistMeta {
+                    source_fingerprint: source_fingerprint.map(str::to_string),
+                    scan_config_fingerprint: Some(
+                        self.orchestrator.scan_config_fingerprint().to_string(),
+                    ),
+                    derived_tags: report.derived_tags.clone(),
+                };
+                Some(
+                    self.store
+                        .persist_verdict(kind, subject_id, &report.verdict, &meta)
+                        .await
+                        .context("failed to persist scan verdict state")?,
+                )
+            }
+            None => None,
+        };
+        let persisted_signal = match report.risk_signal.as_ref() {
             Some(signal) => Some(
                 self.store
                     .persist_signal(&self.issuer_node_id, signal, subject_author)
@@ -315,8 +578,14 @@ impl SafetyScanService {
             ),
             None => None,
         };
+        // signed moderation event は「新しい判定」の記録。signal を既存行へ集約し verdict も
+        // 変わらない再 scan では発行しない（#1050 AC-2）。
+        let should_emit_event = persisted_signal
+            .as_ref()
+            .is_some_and(|signal| signal.newly_created)
+            || verdict_changed(stored.as_ref().map(|s| &s.verdict), &report.verdict);
         let signed_event = match (report.moderation_event.as_ref(), self.signer.as_ref()) {
-            (Some(body), Some(signer)) => {
+            (Some(body), Some(signer)) if should_emit_event => {
                 let event = issue_signed_event(body.clone(), signer.as_ref());
                 self.store
                     .persist_event(&event)
@@ -329,8 +598,9 @@ impl SafetyScanService {
         Ok(SafetyScanOutcome {
             report,
             signed_event,
-            persisted_signal_id,
+            persisted_signal_id: persisted_signal.map(|signal| signal.id),
             verdict_id,
+            disposition: ScanDisposition::Fresh,
         })
     }
 }

@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use kukuri_cn_safety::provider::{ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome};
 use kukuri_cn_safety::{
@@ -57,6 +58,25 @@ pub fn map_scan_error(error: &ScanError) -> ScanOutcome {
     }
 }
 
+/// policy と provider 構成から scan 構成の fingerprint を導く（#1050）。
+///
+/// `SafetyPolicy` の serde 表現（policy_version・閾値・各 action を含む）と、登録順の
+/// provider `config_fingerprint()` を連結して sha256 にする。いずれかが変われば保存済み
+/// verdict は再利用されない。
+pub fn compute_scan_config_fingerprint(
+    policy: &SafetyPolicy,
+    providers: &[Arc<dyn SafetyProvider>],
+) -> String {
+    let mut hasher = Sha256::new();
+    let policy_json = serde_json::to_string(policy).expect("SafetyPolicy is serializable");
+    hasher.update(policy_json.as_bytes());
+    for provider in providers {
+        hasher.update(b"\n");
+        hasher.update(provider.config_fingerprint().as_bytes());
+    }
+    hex::encode(hasher.finalize())
+}
+
 /// safety provider を駆動し verdict / artifact を組み立てる orchestrator。
 pub struct SafetyOrchestrator {
     providers: Vec<Arc<dyn SafetyProvider>>,
@@ -64,6 +84,7 @@ pub struct SafetyOrchestrator {
     issuer_node_id: String,
     clock: Arc<dyn ScanClock>,
     ids: Arc<dyn EventIdGenerator>,
+    scan_config_fingerprint: String,
 }
 
 impl std::fmt::Debug for SafetyOrchestrator {
@@ -91,6 +112,16 @@ impl SafetyOrchestrator {
             clock,
             ids,
         }
+    }
+
+    /// 構築時に確定した scan 構成の fingerprint（保存済み verdict の再利用鍵の一部。#1050）。
+    pub fn scan_config_fingerprint(&self) -> &str {
+        &self.scan_config_fingerprint
+    }
+
+    /// 適用中の policy。
+    pub fn policy(&self) -> &SafetyPolicy {
+        &self.policy
     }
 
     /// 単一 subject を scan して verdict / 未署名 artifact を返す。
@@ -194,14 +225,17 @@ impl SafetyOrchestratorBuilder {
             }
         }
 
+        let policy = self
+            .policy
+            .unwrap_or_else(SafetyPolicy::public_node_default);
+        let scan_config_fingerprint = compute_scan_config_fingerprint(&policy, &self.providers);
         Ok(SafetyOrchestrator {
             providers: self.providers,
-            policy: self
-                .policy
-                .unwrap_or_else(SafetyPolicy::public_node_default),
+            policy,
             issuer_node_id,
             clock: self.clock,
             ids: self.ids,
+            scan_config_fingerprint,
         })
     }
 }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use kukuri_blob_service::MemoryBlobService;
-use kukuri_cn_core::{IndexScopeKind, MemoryIndexEntryStore};
+use kukuri_cn_core::IndexScopeKind;
 use kukuri_cn_indexer::config::{MediaFetchConfig, RelayConfig};
 use kukuri_cn_indexer::ingest::IngestPipeline;
 use kukuri_cn_indexer::media_fetcher::BlobMediaFetcher;
@@ -32,118 +32,21 @@ use kukuri_cn_safety_runtime::{
 };
 use kukuri_core::{
     KukuriKeys, KukuriMediaManifestV1, MediaManifestItem, ObjectVisibility, PayloadRef, ReplicaId,
-    TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope,
-    build_post_envelope_with_payload,
+    TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope_with_payload,
 };
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 
-const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
-
-/// mock provider から scan service（#406）を組む。本番構成と同型（実鍵 signer +
-/// SystemScanClock + UuidEventIdGenerator）で、store のみ in-memory。
-///
-/// 返り値の store から、pipeline 経由で永続化された moderation artifact を検証できる。
-fn service_with(
-    provider: MockSafetyProvider,
-) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
-    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
-    let issuer = signer.issuer_node_id().to_string();
-    let store = Arc::new(MemorySafetyArtifactStore::new());
-    let orchestrator = SafetyOrchestrator::builder(
-        &issuer,
-        Arc::new(SystemScanClock),
-        Arc::new(UuidEventIdGenerator),
-    )
-    .provider(Arc::new(provider))
-    .build()
-    .expect("orchestrator");
-    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
-        .signer(Arc::new(signer))
-        .build()
-        .expect("service");
-    (Arc::new(service), store)
-}
-
-/// mock provider で allow を返す service（known CSAM = NoKnownMatch、脅威スコア無し）。
-///
-/// `public_node_default` policy は known CSAM provider を必須とするため、allow を得るには
-/// `KnownCsamHashMatch` provider が `NoKnownMatch` を返す必要がある。
-fn allow_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
-    service_with(MockSafetyProvider::known_csam("mock-known-csam"))
-}
+mod ingest_support;
+use ingest_support::*;
 
 /// mock provider が scan 失敗を返す service（fail-closed のテスト用）。
 fn scan_failed_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
     service_with(MockSafetyProvider::known_csam("mock-known-csam").default_failed())
 }
 
-/// mock provider が unavailable を返す service（provider unavailable の fail-closed テスト用）。
-fn provider_unavailable_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
-    service_with(
-        MockSafetyProvider::known_csam("mock-known-csam")
-            .default_error(ScanError::Unavailable("mock provider down".to_string())),
-    )
-}
-
 /// known CSAM hash match を返す service（exclude のテスト用）。
 fn known_csam_service(post_id: &str) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
     service_with(MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(post_id))
-}
-
-/// service + 真実源（`MemoryIndexEntryStore`）+ 投影から二段書き込みの pipeline を組む（#404）。
-///
-/// 真実源は artifact store の verdict record を参照するため、service と同じ store を渡す。
-/// 返り値の store から moderation artifact を、entries から真実源の entry を検証できる。
-fn pipeline_with(
-    docs: &Arc<MemoryDocsSync>,
-    projection: &Arc<MemoryIndexProjection>,
-    (service, store): (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>),
-) -> (
-    IngestPipeline,
-    Arc<MemoryIndexEntryStore>,
-    Arc<MemorySafetyArtifactStore>,
-) {
-    let entries = Arc::new(MemoryIndexEntryStore::new(store.clone()));
-    let pipeline = IngestPipeline::new(docs.clone(), service, entries.clone(), projection.clone());
-    (pipeline, entries, store)
-}
-
-/// 本文 text の post envelope を共有 replica に実在させる（app-api の persist と同じ key 形状）。
-///
-/// 返り値は object_id。
-async fn persist_post(
-    docs: &MemoryDocsSync,
-    replica: &ReplicaId,
-    topic: &TopicId,
-    body: &str,
-) -> String {
-    let keys = KukuriKeys::generate();
-    let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
-    let object = envelope
-        .to_post_object()
-        .expect("post object")
-        .expect("post object present");
-    let object_id = object.object_id.as_str().to_string();
-    docs.open_replica(replica).await.expect("open");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/state")),
-            value: serde_json::to_value(&object).expect("state json"),
-        },
-    )
-    .await
-    .expect("state op");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/envelope")),
-            value: serde_json::to_value(&envelope).expect("envelope json"),
-        },
-    )
-    .await
-    .expect("envelope op");
-    object_id
 }
 
 const MEDIA_MANIFEST_ID: &str = "media-manifest-test";
@@ -483,38 +386,6 @@ async fn missing_media_manifest_fails_closed_and_post_is_not_indexed() -> Result
     Ok(())
 }
 
-/// 受け取った scan request を記録する known-CSAM provider（mime 経路の検証用）。
-///
-/// すべての subject に `NoKnownMatch`（allow 側）を返し、`public_node_default` policy の
-/// require_known_csam を満たしつつ request の中身だけを観測する。
-struct RecordingProvider {
-    requests: std::sync::Mutex<Vec<ProviderScanRequest>>,
-}
-
-#[async_trait]
-impl SafetyProvider for RecordingProvider {
-    fn name(&self) -> &str {
-        "recording-known-csam"
-    }
-
-    fn capabilities(&self) -> &[SafetyProviderCapability] {
-        &[SafetyProviderCapability::KnownCsamHashMatch]
-    }
-
-    async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
-        self.requests
-            .lock()
-            .expect("recording provider mutex")
-            .push(request.clone());
-        let mut result = ProviderScanResult::completed(
-            self.name(),
-            SafetyProviderCapability::KnownCsamHashMatch,
-        );
-        result.outcome = ScanOutcome::NoKnownMatch;
-        Ok(result)
-    }
-}
-
 #[tokio::test]
 async fn media_scan_requests_carry_blob_hash_and_mime_from_the_manifest() -> Result<()> {
     // #609: manifest 参照は item blob（hash + mime）へ展開され、mime は scan request の
@@ -529,9 +400,7 @@ async fn media_scan_requests_carry_blob_hash_and_mime_from_the_manifest() -> Res
     let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
     let issuer = signer.issuer_node_id().to_string();
     let store = Arc::new(MemorySafetyArtifactStore::new());
-    let recording = Arc::new(RecordingProvider {
-        requests: std::sync::Mutex::new(Vec::new()),
-    });
+    let recording = RecordingProvider::new();
     let orchestrator = SafetyOrchestrator::builder(
         &issuer,
         Arc::new(SystemScanClock),

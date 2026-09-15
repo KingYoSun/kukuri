@@ -362,3 +362,30 @@ fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装し�
 - scope ゲート（§2.2 / §2.4）、fail-closed の順序（§2.6）、ingestion Model C、readiness と公開関門（§6.7）。
 - 過去に `Exclude` された投稿の backfill は `policy_version` 更新に伴う再 ingest で反映し、専用 migration は
   行わない（ADR 0028 §8.9）。
+
+### 7.6 保存済み verdict の再利用と risk signal の集約（#1050、2026-09-15）
+
+- indexer は pass ごとに scope 全件を走査するが、subject の**内容 fingerprint**（post =
+  `objects/<id>/state` レコードの content hash、blob = blob hash）と **scan 構成 fingerprint**
+  （`SafetyPolicy` の serde 表現 + provider の `config_fingerprint()` の sha256）が保存済み verdict
+  （`cn_safety.scan_verdicts.source_fingerprint` / `scan_config_fingerprint`）と一致する限り provider を
+  呼ばず、保存済み verdict と `derived_tags` を再利用する。再利用時は moderation artifact
+  （risk signal / signed event）を生成しない。
+- **fail-closed の verdict（scan failure / provider unavailable / unscanned / hold）は再利用しない**。次の
+  pass で必ず再試行し、provider 復旧時に `allow` へ更新する。TTL による定期再検証は置かない（再 scan の
+  契機は内容変化と scan 構成変化のみ。既知 hash DB の更新を既存 index に反映するには policy /
+  provider 構成の更新で再 scan を起こす）。
+- 撤回・tombstone・送信防止・envelope 検証は再利用判定より前に評価し、再利用より優先して de-index する。
+- risk signal は鍵 `(issuer_node_id, target, target_id, category, basis)` の活性行を 1 件に保つ
+  （部分 UNIQUE index `uq_cn_safety_risk_signals_active_key`）。同鍵の再 scan は既存行の severity /
+  confidence / visibility を更新し、id / persisted_at / appeal_status を据え置く。失効していない
+  `cleared` 行があれば新規行を作らない。signed moderation event は signal が新規作成されたとき、または
+  verdict の action / reason_code / critical が変わったときだけ発行する。
+- 変更通知（DocEvent）駆動の取り込みは、変更 key に対応する object（`objects/<id>/…` と
+  `withdrawals/<id>/state`）だけを処理し、対象を特定できない key は scope 全体の見直しへ倒す。
+  300 秒の全件見直しは reconciliation として不変。
+- contract: `second_pass_with_unchanged_content_performs_no_provider_calls`、
+  `held_verdict_is_never_reused`、`rescan_with_same_key_updates_signal_instead_of_inserting`、
+  `cleared_signal_with_same_key_is_not_resurrected`、
+  `identical_rescan_emits_no_new_event_but_verdict_change_does`、
+  `dedupe_migration_compresses_duplicates_keeping_referenced_disputed_and_oldest`。

@@ -27,6 +27,7 @@ use kukuri_cn_safety::{
     AppealStatus, Basis, ReasonCode, RiskSignalTarget, SafetyAction, SafetyCategory,
     SafetyRiskSignal, SafetyVerdict, Severity, Visibility,
 };
+use kukuri_cn_safety_runtime::VerdictPersistMeta;
 use kukuri_core::generate_keys;
 use reqwest::{Client, StatusCode};
 
@@ -142,6 +143,7 @@ async fn trust_appeal_and_relation_graph_work_end_to_end() -> Result<()> {
             SubjectKind::Post,
             &format!("{}-{object_id}", stack.topic_id),
             &allow_verdict(),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         stack

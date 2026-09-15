@@ -18,10 +18,10 @@ use kukuri_cn_safety::{
     SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
-    EventIdGenerator, MemorySafetyArtifactStore, SafetyArtifactStore, SafetyOrchestrator,
-    SafetyRuntimeConfig, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
-    SafetyScanService, ScanClock, Secp256k1ModerationEventSigner, build_safety_scan_service,
-    verify_signed_event,
+    EventIdGenerator, MemorySafetyArtifactStore, PersistedSignal, SafetyArtifactStore,
+    SafetyOrchestrator, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
+    SafetyRuntimeProvidersConfig, SafetyScanService, ScanClock, Secp256k1ModerationEventSigner,
+    StoredVerdictRecord, VerdictPersistMeta, build_safety_scan_service, verify_signed_event,
 };
 
 const SCANNED_AT: &str = "2026-07-02T09:00:00Z";
@@ -108,11 +108,14 @@ impl SafetyArtifactStore for FailingSafetyArtifactStore {
         _issuer_node_id: &str,
         _signal: &SafetyRiskSignal,
         _subject_author: Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<PersistedSignal> {
         if matches!(self.operation, FailingStoreOperation::Signal) {
             bail!("signal persistence rejected by contract double");
         }
-        Ok("signal-1".to_string())
+        Ok(PersistedSignal {
+            id: "signal-1".to_string(),
+            newly_created: true,
+        })
     }
 
     async fn persist_verdict(
@@ -120,11 +123,29 @@ impl SafetyArtifactStore for FailingSafetyArtifactStore {
         _subject_kind: SubjectKind,
         _subject_id: &str,
         _verdict: &SafetyVerdict,
+        _meta: &VerdictPersistMeta,
     ) -> Result<String> {
         if matches!(self.operation, FailingStoreOperation::Verdict) {
             bail!("verdict persistence rejected by contract double");
         }
         Ok("verdict-1".to_string())
+    }
+
+    async fn load_verdict(
+        &self,
+        _subject_kind: SubjectKind,
+        _subject_id: &str,
+    ) -> Result<Option<StoredVerdictRecord>> {
+        Ok(None)
+    }
+
+    async fn attribute_subject_author(
+        &self,
+        _target: RiskSignalTarget,
+        _target_id: &str,
+        _author: &str,
+    ) -> Result<()> {
+        Ok(())
     }
 }
 

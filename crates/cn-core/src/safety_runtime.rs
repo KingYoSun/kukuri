@@ -10,13 +10,19 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 
 use kukuri_cn_safety::provider::{MediaFetcher, SubjectKind};
-use kukuri_cn_safety::{SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent};
+use kukuri_cn_safety::{
+    RiskSignalTarget, SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
+};
 use kukuri_cn_safety_runtime::{
-    SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
+    PersistedSignal, SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
+    StoredVerdictRecord, VerdictPersistMeta,
 };
 
-use crate::safety_events::{persist_risk_signal_with_author, persist_signed_moderation_event};
-use crate::scan_verdicts::upsert_scan_verdict;
+use crate::safety_events::{
+    attribute_risk_signal_subject_author, persist_risk_signal_deduplicated,
+    persist_signed_moderation_event,
+};
+use crate::scan_verdicts::{get_scan_verdict, upsert_scan_verdict};
 
 #[derive(Clone, Debug)]
 pub struct PgSafetyArtifactStore {
@@ -42,10 +48,13 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
         issuer_node_id: &str,
         signal: &SafetyRiskSignal,
         subject_author: Option<&str>,
-    ) -> Result<String> {
-        persist_risk_signal_with_author(&self.pool, issuer_node_id, signal, subject_author)
+    ) -> Result<PersistedSignal> {
+        persist_risk_signal_deduplicated(&self.pool, issuer_node_id, signal, subject_author)
             .await
-            .map(|stored| stored.id)
+            .map(|persisted| PersistedSignal {
+                id: persisted.stored.id,
+                newly_created: persisted.newly_created,
+            })
     }
 
     async fn persist_verdict(
@@ -53,10 +62,30 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
         subject_kind: SubjectKind,
         subject_id: &str,
         verdict: &SafetyVerdict,
+        meta: &VerdictPersistMeta,
     ) -> Result<String> {
-        upsert_scan_verdict(&self.pool, subject_kind, subject_id, verdict)
+        upsert_scan_verdict(&self.pool, subject_kind, subject_id, verdict, meta)
             .await
             .map(|stored| stored.id)
+    }
+
+    async fn load_verdict(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &str,
+    ) -> Result<Option<StoredVerdictRecord>> {
+        get_scan_verdict(&self.pool, subject_kind, subject_id)
+            .await
+            .map(|stored| stored.map(|stored| stored.to_record()))
+    }
+
+    async fn attribute_subject_author(
+        &self,
+        target: RiskSignalTarget,
+        target_id: &str,
+        author: &str,
+    ) -> Result<()> {
+        attribute_risk_signal_subject_author(&self.pool, target, target_id, author).await
     }
 }
 

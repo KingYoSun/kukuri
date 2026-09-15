@@ -227,6 +227,17 @@ impl IndexerParticipant {
             .await
     }
 
+    /// 変更通知で届いた key に対応する object だけを ingest する（#1050）。
+    pub async fn ingest_changed_keys(
+        &self,
+        scope: &ScopeReplica,
+        keys: &[String],
+    ) -> Result<IngestSummary> {
+        self.pipeline
+            .ingest_changed_keys(scope.kind, scope.id.as_str(), &scope.replica_id, keys)
+            .await
+    }
+
     /// Apply durable legal state, remove authoritative entries transactionally, then evict every
     /// derived projection hit. Query reconciliation is already fail-closed after the first step.
     pub async fn apply_transmission_prevention(
@@ -266,6 +277,8 @@ impl IndexerParticipant {
                     total.indexed += summary.indexed;
                     total.skipped_non_allow += summary.skipped_non_allow;
                     total.deindexed += summary.deindexed;
+                    total.scans_fresh += summary.scans_fresh;
+                    total.scans_reused += summary.scans_reused;
                 }
                 Err(error) => warn!(
                     kind = scope.kind.as_str(),

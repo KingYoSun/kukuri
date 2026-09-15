@@ -9,6 +9,7 @@ use kukuri_cn_core::{
 };
 use kukuri_cn_safety::provider::SubjectKind;
 use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety_runtime::VerdictPersistMeta;
 
 const DEFAULT_ADMIN_DATABASE_URL: &str = "postgres://cn:cn_password@127.0.0.1:15432/cn";
 
@@ -45,8 +46,14 @@ async fn apply_survives_restart_gates_queries_and_requires_fresh_ingest_after_re
     let pool = connect_postgres(database.database_url.as_str()).await?;
     let result = async {
         initialize_database(&pool).await?;
-        let verdict =
-            upsert_scan_verdict(&pool, SubjectKind::Post, "post-761", &allow_verdict()).await?;
+        let verdict = upsert_scan_verdict(
+            &pool,
+            SubjectKind::Post,
+            "post-761",
+            &allow_verdict(),
+            &VerdictPersistMeta::default(),
+        )
+        .await?;
         let entry = NewIndexEntry {
             scope_kind: IndexScopeKind::PublicTopic,
             scope_id: "rust".to_string(),

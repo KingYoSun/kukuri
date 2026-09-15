@@ -1,0 +1,213 @@
+//! ingest 系 contract test の共有 fixture（`ingestion_contracts.rs` / `verdict_reuse_contracts.rs`）。
+//!
+//! docs 同期・投影・真実源はメモリ内実装、safety provider は mock / 記録用 double で、
+//! `IngestPipeline` を DB 非依存に駆動する。
+#![allow(dead_code)]
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use kukuri_cn_core::MemoryIndexEntryStore;
+use kukuri_cn_indexer::ingest::IngestPipeline;
+use kukuri_cn_indexer::projection::MemoryIndexProjection;
+use kukuri_cn_safety::provider::{ProviderScanRequest, ProviderScanResult, ScanError, ScanOutcome};
+use kukuri_cn_safety::{
+    MockSafetyProvider, ModerationEventSigner, SafetyPolicy, SafetyProvider,
+    SafetyProviderCapability,
+};
+use kukuri_cn_safety_runtime::clock::SystemScanClock;
+use kukuri_cn_safety_runtime::id::UuidEventIdGenerator;
+use kukuri_cn_safety_runtime::{
+    MemorySafetyArtifactStore, SafetyOrchestrator, SafetyScanService,
+    Secp256k1ModerationEventSigner,
+};
+use kukuri_core::{KukuriEnvelope, KukuriKeys, ReplicaId, TopicId, build_post_envelope};
+use kukuri_docs_sync::{DocOp, DocsSync, MemoryDocsSync, stable_key};
+
+pub const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+
+pub fn service_with(
+    provider: MockSafetyProvider,
+) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .provider(Arc::new(provider))
+    .build()
+    .expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    (Arc::new(service), store)
+}
+
+/// mock provider で allow を返す service（known CSAM = NoKnownMatch、脅威スコア無し）。
+///
+/// `public_node_default` policy は known CSAM provider を必須とするため、allow を得るには
+/// `KnownCsamHashMatch` provider が `NoKnownMatch` を返す必要がある。
+pub fn allow_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(MockSafetyProvider::known_csam("mock-known-csam"))
+}
+
+/// mock provider の呼び出し自体が利用不可エラーになる service（fail-closed → hold）。
+pub fn provider_unavailable_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    service_with(
+        MockSafetyProvider::known_csam("mock-known-csam")
+            .default_error(ScanError::Unavailable("mock provider down".to_string())),
+    )
+}
+
+/// 任意の provider 集合と policy で service を組む（store を外から共有できる）。
+pub fn service_with_store(
+    store: Arc<MemorySafetyArtifactStore>,
+    policy: SafetyPolicy,
+    providers: Vec<Arc<dyn SafetyProvider>>,
+) -> Arc<SafetyScanService> {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let mut orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    )
+    .policy(policy);
+    for provider in providers {
+        orchestrator = orchestrator.provider(provider);
+    }
+    let orchestrator = orchestrator.build().expect("orchestrator");
+    Arc::new(
+        SafetyScanService::builder(Arc::new(orchestrator), store)
+            .signer(Arc::new(signer))
+            .build()
+            .expect("service"),
+    )
+}
+
+/// pipeline を組む。真実源（メモリ内実装）は scan service と同じ artifact store を参照し、
+/// verdict への外部キー相当を成立させる。
+pub fn pipeline_with(
+    docs: &Arc<MemoryDocsSync>,
+    projection: &Arc<MemoryIndexProjection>,
+    (service, store): (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>),
+) -> (
+    IngestPipeline,
+    Arc<MemoryIndexEntryStore>,
+    Arc<MemorySafetyArtifactStore>,
+) {
+    let entries = Arc::new(MemoryIndexEntryStore::new(store.clone()));
+    let pipeline = IngestPipeline::new(docs.clone(), service, entries.clone(), projection.clone());
+    (pipeline, entries, store)
+}
+
+/// 本文 text の post envelope を共有 replica に実在させる（app-api の persist と同じ key 形状）。
+///
+/// 返り値は object_id。
+pub async fn persist_post(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> String {
+    persist_post_with_source(docs, replica, topic, body).await.0
+}
+
+/// `persist_post` に加えて署名鍵 / envelope / state JSON も返す（撤回・state 変更の再現用）。
+pub async fn persist_post_with_source(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> (String, KukuriKeys, KukuriEnvelope, serde_json::Value) {
+    let keys = KukuriKeys::generate();
+    let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
+    let object = envelope
+        .to_post_object()
+        .expect("post object")
+        .expect("post object present");
+    let object_id = object.object_id.as_str().to_string();
+    let state = serde_json::to_value(&object).expect("state json");
+    docs.open_replica(replica).await.expect("open");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: state.clone(),
+        },
+    )
+    .await
+    .expect("state op");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/envelope")),
+            value: serde_json::to_value(&envelope).expect("envelope json"),
+        },
+    )
+    .await
+    .expect("envelope op");
+    (object_id, keys, envelope, state)
+}
+
+/// 受け取った scan request を記録する known-CSAM provider（provider 呼び出し回数の検証用）。
+///
+/// すべての subject に `NoKnownMatch`（allow 側）を返し、`public_node_default` policy の
+/// require_known_csam を満たしつつ request の中身だけを観測する。
+pub struct RecordingProvider {
+    pub requests: std::sync::Mutex<Vec<ProviderScanRequest>>,
+}
+
+impl RecordingProvider {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            requests: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+
+    /// 記録された request の subject_id 列（順序どおり）。
+    pub fn subjects(&self) -> Vec<String> {
+        self.requests
+            .lock()
+            .expect("recording provider mutex")
+            .iter()
+            .filter_map(|request| request.subject_id.clone())
+            .collect()
+    }
+}
+
+impl Default for RecordingProvider {
+    fn default() -> Self {
+        Self {
+            requests: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl SafetyProvider for RecordingProvider {
+    fn name(&self) -> &str {
+        "recording-known-csam"
+    }
+
+    fn capabilities(&self) -> &[SafetyProviderCapability] {
+        &[SafetyProviderCapability::KnownCsamHashMatch]
+    }
+
+    async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
+        self.requests
+            .lock()
+            .expect("recording provider mutex")
+            .push(request.clone());
+        let mut result = ProviderScanResult::completed(
+            self.name(),
+            SafetyProviderCapability::KnownCsamHashMatch,
+        );
+        result.outcome = ScanOutcome::NoKnownMatch;
+        Ok(result)
+    }
+}

@@ -17,6 +17,7 @@ use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     MockSafetyProvider, ModerationEventSigner, ReasonCode, SafetyAction, SafetyVerdict,
 };
+use kukuri_cn_safety_runtime::VerdictPersistMeta;
 use kukuri_cn_safety_runtime::{
     SafetyOrchestrator, SafetyScanService, Secp256k1ModerationEventSigner, SystemScanClock,
     UuidEventIdGenerator,
@@ -79,6 +80,7 @@ async fn scan_verdict_upsert_keeps_id_and_tracks_latest() -> Result<()> {
             SubjectKind::Post,
             "post-1",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         assert_eq!(first.action, SafetyAction::Allow);
@@ -90,6 +92,7 @@ async fn scan_verdict_upsert_keeps_id_and_tracks_latest() -> Result<()> {
             SubjectKind::Post,
             "post-1",
             &verdict(SafetyAction::Exclude, true, ReasonCode::CsamConfirmed),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         assert_eq!(second.id, first.id);
@@ -133,6 +136,7 @@ async fn index_only_allow_verdict_content_enforced_by_db_constraints() -> Result
             SubjectKind::Post,
             "post-allow",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
 
@@ -211,6 +215,7 @@ async fn index_entry_upsert_is_idempotent_and_deindexable() -> Result<()> {
             SubjectKind::Post,
             "post-1",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         let allow_2 = upsert_scan_verdict(
@@ -218,6 +223,7 @@ async fn index_entry_upsert_is_idempotent_and_deindexable() -> Result<()> {
             SubjectKind::Post,
             "post-2",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
 
@@ -273,6 +279,7 @@ async fn filter_surfaceable_objects_excludes_non_allow_and_unknown() -> Result<(
             SubjectKind::Post,
             "post-kept",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         let allow_flipped = upsert_scan_verdict(
@@ -280,6 +287,7 @@ async fn filter_surfaceable_objects_excludes_non_allow_and_unknown() -> Result<(
             SubjectKind::Post,
             "post-flipped",
             &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
         )
         .await?;
         upsert_index_entry(&pool, &entry("rust", "post-kept", allow_kept.id.as_str())).await?;
@@ -296,6 +304,7 @@ async fn filter_surfaceable_objects_excludes_non_allow_and_unknown() -> Result<(
             SubjectKind::Post,
             "post-flipped",
             &verdict(SafetyAction::Exclude, true, ReasonCode::CsamConfirmed),
+            &VerdictPersistMeta::default(),
         )
         .await?;
 
@@ -386,6 +395,62 @@ async fn scan_and_record_upserts_verdict_state_via_postgres_store() -> Result<()
         assert_eq!(stored.reason_code, ReasonCode::CsamConfirmed);
         assert!(stored.critical);
         anyhow::Ok(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+/// #1050: verdict 行は再利用鍵（fingerprint）と descriptive タグを往復できる。
+#[tokio::test]
+async fn scan_verdict_round_trips_fingerprints_and_derived_tags() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-core index entries test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_verdict_fingerprints").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let meta = VerdictPersistMeta {
+            source_fingerprint: Some("state-hash-1".to_string()),
+            scan_config_fingerprint: Some("config-1".to_string()),
+            derived_tags: vec!["beach".to_string(), "sunset".to_string()],
+        };
+        let stored = upsert_scan_verdict(
+            &pool,
+            SubjectKind::Blob,
+            "blob-tags",
+            &verdict(SafetyAction::Allow, false, ReasonCode::Clean),
+            &meta,
+        )
+        .await?;
+        assert_eq!(stored.source_fingerprint.as_deref(), Some("state-hash-1"));
+        assert_eq!(stored.scan_config_fingerprint.as_deref(), Some("config-1"));
+        assert_eq!(stored.derived_tags, vec!["beach", "sunset"]);
+
+        let loaded = get_scan_verdict(&pool, SubjectKind::Blob, "blob-tags")
+            .await?
+            .expect("stored verdict");
+        assert_eq!(loaded, stored);
+        let record = loaded.to_record();
+        assert_eq!(record.id, stored.id);
+        assert_eq!(record.derived_tags, vec!["beach", "sunset"]);
+        assert!(record.verdict.is_indexable());
+
+        // 再 upsert は fingerprint / タグも最新値へ置き換える（id は据え置き）。
+        let refreshed = upsert_scan_verdict(
+            &pool,
+            SubjectKind::Blob,
+            "blob-tags",
+            &verdict(SafetyAction::Allow, false, ReasonCode::Clean),
+            &VerdictPersistMeta::default(),
+        )
+        .await?;
+        assert_eq!(refreshed.id, stored.id);
+        assert!(refreshed.source_fingerprint.is_none());
+        assert!(refreshed.derived_tags.is_empty());
+        Ok::<(), anyhow::Error>(())
     }
     .await;
     database.cleanup().await?;
