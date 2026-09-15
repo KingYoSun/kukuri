@@ -18,6 +18,29 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.4-preview.1] - 2026-09-15
+
+### Features
+
+- アバター追従カメラとポインタ固定を追加 ([#1027](https://github.com/KingYoSun/kukuri/pull/1027))
+
+### Fixes
+
+- 全画面の描画・高さ・文脈保持を修正 ([#1029](https://github.com/KingYoSun/kukuri/pull/1029))
+- カラム実幅に応じた配置と幅変更後の表示位置を修正 ([#1028](https://github.com/KingYoSun/kukuri/pull/1028))
+- 所有Domeの管理・再開・削除を可能にする ([#1026](https://github.com/KingYoSun/kukuri/pull/1026))
+- monitor community index availability and retire legacy topics ([#1019](https://github.com/KingYoSun/kukuri/pull/1019))
+- 返信・日時を読みやすくし、カラムと操作ボタンの配置を修正 ([#1017](https://github.com/KingYoSun/kukuri/pull/1017))
+
+### Other
+
+- prepare v0.2.4-preview.1 release ([#1045](https://github.com/KingYoSun/kukuri/pull/1045))
+- Metaverseの方位操作と確認済み接続マップを追加 ([#1035](https://github.com/KingYoSun/kukuri/pull/1035))
+- MetaverseのHUDをカテゴリメニューと詳細タブへ再設計 ([#1030](https://github.com/KingYoSun/kukuri/pull/1030))
+- record v0.2.3-preview.2 release and VM rollout ([#1015](https://github.com/KingYoSun/kukuri/pull/1015))
+- update CHANGELOG for v0.2.3-preview.2 ([#1014](https://github.com/KingYoSun/kukuri/pull/1014))
+- record release hold and verified DM reconnect fix ([#1013](https://github.com/KingYoSun/kukuri/pull/1013))
+
 ## [v0.2.3-preview.2] - 2026-09-13
 
 ### Fixes
