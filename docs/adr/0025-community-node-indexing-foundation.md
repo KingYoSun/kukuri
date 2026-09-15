@@ -10,6 +10,10 @@ Accepted
 **2026-09-11 改訂**: #975 で索引状況の read 面 `GET /v1/indexing/status`（自分の申請状態と
 対象の supported 判定）を追加した（§2.8）。多段ゲートと申請受付条件（#713）は変えない。
 
+**2026-09-15 改訂**（#1051）: nsfw / objectionable の suspected は index から除外せず、`allow` verdict に
+content advisory を伴って index し、`IndexEntryView.content_advisories` として client へ配信する（§7）。
+`allow` のみ index する契約、DB CHECK 制約、fail-closed の順序は変えない。
+
 ## Date
 2026-06-30
 
@@ -59,6 +63,7 @@ community node の `indexing`（`index` / `search` / `discovery` / `recommendati
   - `index_only_allow_verdict_content`
   - `index_excludes_unscanned_and_scan_failed`
   - `search_discovery_recommendation_excludes_non_allow`
+  - 2026-09-15 追加（#1051、§7）: `general_nsfw_is_indexed_with_advisory_label` / `index_entry_advisories_derive_from_latest_verdict` / `content_advisories_are_separate_from_signed_content_labels`
   - `index_only_indexes_shared_replica_entries`
   - `index_private_channel_requires_submitted_channel_secret`
   - `index_private_channel_request_authz_reuses_channel_permission`
@@ -113,6 +118,9 @@ community node の `indexing`（`index` / `search` / `discovery` / `recommendati
 - 派生タグは `allow` verdict の media に対してのみ生成・index する。critical safety で exclude された media は index しない。CSAM 等の Match Data / 生検知結果はタグや index に流さない（#391 / #411 の非ゴールと整合）。
 - **タグのサムネイル代替表示**: client は読み込み中、または安全用の代替表示（特にアダルト / 暴力的コンテンツ）として、サムネイルの代わりにこのタグを表示してよい。具体的な表示挙動は client UI 側の設計（本 ADR スコープ外）だが、index がタグを保持することで成立する。
 
+> **2026-09-15 改訂**（#1051、§7.3）: label 付き `allow`（nsfw / objectionable の suspected）の media もタグ化する。
+> 成人向け・暴力的表現の代替表示の一次判定は `content_advisories`（ADR 0046 §6）に移り、タグは補助情報とする。
+
 ### 2.4 streaming / metaverse — room メタデータのみ index する。room 内の activity は index しない
 
 - streaming（live session, ADR 0005）/ metaverse・game room（ADR 0006）は、**room メタデータ**のみを index・検索対象にする。具体的には room id / topic / title / description テキスト / タグ。
@@ -131,6 +139,10 @@ index への登録は、**scope ゲート（§2.2/§2.3/§2.4）と safety ゲ�
 - `allow` verdict の content のみが search / discovery / recommendation に出る（`index_only_allow_verdict_content` / `search_discovery_recommendation_excludes_non_allow`）。
 
 safety verdict は `cn-safety-runtime` の `SafetyVerdict` を index 反映の前段に組み込むことで供給する。index entry は対応する safety verdict state を必ず伴う（verdict 無しの index entry を作らない）。
+
+> **2026-09-15 改訂**（#1051、§7.1）: nsfw / objectionable の suspected は `allow` verdict に `advisory_labels` を伴って
+> 本節のゲートを通過する。`allow` のみ index する契約は文言どおり維持され、advisory は verdict state の一部として
+> index entry から参照される。
 
 ### 2.6 二重ゲートの順序
 
@@ -311,3 +323,42 @@ fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装し�
 
 - client が index 許可付きで post を CN の API に submit する opt-in 経路。
 - 必須ではない。採用する場合、ghost 注入を防ぐため **submit された content も共有 replica 上の実在を確認してから index する**（単独 POST だけで index しない）。確認できないなら index しない。
+
+## 7. 改訂追補（#1051、2026-09-15）: content advisory 付き index entry
+
+本節は 2026-09-15 の製品決定（Issue #1051、ADR 0028 §8）のうち index に関する部分を記録する。
+
+### 7.1 verdict state に advisory を持つ
+- nsfw / objectionable の suspected は `allow` verdict に `advisory_labels` を伴って index される
+  （`general_nsfw_is_indexed_with_advisory_label`）。index 真実源 `cn_index.index_entries` の
+  `CHECK (verdict_action = 'allow')` / `CHECK (NOT critical)`（§6.7）と、`FailClosedIndexQuery` の
+  「真実源 + 最新 verdict と突合して非 allow を落とす」境界は不変。
+- advisory は `cn_safety.scan_verdicts` 側（`advisory_labels`）に保持し、index entry は既存の verdict FK を
+  通じて最新の advisory state を参照する（`index_entry_advisories_derive_from_latest_verdict`）。
+  index entry 自体に verdict 以外の判定列は増やさない。
+
+### 7.2 wire: `IndexEntryView.content_advisories`
+- `GET /v1/index/{search,discovery,recommendations}` の `IndexEntryView` に `content_advisories`
+  （ADR 0028 §8.6 の要素: issuer_node_id / subject_kind / subject_id / category / label / confidence /
+  signal_id / basis）を追加する。`text` と同じく canonical content の信頼元にせず、client は署名済み投稿を
+  ローカル解決した後も第 2 のラベル源として保持する（ADR 0046 §6）。
+- 署名済み `content_labels` とは別欄であり、index は `content_labels` を生成・改変しない。
+- blob 単位の advisory（`subject_kind = blob_cid`）は post entry に同梱し、client の hash 単位取得ゲートに使う。
+
+### 7.3 派生タグと代替表示
+- §2.3 の「派生タグは `allow` verdict の media に対してのみ生成・index する」は文言どおり維持し、label 付き
+  `allow` の media もタグ化する。critical / Match Data / 生スコアの除外は不変。
+- §2.3 の「タグのサムネイル代替表示」について、成人向け・暴力的表現の代替表示の一次判定は
+  `content_advisories`（と self-label）に移し、タグは補助情報とする。
+
+### 7.4 contract
+- 追加: `general_nsfw_is_indexed_with_advisory_label`、`index_entry_advisories_derive_from_latest_verdict`、
+  `content_advisories_are_separate_from_signed_content_labels`（ADR 0028 / 0046 と共有）。
+- 維持: `index_only_allow_verdict_content`、`index_excludes_unscanned_and_scan_failed`、
+  `search_discovery_recommendation_excludes_non_allow`、`index_media_searchable_via_derived_tags`、
+  `index_excludes_raw_media_blob`。
+
+### 7.5 変更しないもの
+- scope ゲート（§2.2 / §2.4）、fail-closed の順序（§2.6）、ingestion Model C、readiness と公開関門（§6.7）。
+- 過去に `Exclude` された投稿の backfill は `policy_version` 更新に伴う再 ingest で反映し、専用 migration は
+  行わない（ADR 0028 §8.9）。

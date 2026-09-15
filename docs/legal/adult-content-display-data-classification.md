@@ -18,3 +18,11 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 ## 補足
 - 表示設定は 18 歳以上の自己申告とは別の状態であり、自己申告だけでは ON にならない。既定 OFF。
 - 成人向けラベルは投稿者自己申告(署名済み envelope の `content_labels`)であり、真正性は検証できない。ラベルなしコンテンツの安全は保証しない(ADR 0046)。
+
+## 2026-09-15 改訂（#1051、ADR 0046 §6）: Community Node content advisory の合成
+- ラベル源に、設定済み / 購読 Community Node が発行した `content_advisories`（ADR 0028 §8.6。`label = adult` / `sensitive`、issuer_node_id / category / confidence / signal_id / basis 付き）を第 2 の源として加える。node-local な advisory であり canonical でも署名対象でもない。`content_labels` へ書き戻さない。
+- Blob: 設定 OFF 中は advisory 付き添付の blob 取得も行わない。ON 中は ephemeral fetch で永続化しない（self-label と同一ゲート）。
+- SQLite projection: advisory 付き blob hash の集合を取得ゲート判定に使う。永続 projection にするか in-memory にするかは実装（#1051 child C3 / C4）で決定し、本節へ追記する。
+- 追加 contract: `advisory_labeled_media_respects_adult_display_gate`（`blob_media_payload` が「advisory 付き hash かつ設定 OFF」で blob 取得を行わない）、`content_advisories_are_separate_from_signed_content_labels`、`advisory_lookup_returns_only_configured_node_signals`（一括照会は設定済み node 自身の advisory のみ返す）。
+- 追加 scenario: 表示ゲート（見つけるの `content_advisories`、タイムライン向け一括照会の応答）で self-label と同じプレースホルダーになり、発行 node / category / confidence と異議申し立て導線を説明できる。設定 OFF 中に advisory 付き media の bytes 取得が 0 であることを frontend vitest と `crates/app-api` の test で担保する。
+- 利用規約 第3条 4 項の文言改訂と `LEGAL_BUNDLE_VERSION` 更新（再同意）は C4 で行う。それまで advisory の合成は有効化しない。

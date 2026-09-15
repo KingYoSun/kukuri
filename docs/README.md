@@ -85,6 +85,7 @@ Issue・PR・セッションの記述だけで「実装済み」「検証成功�
 - Linux GUI配布とCLIのローカル制御経路: `docs/adr/0049-linux-gui-cli-control-plane.md`（#885。CLI専用profile、常駐プロセス／IPC、command登録簿、要求単位の実行、配布成果物のデータ分類）
 - moderation event / safety advisory の trust semantics + deterministic (CSAM / known-hash) critical safety: `docs/adr/0027-deterministic-moderation-critical-safety.md`（optional trust input であり network-wide command ではないことを固定。旧 `community-node-critical-safety.md` / `moderation-event-trust-semantics.md` を集約）
 - community node trust / relation foundation: `docs/adr/0026-community-node-trust-relation-foundation.md`
+- 非決定論的（VLM）moderation と general 判定の content advisory 化（#1051）: `docs/adr/0028-nondeterministic-moderation-vlm.md`（§8。nsfw / objectionable は index + advisory、trust 寄与 0。trust 側は ADR 0026 §7、index 側は ADR 0025 §7、client 側は ADR 0046 §6）
 - default community node 依存低減ロードマップ: `docs/architecture/default-community-node-dependency-reduction.md`（default node は onboarding infrastructure であり network-wide authority ではない）
 
 ## Legal

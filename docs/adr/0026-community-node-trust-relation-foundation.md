@@ -3,6 +3,12 @@
 ## Status
 Accepted（foundation は #409 / PR #414 で確定。§6 未決事項は #416 で Decision 化）
 
+**2026-09-15 改訂**（#1051）: general moderation のうち **nsfw と `objectionable`（ADR 0028 §8.2）の risk signal は
+trust の相対成分へ寄与しない（0）**。signal は生成・永続化し、利用者向け read の basis に寄与 0 で残す。
+§2.7 の振り分けは「critical = 絶対 / spam・malware・phishing・node-local 観測 = 相対 / nsfw・objectionable =
+advisory-only（0）」の 3 分岐になる。詳細は「§7 改訂追補」を正本とし、§2.3 / §2.7 と必須 scenario の該当行は
+失効注記で後継を示す。絶対成分、cross-node 開示（§6.3）、appeal 反映（§6.2）は変更しない。
+
 ## Date
 2026-06-30
 
@@ -57,10 +63,14 @@ trust と relation は **node-local かつ advisory** な derived signal であ�
   - `trust_appeal_accepted_excludes_contribution`（`accepted` は該当寄与除外, §6.2）
   - `cross_node_pull_discloses_only_confirmed_absolute_component`（cross-node pull は confirmed 絶対成分のみ, §6.3）
   - `viewer_relative_read_requires_authenticated_viewer`（相対成分 read は viewer 署名検証必須, §6.3）
+  - 2026-09-15 追加（#1051、§7）:
+    - `general_advisory_contributes_zero_to_trust`（nsfw / objectionable の signal は評価に寄与 0。ADR 0028 §8.5 と共有）
+    - `trust_read_lists_advisory_only_basis_with_zero_contribution`（利用者向け read の basis に寄与 0 で残る）
 - 必須 scenario:
   - CSAM 系 risk がある pubkey は絶対成分が下がり、relation や通報数で揺れない
   - 特定 cluster からの大量通報は相対成分に raw count として効かず、relation で重み付けされる（report-bombing 耐性）
-  - hate / アダルトなど相対指標は viewer の cluster によって評価が変わる / risk・観測が無ければ不当に下げない
+  - hate / アダルトなど相対指標は viewer の cluster によって評価が変わる / risk・観測が無ければ不当に下げない（2026-09-15 superseded: アダルト（nsfw）と hate 等（objectionable）は評価を動かさず basis にのみ残る。§7）
+  - 2026-09-15 追加（#1051）: nsfw / objectionable の advisory だけを持つ pubkey は、相対成分・最終 `trust` とも 0 のままで、basis に寄与 0 の行として現れる
   - 絶対成分と相対成分がともに最悪でも最終 `trust` は `-1` を下回らない（clamp）
   - 相対成分の寄与は時間経過で半減し、絶対成分（known-hash 由来）は同期間で減衰しない
   - 他 node が pull すると confirmed 絶対成分のみ根拠つきで返り、相対成分は返らない
@@ -131,6 +141,10 @@ trust が「個人の信頼度（troll でないか）」を測るのに対し�
   - 入力: 非決定論的 moderation（#411）+ node-local 観測（spam / abuse 報告、rate など）+ **relation（clustering）を加味**した値。
   - viewer / cluster 相対。relation で重み付けすることで、特定 cluster からの大量通報が raw count として効かず cluster 文脈で相対化される（report-bombing 耐性）。
 - bot / 自動化 abuse の検知は挙動ベースの絶対指標寄り、troll / harassment の判断は文化依存の相対指標寄りとして扱う。
+
+> **2026-09-15 改訂**（#1051、§7）: 上記の相対指標の例示のうち **アダルト（nsfw）と hate 等（objectionable）は
+> 相対成分の入力から外し、寄与 0 の advisory として basis にのみ残す**。相対成分の入力は spam / malware /
+> phishing と node-local 観測（+ relation 重み付け）に限る。
 - read: trust は **絶対成分（viewer 非依存）+ 相対成分（viewer / cluster 依存）**の合成として返す（合成式は §6.2、初期決め打ち・operator 可変）。いずれも断定ラベル（「このユーザーは troll」）ではなく根拠つき advisory（basis / 寄与 signal / confidence / visibility / expiry を説明可能、trust-semantics §4）。
 
 ### 2.4 relation の入力と read
@@ -157,6 +171,7 @@ trust が「個人の信頼度（troll でないか）」を測るのに対し�
 - #406 の「risk signal を trust/relation reads に反映」は、risk signal の category に応じて trust の **絶対成分 / 相対成分**へ振り分けて反映する。
   - CSAM など critical safety = **絶対成分**（relation 非依存、report-bomb で不動）。
   - hate / nsfw / spam など = **相対成分**（relation で重み付け、viewer / cluster 相対）。
+    （2026-09-15 superseded: spam / malware / phishing のみ相対成分。nsfw / objectionable（hate を含む）は寄与 0 の advisory-only。§7）
 - relation は相対成分の重み付け入力として使う。relation 本体は cluster proximity であり risk ラベルではない。
 - 反映は advisory（根拠つき）。断定 / canonical 改変はしない。
 
@@ -239,3 +254,40 @@ foundation（#409 / PR #414）が残した §6 の未決事項を #416 で決定
 - distance opt-out は **relation graph からの離脱ではなく、プライバシー機能でもない**。relation edge、user / post、social graph canonical を削除せず、P2P・別 CN・network 全体への秘匿性を保証しない。**trust にも影響しない**（troll 判定を回避する手段にしない）。既存の `PUT/DELETE /v1/relation/optout` はこの node-local surfacing 選択の設定 / 解除として解釈する。
 - **distance opt-out の安定エラーコード（#712）**: `/v1/relation/optout` は trust read とは独立の門を持ち、未構成は `RELATION_VISIBILITY_NOT_CONFIGURED`、有効化（準備完了記録）の失効は `RELATION_VISIBILITY_NOT_ACTIVATED`（いずれも 404）で縮退を判別できる。client はこのコードで未提供・失効・認証（`AUTH_REQUIRED`）・同意（`CONSENT_REQUIRED`）を見分けて案内し、サーバの英文メッセージを生表示しない。コード名は `cn-protocol` の定数が単一定義で、通信境界の実値はサーバ契約試験（`activation_gate.rs` / `trust_relation.rs`）が `body.code` で固定する。
 - **private channel における扱い（Decision）**: private channel（ADR 0024 admission / ADR 0025 §6.3）由来の co-participation は **channel メンバー + その CN の authority に閉じ、`Local` 固定**とする。当該 channel メンバー可視の relation に閉じ、**public relation / trust には混ぜない**。private channel の secret を提示できる権限者の scope を超えて private 由来 signal を露出させない。
+
+## 7. 改訂追補（#1051、2026-09-15）: advisory-only category（nsfw / objectionable）
+
+本節は 2026-09-15 の製品決定（Issue #1051、ADR 0028 §8）のうち trust に関する部分を記録する。§2.3 / §2.7 と
+必須 scenario の失効注記は本節を後継とする。
+
+### 7.1 振り分けの 3 分岐
+- risk signal の category による振り分けを次の 3 分岐にする。
+  - critical safety（`Csam` / `Cse` / `Grooming`）= **絶対成分**（不変）。
+  - `Spam` / `Malware` / `Phishing` と node-local 観測 = **相対成分**（relation 重み付け・半減期減衰。不変）。
+  - `Nsfw` / `Objectionable`（ADR 0028 §8.2）= **advisory-only**。評価計算に入れず寄与 0。
+- 文化圏で判断が変わる指標を viewer 非依存の減点にしないため、relation 重み（cluster 近接度）が実装された後も
+  nsfw / objectionable は重み付けの対象にしない。
+
+### 7.2 利用者向け read での扱い
+- `GET /v1/trust/users/{pubkey}` の basis には、nsfw / objectionable の signal を **`raw_contribution = 0` /
+  `contribution = 0`** の行として残す（§6.2 の `Cleared` と同じ「実効寄与 0 の説明用 basis」）。利用者は判定・
+  confidence・appeal 状態を確認し、ADR 0028 §2.8 の申し立てへ進める。
+- `TrustBasisEntry` の既存欄（`component` は `Relative` のまま）で表現し、wire に破壊的変更を加えない。
+- 評価値（`relative` / `trust`）には入れない。別ノード向け pull（§6.3、confirmed 絶対成分のみ）にも入れない。
+
+### 7.3 appeal / 失効との関係
+- `Disputed` / `Cleared` / `expires_at` の扱い（§6.2）は不変。nsfw / objectionable は元から寄与 0 なので、
+  `Cleared` になっても評価値は動かず、basis の状態表示だけが変わる。
+- #1050 が所有する重複 signal の圧縮後も、寄与 0 の契約は signal 件数に依存しない。
+
+### 7.4 contract / scenario
+- 追加: `general_advisory_contributes_zero_to_trust`（ADR 0028 §8.11 と共有）、
+  `trust_read_lists_advisory_only_basis_with_zero_contribution`。
+- 維持: `trust_separates_absolute_and_relative_indicators`、`trust_relative_indicators_are_relation_weighted`
+  （対象は spam / malware / phishing と node-local 観測）、`trust_reflects_risk_signals_split_by_category`
+  （3 分岐）、`cross_node_pull_discloses_only_confirmed_absolute_component`。
+- superseded: 必須 scenario「hate / アダルトなど相対指標は viewer の cluster によって評価が変わる」。
+
+### 7.5 変更しないもの
+- 絶対成分の入力・非減衰・`w_abs_negative = 2.0` の合成式、最終クランプ `[-1, 1]`。
+- cross-node 開示範囲、viewer 相対 read の署名検証、distance opt-out、private channel の `Local` 固定。
