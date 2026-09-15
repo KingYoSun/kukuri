@@ -50,7 +50,11 @@
 - 追加再現: draining recordより古いready表示を優先するtestが失敗。terminal理由の優先後にPanel全8件成功。host read中の離脱後にaccess previewを開始するtestが失敗。取消再確認後にneighbor全4件成功。
 - oversized baseline: 初回は`dome_connections.rs`が1025→1029行となったが、監査修正でread専用helperを既存`service/dome_connection_support.rs`へ配置し、最終的に1025行を維持。生成時に既存のsession／noticeの減少も反映し、新規大型ファイル・許容上限増加は追加しない。
 - Windowsでは実行中xtask.exeの再リンクが拒否されたため、同じソースのxtask.exeをローカル別名で実行して検証。製品・検証処理や必須項目は変更しない。
-- 全体test、desktop-ui-check、Dome scenarios、Windows／Ubuntu24 after、独立監査、CI: 未完了。
+- ローカルdesktop-ui-check: lint／typecheck成功、frontend 1722件中1719成功・topics 3件失敗。失敗は変更前worktreeにも存在し、pipelineがtestで停止したため、後続Storybook／browser／visualを個別に確認した。
+- 最終browser: 接続・HUD・camera・カラム幅の27ケース中26件が初回成功。ja/light/1 spanのheader位置assertion 1件は同じ条件の再実行で成功。assertionやtimeoutは変更していない。
+- 最終Storybook build成功。Windows visual smoke 38件成功（pixel比較はskip）。修正後の接続／遷移scenarioを再実行し、9 steps／4 steps成功。
+- Windows／Ubuntu24の初期実装に対するnative pointer・方位keyboard・基本描画を確認。[Windows map](assets/2026-09-15-1025-connections/windows-map-initial.png)は初期実装の証拠。監査修正後の両OSビルドは成功したが、新しいWindows executableのネットワーク許可画面が表示され、手動で閉じる対応待ち。最終native fullscreen／戻る確認・複数Dome実P2Pは未確認であり、browser／in-process成功で代替しない。
+- CIは[PR checks](https://github.com/KingYoSun/kukuri/pull/1035/checks)で対象headを確認する。ローカル失敗をCI成功へ読み替えず、実行場所・対象commitを分ける。
 
 ## 監査・Close
 
@@ -63,3 +67,7 @@ F1はrestore相当のFriendOnly owner＋mutual解消済みparticipantで、変�
 Storybookの11状態×light/dark、計22条件でaxeの対象WCAG tag違反0。色transitionが終了してから検査する。20条件のcolor-contrastはincompleteが残るため、自動判定の完了やAccessibility適合の証明とは扱わない。文字色を既存Buttonから継承し、theme tokenでmap線と現在地を描く。[明色の確認済みmap](assets/2026-09-15-1025-connections/story-confirmed-light.png)／[暗色](assets/2026-09-15-1025-connections/story-confirmed-dark.png)／[狭幅](assets/2026-09-15-1025-connections/story-narrow-light.png)を確認した。
 
 固定PR headの独立監査を実装工程と分ける。IssueのAC／INVAR、上記入口と逆引きから再構築し、PASS、必須CI成功、merge tree整合またはdelta監査後にIssueをCloseする。未知の不具合の不存在や別Issueの新要件は条件へ追加しない。
+
+`77db7d222626c3085b42ece38983cf5d0652caff` の[独立delta監査](2026-09-15-1025-independent-audit.md)はPASS。inventory 3件すべて適合、未分類0、不適合0、blocker0。許可ContextのIrohDocsSync内部同期は既存read機構として維持し、禁止するAppService購読Taskの新規起動・Connection／epoch等のdomain writeと区別する。後続差分はこの説明、comment、検証記録、画像のみで、domain動作は変更しない。
+
+実機確認待ちを残したままComplete／マージ可能とは扱わない。必要な実機確認と最終CIが揃ってからPRをreadyにし、承認済みのマージとmerge tree確認を行う。

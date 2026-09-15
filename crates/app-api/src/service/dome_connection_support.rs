@@ -83,7 +83,7 @@ pub(crate) fn verify_dome_proposal_terminal_event(
 }
 
 impl AppService {
-    /// Map reads must not redeem grants, rotate epochs, or start subscriptions.
+    /// Map reads must not redeem grants, rotate epochs, or start AppService subscriptions.
     pub(crate) async fn dome_connection_read_replica(
         &self,
         context: &SpatialContextV1,
