@@ -13,7 +13,9 @@ use crate::safety_appeals::{
     RiskSignalCorrection, RiskSignalMetadataEdit, validate_optional_confidence,
     validate_optional_expires_at,
 };
-use crate::safety_events::to_db_enum;
+use crate::safety_events::{
+    OperatorCorrectedRiskSignal, insert_operator_corrected_risk_signal, to_db_enum,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppealReviewReport {
@@ -162,7 +164,8 @@ pub async fn apply_appeal_review_action(
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
         "SELECT id, issuer_node_id, target, target_id, category, severity, basis, confidence,
-                visibility, expires_at, COALESCE(appeal_status, 'none') AS appeal_status
+                visibility, expires_at, COALESCE(appeal_status, 'none') AS appeal_status,
+                COALESCE(operator_origin_category, category) AS origin_category
          FROM cn_safety.risk_signals
          WHERE id = $1 AND retention_expires_at > NOW()
          FOR UPDATE",
@@ -241,9 +244,13 @@ pub async fn apply_appeal_review_action(
                 .expires_at
                 .clone()
                 .or_else(|| current.expires_at.clone());
+            // #1058: operator 確定の印を付け、訂正前の category を初回だけ記録する
+            // （SET 右辺の category は更新前の値）。
             sqlx::query(
                 "UPDATE cn_safety.risk_signals
-                 SET category = $2, severity = $3, confidence = $4, expires_at = $5
+                 SET category = $2, severity = $3, confidence = $4, expires_at = $5,
+                     operator_adjusted_at = NOW(),
+                     operator_origin_category = COALESCE(operator_origin_category, category)
                  WHERE id = $1",
             )
             .bind(risk_signal_id)
@@ -268,28 +275,28 @@ pub async fn apply_appeal_review_action(
             .bind(risk_signal_id)
             .execute(&mut *tx)
             .await?;
-            let new_id = Uuid::new_v4().to_string();
             let category = enum_or_current(correction.category, &current.category)?;
             let severity = enum_or_current(correction.severity, &current.severity)?;
             let visibility = enum_or_current(correction.visibility, &current.visibility)?;
             let confidence = correction.confidence.or(current.confidence);
-            sqlx::query(
-                "INSERT INTO cn_safety.risk_signals
-                    (id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                     confidence, expires_at, appeal_status)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, 'none')",
+            let origin_category: String = row.try_get("origin_category")?;
+            // #1058: 訂正版は scanner の集約経路を通さず、operator 確定の印を付けて挿入する。
+            let reissued = insert_operator_corrected_risk_signal(
+                &mut tx,
+                &OperatorCorrectedRiskSignal {
+                    issuer_node_id: &current.issuer_node_id,
+                    target: &current.target,
+                    target_id: &current.target_id,
+                    category: &category,
+                    severity: &severity,
+                    basis: &current.basis,
+                    visibility: &visibility,
+                    confidence,
+                    origin_category: &origin_category,
+                },
             )
-            .bind(&new_id)
-            .bind(&current.issuer_node_id)
-            .bind(&current.target)
-            .bind(&current.target_id)
-            .bind(&category)
-            .bind(&severity)
-            .bind(&current.basis)
-            .bind(&visibility)
-            .bind(confidence.map(i16::from))
-            .execute(&mut *tx)
             .await?;
+            let new_id = reissued.id;
             set_linked_report_status(&mut tx, risk_signal_id, "actioned").await?;
             (
                 "appeal.reissue_correction",

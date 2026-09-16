@@ -34,7 +34,22 @@ fn stored_signal(
             appeal_status,
         },
         persisted_at: Utc::now(),
+        operator_adjusted_at: None,
+        operator_origin_category: None,
     }
+}
+
+/// #1058 AC-3: operator が値を確定した signal の印は trust 入力へそのまま運ばれる。
+#[test]
+fn operator_adjustment_is_carried_to_trust_inputs() {
+    let adjusted_at = Utc::now();
+    let mut adjusted = stored_signal("sig-adjusted", SafetyCategory::Spam, None, None);
+    adjusted.operator_adjusted_at = Some(adjusted_at);
+    adjusted.operator_origin_category = Some(SafetyCategory::Nsfw);
+    let plain = stored_signal("sig-plain", SafetyCategory::Spam, None, None);
+    let inputs = trust_risk_inputs_from(&[adjusted, plain], NOW).unwrap();
+    assert_eq!(inputs.relative[0].operator_adjusted_at, Some(adjusted_at));
+    assert_eq!(inputs.relative[1].operator_adjusted_at, None);
 }
 
 // --- 絶対 / 相対振り分け（ADR 0026 §2.7） ---

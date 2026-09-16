@@ -86,6 +86,7 @@ pub fn trust_risk_inputs_from(
             appeal_status,
             expires_at: signal.expires_at.clone(),
             persisted_at: stored.persisted_at,
+            operator_adjusted_at: stored.operator_adjusted_at,
         };
         match component {
             TrustComponentKind::Absolute => inputs.absolute.push(input),

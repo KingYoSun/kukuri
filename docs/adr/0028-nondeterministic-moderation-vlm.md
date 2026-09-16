@@ -220,6 +220,17 @@ general route も同じ閾値に従う（score / confidence を持つ検知の�
   新 signal と二重寄与しない。appeal を伴わない `cn-cli` の個別再発行（運用是正）は従来どおり
   旧 signal へ `expires_at` を刻む。contract:
   `post_appeal_reissue_closure_is_visible_after_trust_refetch`。
+- **operator 確定値の保護（#1058、2026-09-16）**: 審査・`cn-cli` の検知メタデータ編集と訂正版再発行で
+  値を確定した risk signal は、operator 確定の印（`operator_adjusted_at`）と最初の訂正前の category
+  （`operator_origin_category`）を持つ。scan 構成の変更などによる再 scan は、同じ issuer / target /
+  basis で category か訂正前の category が一致する印付きの行があれば、失効・`Cleared` を問わず
+  値を更新せず新しい行も作らない（#1050 の集約更新より優先する）。別 category の新しい判定は抑止しない。
+  訂正版は scanner の集約経路を通さず印付きで挿入するため、訂正済みの判定も再発行できる。
+  棄却（`Disputed → None`）は印を付けない。印は利用者向け信頼評価取得の `basis`
+  （`operator_adjusted_at`）と `cn-cli moderation show` / `list-signals` で判別できる。印を外して
+  scanner の判定へ戻す操作は持たない。migration は審査経路の過去操作を操作記録から復元し、記録の無い
+  `cn-cli` の過去操作は復元しない。contract: `operator_adjusted_signal_survives_rescan`、
+  `appeal_review_adjustments_survive_rescan`、`trust_read_basis_marks_operator_adjusted_signals`。
 - 署名済み moderation event は不変（是正は risk signal 側）。
 
 ## 8. 改訂追補（#1051、2026-09-15）: general 判定の index + content advisory 化

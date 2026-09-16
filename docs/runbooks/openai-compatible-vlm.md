@@ -92,6 +92,11 @@ cargo test -p kukuri-cn-safety-vlm --test live_endpoint -- --ignored --nocapture
   一つの Postgres 取引で確定する。訂正版再発行は旧判定を認容（寄与なし）として終結させたまま
   根拠一覧に残し、訂正版を新規発行する（#710。利用者は再取得で終結を確認できる）。
   `cn-cli moderation reissue` の appeal を伴わない個別再発行は従来どおり旧判定へ失効時刻を刻む。
+- **調整・再発行した判定は再 scan で戻らない（#1058）**: 検知情報調整（運営画面・`cn-cli moderation edit`）と
+  訂正版再発行で確定した判定には operator 確定の印が付き、scan 構成を変えた後の再 scan でも値は
+  更新されず、元の category で判定が作り直されることもない。印は `cn-cli moderation show` の
+  `operator_adj:` 行（確定時刻と訂正前の category）と `list-signals` の `operator_adjusted=` で確認する。
+  印を外す操作は無いため、scanner の判定に戻したいときも訂正版再発行で値を直す。
 - **審査の有効化状態（#709。標準配備は既定有効）**: `operator-config.yaml` の
   `safety.moderation.operator_review` とterraformの `safety_operator_review` は既定で `true` とし、
   生成envへ `COMMUNITY_NODE_SAFETY_OPERATOR_REVIEW=true` を注入する。無効へ戻すときは両方を

@@ -530,7 +530,12 @@ export type AppealStatus = "none" | "disputed" | "cleared";
 
 export type RiskSignalTarget = "user_pubkey" | "peer_node" | "post_id" | "blob_cid";
 
-export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, target: RiskSignalTarget, target_id: string, component: TrustComponentKind, category: SafetyCategory, severity: Severity, basis: Basis, confidence?: number | null, visibility: Visibility, appeal_status: AppealStatus, expires_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
+export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, target: RiskSignalTarget, target_id: string, component: TrustComponentKind, category: SafetyCategory, severity: Severity, basis: Basis, confidence?: number | null, visibility: Visibility, appeal_status: AppealStatus, expires_at?: string | null, 
+/**
+ * operator が審査・運用是正で値を確定した時刻（RFC3339、#1058）。`None` は scanner 由来の
+ * 未訂正判定。旧 node の応答では欠落する。
+ */
+operator_adjusted_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
 
 export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
 

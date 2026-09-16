@@ -41,6 +41,7 @@ fn input(
         appeal_status: AppealStatus::None,
         expires_at: None,
         persisted_at,
+        operator_adjusted_at: None,
     }
 }
 
@@ -468,11 +469,43 @@ fn trust_read_is_explainable_with_basis() {
     assert!((rel.decay_factor - 0.5).abs() < 1e-9);
     assert_eq!(rel.relation_weight, 0.8);
     assert!((rel.contribution - rel.raw_contribution * rel.decay_factor * 0.8).abs() < 1e-12);
+    assert_eq!(rel.operator_adjusted_at, None, "未訂正の判定は印を持たない");
 
     // 合成値と成分・適用重みが view から再構成できる（説明可能性）。
     let recomposed = compose_trust(&TrustParams::default(), view.absolute, view.relative);
     assert_eq!(view.trust, recomposed.trust);
     assert_eq!(view.w_abs_applied, recomposed.w_abs_applied);
+}
+
+/// #1058 AC-3: operator が値を確定した判定は、根拠一覧で確定時刻（RFC3339）として判別できる。
+/// 寄与の計算は印の有無で変わらない。
+#[test]
+fn trust_read_basis_marks_operator_adjusted_signals() {
+    let adjusted_at: DateTime<Utc> = "2026-09-16T01:02:03Z".parse().unwrap();
+    let mut adjusted = spam_input("sig-adjusted", now());
+    adjusted.operator_adjusted_at = Some(adjusted_at);
+    let plain = spam_input("sig-plain", now());
+    let inputs = TrustRiskInputs {
+        absolute: Vec::new(),
+        relative: vec![adjusted, plain],
+    };
+    let view = build_trust_read(
+        "pubkey-1",
+        &inputs,
+        now(),
+        &TrustParams::default(),
+        &UniformRelationWeight(1.0),
+    );
+    let entry = |id: &str| view.basis.iter().find(|e| e.signal_id == id).unwrap();
+    assert_eq!(
+        entry("sig-adjusted").operator_adjusted_at.as_deref(),
+        Some("2026-09-16T01:02:03Z")
+    );
+    assert_eq!(entry("sig-plain").operator_adjusted_at, None);
+    assert_eq!(
+        entry("sig-adjusted").contribution,
+        entry("sig-plain").contribution
+    );
 }
 
 // --- scenario: CSAM 系 risk は relation / 通報数で揺れない ---

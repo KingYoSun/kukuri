@@ -55,6 +55,8 @@ pub struct TrustRiskInput {
     pub appeal_status: AppealStatus,
     pub expires_at: Option<String>,
     pub persisted_at: DateTime<Utc>,
+    /// operator が値を確定した時刻（#1058）。`None` は scanner 由来の未訂正判定。
+    pub operator_adjusted_at: Option<DateTime<Utc>>,
 }
 
 /// 対象 1 つ分の trust 入力（絶対 / 相対に振り分け済み）。

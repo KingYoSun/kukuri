@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent};
 use kukuri_cn_safety::verdict::SafetyLabel;
-use kukuri_cn_safety::{AppealStatus, RiskSignalTarget, SafetyRiskSignal};
+use kukuri_cn_safety::{AppealStatus, RiskSignalTarget, SafetyCategory, SafetyRiskSignal};
 use kukuri_cn_safety_runtime::verify_signed_event;
 
 /// 配布クエリの受け手区分。`local` はどの audience にも配布しない。
@@ -71,6 +71,11 @@ pub struct StoredRiskSignal {
     pub signal: SafetyRiskSignal,
     /// 永続化時刻。
     pub persisted_at: DateTime<Utc>,
+    /// operator が審査・運用是正で値を確定した最後の時刻（#1058）。`None` は scanner 由来の
+    /// 未訂正行。印のある行は再 scan の集約更新・新規 insert の対象にならない。
+    pub operator_adjusted_at: Option<DateTime<Utc>>,
+    /// 最初の訂正前の scanner 由来 category（#1058）。印のある行では常に `Some`。
+    pub operator_origin_category: Option<SafetyCategory>,
 }
 
 /// signed moderation event を保存する（event id で冪等）。
@@ -202,8 +207,9 @@ pub struct PersistedRiskSignal {
     pub newly_created: bool,
 }
 
-const RISK_SIGNAL_COLUMNS: &str = "id, issuer_node_id, target, target_id, category, severity, \
-     basis, visibility, confidence, expires_at, appeal_status, persisted_at";
+pub(crate) const RISK_SIGNAL_COLUMNS: &str = "id, issuer_node_id, target, target_id, category, \
+     severity, basis, visibility, confidence, expires_at, appeal_status, persisted_at, \
+     operator_adjusted_at, operator_origin_category";
 
 /// risk signal を保存する。`target_id` が空 / 空白なら保存しない。
 ///
@@ -237,11 +243,16 @@ pub async fn persist_risk_signal_with_author(
 ///
 /// 1. 同鍵の活性行（`appeal_status` が cleared 以外 かつ `expires_at` 無し）があれば、その行の
 ///    severity / confidence / visibility を更新し、id / persisted_at / appeal_status は据え置く。
-/// 2. 活性行が無く cleared 行だけがあれば、審査の結論を尊重して新規行を作らず cleared 行を返す。
-/// 3. どちらも無ければ INSERT する。部分 UNIQUE index `uq_cn_safety_risk_signals_active_key`
-///    との競合（同時挿入）は `ON CONFLICT ... DO UPDATE` で 1 の更新に倒す。
+///    ただし operator が値を確定した行（`operator_adjusted_at` あり、#1058）は更新しない。
+/// 2. 活性行が無く、operator が確定した行が同じ issuer / target / basis にあり、その category か
+///    訂正前の category が一致すれば、失効・cleared を問わず新規行を作らずその行を返す（#1058）。
+/// 3. 活性行が無く cleared 行だけがあれば、審査の結論を尊重して新規行を作らず cleared 行を返す。
+/// 4. いずれも無ければ INSERT する。部分 UNIQUE index `uq_cn_safety_risk_signals_active_key`
+///    との競合（同時挿入）は `ON CONFLICT ... DO UPDATE` で 1 の更新に倒す（operator が確定した
+///    行とは競合しても更新しない）。
 ///
 /// 著者関連付け（`risk_signal_subject_authors`）は集約の有無に関わらず同一取引で行う。
+/// operator の訂正版は本関数ではなく `insert_operator_corrected_risk_signal` で保存する。
 pub async fn persist_risk_signal_deduplicated(
     pool: &PgPool,
     issuer_node_id: &str,
@@ -284,23 +295,51 @@ pub async fn persist_risk_signal_deduplicated(
     .await?;
 
     let (row, newly_created) = if let Some(active) = active {
-        let id: String = active.try_get("id")?;
-        let row = sqlx::query(&format!(
-            "UPDATE cn_safety.risk_signals
-             SET severity = $2, confidence = $3, visibility = $4
-             WHERE id = $1
-             RETURNING {RISK_SIGNAL_COLUMNS}"
-        ))
-        .bind(&id)
-        .bind(&severity)
-        .bind(signal.confidence.map(i16::from))
-        .bind(&visibility)
-        .fetch_one(&mut *tx)
-        .await?;
-        (row, false)
+        if row_is_operator_adjusted(&active)? {
+            // operator が確定した値は scanner の値で上書きしない（#1058 AC-1）。行ロックを取って
+            // から判定するため、同時に進む審査の更新とも直列化される。
+            (active, false)
+        } else {
+            let id: String = active.try_get("id")?;
+            let row = sqlx::query(&format!(
+                "UPDATE cn_safety.risk_signals
+                 SET severity = $2, confidence = $3, visibility = $4
+                 WHERE id = $1
+                 RETURNING {RISK_SIGNAL_COLUMNS}"
+            ))
+            .bind(&id)
+            .bind(&severity)
+            .bind(signal.confidence.map(i16::from))
+            .bind(&visibility)
+            .fetch_one(&mut *tx)
+            .await?;
+            (row, false)
+        }
+    } else if let Some(adjusted) = sqlx::query(&format!(
+        // category を変える訂正や期限付与の後は元の鍵に活性行が無い。訂正前の category
+        // （operator_origin_category）でも一致させ、失効・cleared を問わず新規行を作らない
+        // （#1058 AC-2）。別 category の新しい判定は抑止しない。
+        "SELECT {RISK_SIGNAL_COLUMNS}
+         FROM cn_safety.risk_signals
+         WHERE issuer_node_id = $1 AND target = $2 AND target_id = $3 AND basis = $5
+           AND operator_adjusted_at IS NOT NULL
+           AND (category = $4 OR operator_origin_category = $4)
+         ORDER BY (appeal_status IS DISTINCT FROM 'cleared' AND expires_at IS NULL) DESC,
+                  operator_adjusted_at DESC, persisted_at DESC, id DESC
+         LIMIT 1"
+    ))
+    .bind(issuer_node_id)
+    .bind(&target)
+    .bind(&signal.target_id)
+    .bind(&category)
+    .bind(&basis)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        (adjusted, false)
     } else {
-        // 失効していない cleared 行 = 現在も有効な審査結論。cn-cli の再発行は旧行に expires_at を
-        // 刻んでから呼ぶため、ここには掛からず新行を作れる。
+        // 失効していない cleared 行 = 現在も有効な審査結論。cn-cli の再発行は operator 専用の
+        // 挿入経路を使うため、ここには掛からない。
         let cleared = sqlx::query(&format!(
             "SELECT {RISK_SIGNAL_COLUMNS}
              FROM cn_safety.risk_signals
@@ -332,6 +371,7 @@ pub async fn persist_risk_signal_deduplicated(
                      DO UPDATE SET severity = EXCLUDED.severity,
                                    confidence = EXCLUDED.confidence,
                                    visibility = EXCLUDED.visibility
+                        WHERE cn_safety.risk_signals.operator_adjusted_at IS NULL
                      RETURNING {RISK_SIGNAL_COLUMNS}, (xmax = 0) AS inserted"
                 ))
                 .bind(&id)
@@ -345,10 +385,33 @@ pub async fn persist_risk_signal_deduplicated(
                 .bind(signal.confidence.map(i16::from))
                 .bind(signal.expires_at.as_deref())
                 .bind(signal.appeal_status.map(|s| to_db_enum(&s)).transpose()?)
-                .fetch_one(&mut *tx)
+                .fetch_optional(&mut *tx)
                 .await?;
-                let inserted: bool = row.try_get("inserted")?;
-                (row, inserted)
+                match row {
+                    Some(row) => {
+                        let inserted: bool = row.try_get("inserted")?;
+                        (row, inserted)
+                    }
+                    None => {
+                        // 同時に operator が同鍵の訂正版を挿入した: その行を上書きせず返す。
+                        let adjusted = sqlx::query(&format!(
+                            "SELECT {RISK_SIGNAL_COLUMNS}
+                             FROM cn_safety.risk_signals
+                             WHERE issuer_node_id = $1 AND target = $2 AND target_id = $3
+                               AND category = $4 AND basis = $5
+                               AND appeal_status IS DISTINCT FROM 'cleared'
+                               AND expires_at IS NULL"
+                        ))
+                        .bind(issuer_node_id)
+                        .bind(&target)
+                        .bind(&signal.target_id)
+                        .bind(&category)
+                        .bind(&basis)
+                        .fetch_one(&mut *tx)
+                        .await?;
+                        (adjusted, false)
+                    }
+                }
             }
         }
     };
@@ -360,6 +423,58 @@ pub async fn persist_risk_signal_deduplicated(
         stored: risk_signal_from_row(&row)?,
         newly_created,
     })
+}
+
+fn row_is_operator_adjusted(row: &PgRow) -> Result<bool> {
+    Ok(row
+        .try_get::<Option<DateTime<Utc>>, _>("operator_adjusted_at")?
+        .is_some())
+}
+
+/// operator が訂正版として再発行する risk signal の内容（#1058）。
+pub(crate) struct OperatorCorrectedRiskSignal<'a> {
+    pub issuer_node_id: &'a str,
+    pub target: &'a str,
+    pub target_id: &'a str,
+    pub category: &'a str,
+    pub severity: &'a str,
+    pub basis: &'a str,
+    pub visibility: &'a str,
+    pub confidence: Option<u8>,
+    /// 旧行の訂正前 category（旧行が未訂正なら旧行の category）。
+    pub origin_category: &'a str,
+}
+
+/// operator の訂正版を新しい活性行として挿入する（審査・cn-cli の再発行で共有、#1058）。
+///
+/// scanner の集約経路を通さず、operator 確定の印（`operator_adjusted_at`）と訂正前の category を
+/// 付けて保存する。呼出元は旧行を先に cleared / 失効させ、同じ取引で呼ぶ。
+pub(crate) async fn insert_operator_corrected_risk_signal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    corrected: &OperatorCorrectedRiskSignal<'_>,
+) -> Result<StoredRiskSignal> {
+    let id = Uuid::new_v4().to_string();
+    let row = sqlx::query(&format!(
+        "INSERT INTO cn_safety.risk_signals
+            (id, issuer_node_id, target, target_id, category, severity, basis, visibility,
+             confidence, expires_at, appeal_status, operator_adjusted_at,
+             operator_origin_category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, 'none', NOW(), $10)
+         RETURNING {RISK_SIGNAL_COLUMNS}"
+    ))
+    .bind(&id)
+    .bind(corrected.issuer_node_id)
+    .bind(corrected.target)
+    .bind(corrected.target_id)
+    .bind(corrected.category)
+    .bind(corrected.severity)
+    .bind(corrected.basis)
+    .bind(corrected.visibility)
+    .bind(corrected.confidence.map(i16::from))
+    .bind(corrected.origin_category)
+    .fetch_one(&mut **tx)
+    .await?;
+    risk_signal_from_row(&row)
 }
 
 /// content target の risk signal を著者へ関連付ける（既にあれば何もしない）。
@@ -418,14 +533,13 @@ pub async fn list_risk_signals(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<StoredRiskSignal>> {
-    let rows = sqlx::query(
-        "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                confidence, expires_at, appeal_status, persisted_at
+    let rows = sqlx::query(&format!(
+        "SELECT {RISK_SIGNAL_COLUMNS}
          FROM cn_safety.risk_signals
          WHERE retention_expires_at > NOW()
          ORDER BY persisted_at DESC
-         LIMIT $1 OFFSET $2",
-    )
+         LIMIT $1 OFFSET $2"
+    ))
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
@@ -435,12 +549,11 @@ pub async fn list_risk_signals(
 
 /// risk signal を id で取得する。
 pub async fn get_risk_signal(pool: &PgPool, id: &str) -> Result<Option<StoredRiskSignal>> {
-    let row = sqlx::query(
-        "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                confidence, expires_at, appeal_status, persisted_at
+    let row = sqlx::query(&format!(
+        "SELECT {RISK_SIGNAL_COLUMNS}
          FROM cn_safety.risk_signals
-         WHERE id = $1 AND retention_expires_at > NOW()",
-    )
+         WHERE id = $1 AND retention_expires_at > NOW()"
+    ))
     .bind(id)
     .fetch_optional(pool)
     .await?;
@@ -453,14 +566,13 @@ pub async fn list_risk_signals_for_target(
     target: RiskSignalTarget,
     target_id: &str,
 ) -> Result<Vec<StoredRiskSignal>> {
-    let rows = sqlx::query(
-        "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                confidence, expires_at, appeal_status, persisted_at
+    let rows = sqlx::query(&format!(
+        "SELECT {RISK_SIGNAL_COLUMNS}
          FROM cn_safety.risk_signals
          WHERE target = $1 AND target_id = $2
            AND retention_expires_at > NOW()
-         ORDER BY persisted_at DESC",
-    )
+         ORDER BY persisted_at DESC"
+    ))
     .bind(to_db_enum(&target)?)
     .bind(target_id)
     .fetch_all(pool)
@@ -478,7 +590,8 @@ pub async fn list_risk_signals_for_user(
     let rows = sqlx::query(
         "SELECT DISTINCT rs.id, rs.issuer_node_id, rs.target, rs.target_id, rs.category,
                 rs.severity, rs.basis, rs.visibility, rs.confidence, rs.expires_at,
-                rs.appeal_status, rs.persisted_at
+                rs.appeal_status, rs.persisted_at, rs.operator_adjusted_at,
+                rs.operator_origin_category
          FROM cn_safety.risk_signals rs
          LEFT JOIN cn_safety.risk_signal_subject_authors rsa
            ON rsa.target = rs.target AND rsa.target_id = rs.target_id
@@ -504,16 +617,15 @@ pub async fn list_distributable_risk_signals(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<StoredRiskSignal>> {
-    let rows = sqlx::query(
-        "SELECT id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                confidence, expires_at, appeal_status, persisted_at
+    let rows = sqlx::query(&format!(
+        "SELECT {RISK_SIGNAL_COLUMNS}
          FROM cn_safety.risk_signals
          WHERE visibility = ANY($1)
            AND (expires_at IS NULL OR expires_at::timestamptz > $2::timestamptz)
            AND retention_expires_at > NOW()
          ORDER BY persisted_at DESC
-         LIMIT $3 OFFSET $4",
-    )
+         LIMIT $3 OFFSET $4"
+    ))
     .bind(audience.allowed_visibilities())
     .bind(now_rfc3339)
     .bind(limit)
@@ -569,11 +681,16 @@ pub(crate) fn risk_signal_from_row(row: &PgRow) -> Result<StoredRiskSignal> {
         expires_at: row.try_get("expires_at")?,
         appeal_status,
     };
+    let operator_origin_category: Option<String> = row.try_get("operator_origin_category")?;
     Ok(StoredRiskSignal {
         id: row.try_get("id")?,
         issuer_node_id: row.try_get("issuer_node_id")?,
         signal,
         persisted_at: row.try_get("persisted_at")?,
+        operator_adjusted_at: row.try_get("operator_adjusted_at")?,
+        operator_origin_category: operator_origin_category
+            .map(|value| from_db_enum("operator_origin_category", &value))
+            .transpose()?,
     })
 }
 
