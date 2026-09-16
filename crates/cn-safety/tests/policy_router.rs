@@ -19,6 +19,8 @@ const SCANNED_AT: &str = "2026-06-29T00:00:00Z";
 
 fn known_hash_result() -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Completed,
@@ -31,6 +33,8 @@ fn known_hash_result() -> ProviderScanResult {
 
 fn no_known_match_result() -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,
@@ -47,6 +51,8 @@ fn score_result(
     score: u8,
 ) -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "classifier".to_string(),
         capability,
         outcome: ScanOutcome::Completed,
@@ -59,6 +65,8 @@ fn score_result(
 
 fn general_result(category: SafetyCategory) -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
@@ -132,6 +140,8 @@ fn critical_detection_with_no_score_fails_closed() {
     // score=None でも critical capability の Completed 検知は Allow に取りこぼさない。
     let policy = SafetyPolicy::public_node_default();
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Completed,
@@ -169,6 +179,8 @@ fn critical_label_confidence_drives_suspected_when_score_absent() {
     // result.score が無くても label.confidence>=threshold なら suspected として扱う。
     let policy = SafetyPolicy::public_node_default();
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Completed,
@@ -190,6 +202,8 @@ fn cse_first_label_noncritical_still_reports_cse_not_csam() {
     // CSE capability で先頭ラベルが非 critical(Nsfw) でも、CSE として報告する（取り違えない）。
     let policy = SafetyPolicy::public_node_default();
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "cse".to_string(),
         capability: SafetyProviderCapability::CseTextClassifier,
         outcome: ScanOutcome::Completed,
@@ -257,6 +271,8 @@ fn spam_uses_general_route() {
 fn missing_required_known_csam_provider_fails_closed() {
     let policy = SafetyPolicy::public_node_default();
     let clean_general = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
@@ -275,6 +291,8 @@ fn missing_required_known_csam_provider_fails_closed() {
 fn scan_failure_fails_closed_not_allow() {
     let policy = SafetyPolicy::public_node_default();
     let failed = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Failed,
@@ -293,6 +311,8 @@ fn scan_failure_fails_closed_not_allow() {
 fn provider_unavailable_fails_closed_not_allow() {
     let policy = SafetyPolicy::public_node_default();
     let unavailable = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::Unavailable,
@@ -320,6 +340,8 @@ fn empty_scan_outcomes_fail_closed_unscanned() {
 fn no_known_match_is_not_treated_as_clean() {
     let policy = SafetyPolicy::public_node_default();
     let no_match = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known-csam".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,
@@ -338,6 +360,8 @@ fn no_known_match_is_not_treated_as_clean() {
 fn known_match_takes_priority_over_other_failures() {
     let policy = SafetyPolicy::public_node_default();
     let failed = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "classifier".to_string(),
         capability: SafetyProviderCapability::NovelCsamImageClassifier,
         outcome: ScanOutcome::Failed,

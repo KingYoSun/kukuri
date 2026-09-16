@@ -188,7 +188,10 @@ pub fn route(
     if let Some(result) = scan_outcomes
         .iter()
         .filter(|r| r.outcome == ScanOutcome::Completed && is_critical_detection(r))
-        .find(|r| effective_critical_score(r).is_some_and(|s| s >= policy.suspected_threshold))
+        .find(|r| {
+            r.decision_basis == crate::ProviderDecisionBasis::CategoryFlags
+                || effective_critical_score(r).is_some_and(|s| s >= policy.suspected_threshold)
+        })
     {
         let category = critical_category(result).unwrap_or(SafetyCategory::Csam);
         let reason = if category == SafetyCategory::Cse {
@@ -260,7 +263,9 @@ pub fn route(
         .filter_map(|r| {
             general_category(r, policy)
                 .filter(|_| {
-                    effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold)
+                    r.decision_basis == crate::ProviderDecisionBasis::CategoryFlags
+                        || effective_general_score(r)
+                            .is_none_or(|s| s >= policy.suspected_threshold)
                 })
                 .map(|category| (r, category))
         })
@@ -275,7 +280,17 @@ pub fn route(
         let mut verdict = base(action, ReasonCode::GeneralModeration, false);
         verdict.provider = Some(result.provider.clone());
         verdict.provider_capability = Some(result.capability);
-        verdict.confidence = result.score;
+        verdict.confidence = if result.decision_basis == crate::ProviderDecisionBasis::CategoryFlags
+        {
+            result
+                .labels
+                .iter()
+                .filter(|label| label.category == category)
+                .filter_map(|label| label.confidence)
+                .max()
+        } else {
+            result.score
+        };
         verdict.labels = non_empty_labels(result, category);
         // ADR 0028 §8.1: nsfw / objectionable を `label` で Allow に落としたときだけ、検知ラベルの
         // advisory-only 分を content advisory として同伴する。非 index なら advisory は付けない。
@@ -326,6 +341,15 @@ fn is_critical_detection(result: &ProviderScanResult) -> bool {
 /// `result.score` を優先し、無ければ critical category ラベルの最大 confidence を使う。
 /// `score` と label `confidence` が独立フィールドであることによる取りこぼしを防ぐ。
 fn effective_critical_score(result: &ProviderScanResult) -> Option<u8> {
+    if result.decision_basis == crate::ProviderDecisionBasis::CategoryFlags {
+        let category = critical_category(result)?;
+        return result
+            .labels
+            .iter()
+            .filter(|label| label.category == category)
+            .filter_map(|label| label.confidence)
+            .max();
+    }
     result.score.or_else(|| {
         result
             .labels

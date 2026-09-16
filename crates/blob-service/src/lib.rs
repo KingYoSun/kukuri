@@ -35,6 +35,15 @@ pub trait BlobService: Send + Sync {
     async fn fetch_blob_ephemeral(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
         self.fetch_blob(hash).await
     }
+    /// Bounded scan ingress. Implementations must reject before full allocation;
+    /// an implementation without this contract is unavailable rather than an unbounded fallback.
+    async fn fetch_blob_ephemeral_bounded(
+        &self,
+        _hash: &BlobHash,
+        _max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        anyhow::bail!("bounded ephemeral blob fetch is not supported")
+    }
     async fn pin_blob(&self, hash: &BlobHash) -> Result<()>;
     async fn unpin_blob(&self, _hash: &BlobHash) -> Result<()> {
         Ok(())
@@ -133,6 +142,19 @@ impl IrohBlobService {
 
 #[async_trait]
 impl BlobService for MemoryBlobService {
+    async fn fetch_blob_ephemeral_bounded(
+        &self,
+        hash: &BlobHash,
+        max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        let blobs = self.blobs.read().await;
+        match blobs.get(hash.as_str()) {
+            Some(bytes) if bytes.len() as u64 > max_bytes => {
+                Err(remote_fetch::BlobTooLarge { limit: max_bytes }.into())
+            }
+            bytes => Ok(bytes.cloned()),
+        }
+    }
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
         let hash = BlobHash::new(blake3::hash(&data).to_hex().to_string());
         self.blobs
@@ -177,6 +199,46 @@ impl BlobService for MemoryBlobService {
 
 #[async_trait]
 impl BlobService for IrohBlobService {
+    async fn fetch_blob_ephemeral_bounded(
+        &self,
+        hash: &BlobHash,
+        max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        use tokio::io::AsyncReadExt;
+        let expected = iroh_blobs::Hash::from_str(hash.as_str())?;
+        let mut bytes = Vec::new();
+        let mut reader = self
+            .node
+            .blobs()
+            .blobs()
+            .reader(expected)
+            .take(max_bytes.saturating_add(1));
+        let result = match reader.read_to_end(&mut bytes).await {
+            Ok(_) if bytes.len() as u64 > max_bytes => {
+                return Err(remote_fetch::BlobTooLarge { limit: max_bytes }.into());
+            }
+            Ok(_) => Some(bytes),
+            Err(_) => {
+                // Free any partial local read before beginning a bounded remote transfer.
+                drop(bytes);
+                remote_fetch::fetch_bytes_ephemeral_bounded_with_cooldown(
+                    &self.node,
+                    &self.peers,
+                    &self.remote_fetch_retries,
+                    expected,
+                    max_bytes,
+                )
+                .await?
+            }
+        };
+        if let Some(bytes) = &result {
+            anyhow::ensure!(
+                iroh_blobs::Hash::new(bytes) == expected,
+                "ephemeral blob hash mismatch"
+            );
+        }
+        Ok(result)
+    }
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
         let byte_len = data.len() as u64;
         let temp_tag = self.node.blobs().blobs().add_bytes(data).await?;
@@ -654,6 +716,39 @@ mod tests {
         assert!(
             receiver_node.blobs().blobs().get_bytes(hash).await.is_err(),
             "ephemeral fetch must not persist the blob into the local store"
+        );
+
+        // #1060: both local and remote ingress stop at the byte bound, and a
+        // rejected small scan must not poison a later permitted acquisition.
+        let large = sender
+            .put_blob(vec![42; 2 * 1024 * 1024], "video/mp4")
+            .await
+            .expect("large blob");
+        let local_error = sender
+            .fetch_blob_ephemeral_bounded(&large.hash, 1024)
+            .await
+            .expect_err("bounded local read");
+        assert!(local_error.is::<remote_fetch::BlobTooLarge>());
+        let remote_error = receiver
+            .fetch_blob_ephemeral_bounded(&large.hash, 1024)
+            .await
+            .expect_err("bounded remote stream");
+        assert!(remote_error.is::<remote_fetch::BlobTooLarge>());
+        let recovered = receiver
+            .fetch_blob_ephemeral_bounded(&large.hash, 3 * 1024 * 1024)
+            .await
+            .expect("larger permitted read")
+            .expect("bytes");
+        assert_eq!(recovered.len(), 2 * 1024 * 1024);
+        assert!(recovered.iter().all(|byte| *byte == 42));
+        let large_hash = iroh_blobs::Hash::from_str(large.hash.as_str()).expect("hash");
+        assert!(
+            receiver_node
+                .blobs()
+                .blobs()
+                .get_bytes(large_hash)
+                .await
+                .is_err()
         );
     }
 

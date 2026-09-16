@@ -378,3 +378,65 @@ scenario は Feature Data Classification の「2026-09-15 追加」3 件を正�
 - `Basis::ClassifierScore` は confirmed に昇格しない。cross-node pull は confirmed 絶対成分のみ。
 - no permanent blob storage。VLM 入力は一時 fetch。
 - ラベル無し（self-label も advisory も無い）投稿は通常表示（ADR 0046 の fail-open の限界は不変）。
+
+## 9. OpenAI Moderation・動画抽出・内容hash再利用（#1060）
+
+2026-09-17承認、Scope revision `2026-09-17-expanded`。専用OpenAI providerと共通内容cacheも
+#1060が所有する。以下は専用providerの契約であり、既存OpenAI-compatible VLMのscore閾値・
+self-hostの任意APIキー契約は維持する。
+
+### 9.1 データ分類
+
+- Feature名: OpenAI ModerationとCN動画フレーム抽出、内容判定再利用。
+- Durable / Transient: 元動画とposterは既存のdocs/blobs。抽出frame・HTTP入力/生応答はtransient。
+  完了した内容判定と最小coverage、参照元のverdict/advisoryはnode-local Postgres。
+- Canonical Source: 投稿とmediaは既存docs/blobs。内容判定は派生情報であり真の分類を表明しない。
+- Replicated?: 内容cacheは複製しない。advisory配布は既存visibility規則に従う。
+- Rebuildable From: 認可された元内容と同一provider/抽出構成。frameをcanonical blobにしない。
+- Public Replica / Private Replica / Local Only: cacheとdecoder一時領域はCN local only。
+- Gossip Hint: 追加なし。Blob: 新たな派生blobなし。SQLite projection: 追加なし。
+- 必須contract: boolean判定、カテゴリ別confidence、coverage、部分失敗、同内容の別参照、
+  並行miss、構成変更、restart、scope/撤回/appeal保持、取得/decoder/HTTPの上限とcleanup。
+- 必須scenario: benign MP4/WebMのcold scan→別投稿/別著者→restart後の再利用で追加動画取得・
+  decode・APIが0。mockによる検知と失敗、production相当imageによる実decodeを併用する。
+
+### 9.2 判定とcoverage
+
+- 専用providerは `omni-moderation-latest` の `/v1/moderations` を使い、
+  `COMMUNITY_NODE_VLM_API_KEY` を必須credentialとして明示的に読む。
+- 発火はカテゴリboolean。scoreは同カテゴリのconfidenceであり、70閾値を二重適用しない。
+  confidenceを閾値回避のために改変しない。旧VLMの判定方式と型で区別する。
+- 本文と静止画は別入力。動画はCNが本体から採取したJPEGを1画像/requestで検査する。
+  全frame成功後だけ同カテゴリbooleanのOR・scoreのMAXを集約し、元動画blobへ記録する。
+- `sexual` はnsfw、一般の非性的カテゴリはobjectionable。本文の `sexual/minors` 検知は
+  CSE suspectedとして既存critical経路へ渡し、confirmedには昇格しない。
+  画像非対応カテゴリの0は未検査。未知CSAM動画/grooming検査済みを表明しない。
+- 音声trackは検査しない。正常な音声スキップと無映像/破損/部分成功を混同しない。
+- nsfw/objectionableは§8のadvisory付きAllow・trust寄与0を維持する。known-match、
+  Arachnid、critical、appeal、operator訂正の契約は維持する。
+
+### 9.3 抽出と上限
+
+- 動画長を整数時間Dへ正規化し `N=min(8,max(1,ceil(D/5秒)))`、
+  `t_i=floor(D*(2i+1)/(2N))` の全区間に分布する決定的時刻を採る。
+- 初期対応はMP4/H.264、WebM/VP8・VP9。入力32 MiB、600秒、長辺3840/短辺2160pxまで。
+  JPEGは長辺512pxまで、1枚256 KiB、全体2 MiB。全量確保前に取得上限を適用する。
+- decoderは検証済みlocal bytesのみを専用tmpfs/pipeで扱い、外部参照・network protocolを
+  禁止する。入力値をshellへ埋め込まない。子processへcredentialを継承しない。
+- 同時動画job/decoder/動画HTTPは各1、待機16件/60秒。fetch30秒、probe5秒、
+  decode合計30秒、HTTP30秒、job全体300秒。timeout/cancel/shutdownでkill・wait・cleanupする。
+- 検査はサンプリングであり全フレーム網羅を保証しない。抽出設定・decoder identityをversion化する。
+
+### 9.4 共通再利用と予算
+
+- 内容identityは本文hash、media blob hash。node-localなprovider/model/policy/判定方式/
+  前処理・抽出構成のfingerprintと組にする。秘密値と投稿固有のauthor/appealをキーや結果へ混入しない。
+- 未完了・失敗は完了cacheに保存しない。同一キーの並行missは実行を共有し、restart後も完了結果を再利用する。
+- cache hitの前後も参照元のscope・署名・撤回・送信防止を守り、新参照を別に関連付ける。
+  一投稿の削除で他の有効参照を消さず、他著者の履歴やappealをコピーしない。
+- 本文・静止画・動画・readiness・retryは同じ有界queue/予算を通る。初期予算案は
+  400 RPM / 8,000 RPD / 8,000 TPMと実project枠の小さい方。画像TPMを0扱いしない。
+- 429/一時障害は追加2回まで、backoffと全体deadlineを共有する。401/403・入力4xxは
+  設定/入力障害として扱う。生API応答・media・credentialをログ/DBへ保存しない。
+
+実装状況と検証は [作業記録](../progress/2026-09-17-1060-openai-video-moderation.md) を参照する。

@@ -272,6 +272,8 @@ fn moderation_action_serializes_snake_case() {
 #[test]
 fn provider_scan_result_round_trips() {
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "mock".to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome: ScanOutcome::NoKnownMatch,

@@ -1,0 +1,27 @@
+[package]
+name = "kukuri-cn-safety-video"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[package.metadata.kukuri]
+cn-lane = true
+
+[dependencies]
+async-trait.workspace = true
+hex.workspace = true
+kukuri-cn-safety = { path = "../cn-safety" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["process", "io-util"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+
+[lints]
+workspace = true

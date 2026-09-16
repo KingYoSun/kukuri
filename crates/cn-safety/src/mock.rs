@@ -92,6 +92,8 @@ impl MockSafetyProvider {
             .copied()
             .unwrap_or(SafetyProviderCapability::KnownCsamHashMatch);
         let result = ProviderScanResult {
+            decision_basis: Default::default(),
+            coverage: None,
             provider: self.name.clone(),
             capability,
             outcome: ScanOutcome::Completed,
@@ -116,6 +118,8 @@ impl MockSafetyProvider {
         score: u8,
     ) -> Self {
         let result = ProviderScanResult {
+            decision_basis: Default::default(),
+            coverage: None,
             provider: self.name.clone(),
             capability,
             outcome: ScanOutcome::Completed,
@@ -158,6 +162,8 @@ impl MockSafetyProvider {
             .copied()
             .unwrap_or(SafetyProviderCapability::KnownCsamHashMatch);
         let result = ProviderScanResult {
+            decision_basis: Default::default(),
+            coverage: None,
             provider: self.name.clone(),
             capability,
             outcome: ScanOutcome::Failed,

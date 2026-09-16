@@ -78,6 +78,20 @@ impl ObservedBlobs {
 }
 #[async_trait]
 impl BlobService for ObservedBlobs {
+    async fn fetch_blob_ephemeral_bounded(
+        &self,
+        hash: &BlobHash,
+        max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        let bytes = self.fetch_blob_ephemeral(hash).await?;
+        if bytes
+            .as_ref()
+            .is_some_and(|bytes| bytes.len() as u64 > max_bytes)
+        {
+            return Err(kukuri_iroh_node::remote_fetch::BlobTooLarge { limit: max_bytes }.into());
+        }
+        Ok(bytes)
+    }
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
         self.trace
             .lock()
