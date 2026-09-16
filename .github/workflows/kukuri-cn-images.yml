@@ -43,7 +43,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -66,8 +66,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # #1073: layer cache は Blacksmith の builder（sticky disk）に置く。GitHub Actions cache
+      # （type=gha）の import / export を行わないので、repo の 10 GB 上限を消費しない。
+      # cache-key は image ごとに分け、別 image の layer が互いを追い出さないようにする。
+      - name: Set up Docker builder
+        uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: docker/cn/Dockerfile-${{ matrix.image }}
 
       - name: Prepare image metadata
         id: meta
@@ -125,11 +130,11 @@ jobs:
       # cn-indexer は publish 前に production 契約を image smoke で固定する（#614）:
       # mock / unknown provider の fail-closed 拒否、slot 制約、credential env 欠落の明示的
       # 失敗、credential 値の非漏出、正常構成の exit 0。`validate-config` は外部接続なしの
-      # 起動前検証モードなので、secret 実値や DB を要しない。build layer は最終 build と
-      # cache 共有されるため二重 build のコストは小さい。
+      # 起動前検証モードなので、secret 実値や DB を要しない。build layer は同じ builder 上で
+      # 最終 build と共有されるため二重 build のコストは小さい。
       - name: Build cn-indexer image for smoke
         if: ${{ matrix.bin == 'cn-indexer' }}
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: docker/cn/Dockerfile
@@ -139,8 +144,6 @@ jobs:
           build-args: |
             TARGET_PACKAGE=${{ matrix.package }}
             TARGET_BIN=${{ matrix.bin }}
-          cache-from: type=gha,scope=cn-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=cn-${{ matrix.image }}
 
       - name: Smoke test cn-indexer image
         if: ${{ matrix.bin == 'cn-indexer' }}
@@ -232,7 +235,7 @@ jobs:
           echo "credential leak check: ok"
 
       - name: Build and optionally push
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: docker/cn/Dockerfile
@@ -245,8 +248,6 @@ jobs:
           build-args: |
             TARGET_PACKAGE=${{ matrix.package }}
             TARGET_BIN=${{ matrix.bin }}
-          cache-from: type=gha,scope=cn-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=cn-${{ matrix.image }}
 
       - name: Image summary
         shell: bash
