@@ -134,6 +134,20 @@ pub(crate) fn default_content_advisory_enabled() -> bool {
     true
 }
 
+impl CommunityNodeNodeConfig {
+    /// 採用設定を既定(採用)にした node 設定。
+    pub fn new(
+        base_url: impl Into<String>,
+        resolved_urls: Option<CommunityNodeResolvedUrls>,
+    ) -> Self {
+        Self {
+            base_url: base_url.into(),
+            resolved_urls,
+            content_advisory_enabled: default_content_advisory_enabled(),
+        }
+    }
+}
+
 impl Default for CommunityNodeNodeConfig {
     fn default() -> Self {
         Self {
@@ -165,6 +179,16 @@ pub struct SetCommunityNodeConfigNode {
     /// #1056: content advisory の採用。未指定は保存済みの値を維持し、新規 node は true。
     #[serde(default)]
     pub content_advisory_enabled: Option<bool>,
+}
+
+impl SetCommunityNodeConfigNode {
+    /// 採用設定を指定しない(保存済みの値を維持する)入力。
+    pub fn new(base_url: impl Into<String>) -> Self {
+        Self {
+            base_url: base_url.into(),
+            content_advisory_enabled: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

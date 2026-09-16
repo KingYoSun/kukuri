@@ -6,8 +6,6 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
-  CommunityNodeContentAdvisoryLookupRequest,
-  CommunityNodeContentAdvisoryLookupResult,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexingStatusRequest,
   CommunityNodeIndexQueryRequest,
@@ -907,15 +905,8 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
-  lookupCommunityNodeContentAdvisories: command(
-    'lookupCommunityNodeContentAdvisories',
-    async (request) => {
-      return invokeDesktop<CommunityNodeContentAdvisoryLookupResult>(
-        'lookup_community_node_content_advisories',
-        { request: request satisfies CommunityNodeContentAdvisoryLookupRequest }
-      );
-    }
-  ),
+  lookupCommunityNodeContentAdvisories: command('lookupCommunityNodeContentAdvisories', (request) =>
+    invokeDesktop('lookup_community_node_content_advisories', { request })),
   readCommunityNodeTrustUser: command('readCommunityNodeTrustUser', async (request) => {
     return invokeDesktop<TrustUserReadResponse>('read_community_node_trust_user', {
       request: request satisfies CommunityNodeUserAdvisoryRequest,
@@ -926,14 +917,10 @@ export const runtimeApi: DesktopApi = {
       request: request satisfies CommunityNodeUserAdvisoryRequest,
     });
   }),
-  listCommunityNodeRelationNeighbors: command(
-    'listCommunityNodeRelationNeighbors',
-    async (request) => {
-      return invokeDesktop<RelationNeighborsResponse>('list_community_node_relation_neighbors', {
-        request: request satisfies CommunityNodeRelationNeighborsRequest,
-      });
-    }
-  ),
+  listCommunityNodeRelationNeighbors: command('listCommunityNodeRelationNeighbors', (request) =>
+    invokeDesktop<RelationNeighborsResponse>('list_community_node_relation_neighbors', {
+      request: request satisfies CommunityNodeRelationNeighborsRequest,
+    })),
   getCommunityNodeRelationOptout: command('getCommunityNodeRelationOptout', async (baseUrl) => {
     return invokeDesktop<RelationOptoutResponse>('get_community_node_relation_optout', {
       request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
