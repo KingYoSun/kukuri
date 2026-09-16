@@ -75,6 +75,8 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           author_pubkey: post.author_pubkey,
           text: post.content,
           created_at: post.created_at,
+          // #1054: mock の投稿には CN の content advisory は付かない（表示側は C3 で扱う）。
+          content_advisories: [],
         }))
       )
       .filter(

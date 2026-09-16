@@ -726,3 +726,70 @@ async fn media_mime_hint_reaches_the_fetcher() {
         [("blake3:abc123".to_string(), Some("image/png".to_string()))]
     );
 }
+
+// --- ADR 0028 §8.2 contract: objectionable_category_separated_from_nsfw ---
+
+#[tokio::test]
+async fn objectionable_category_separated_from_nsfw() {
+    // guard 写像は A → Nsfw、B / C / G → Objectionable。critical へは写像しない。
+    for (letter, expected) in [
+        ('A', SafetyCategory::Nsfw),
+        ('B', SafetyCategory::Objectionable),
+        ('C', SafetyCategory::Objectionable),
+        ('G', SafetyCategory::Objectionable),
+    ] {
+        let server = MockServer::start().await;
+        let content = format!("unsafe\n[Step 2] ...\n<answer>{letter}. Some Category</answer>");
+        mock_chat(&server, guard_chat_body(&content, "unsafe", -0.1054)).await;
+        let provider = provider_for(
+            &server.uri(),
+            VlmResponseFormat::Guard,
+            CapabilityProfile::General,
+        );
+        let result = provider
+            .scan(&media_request())
+            .await
+            .expect("scan succeeds");
+        assert_eq!(result.labels.len(), 1, "{letter}");
+        assert_eq!(result.labels[0].category, expected, "{letter}");
+        assert!(!result.labels[0].category.is_critical_safety());
+        assert!(result.labels[0].category.is_advisory_only());
+        // exp(-0.1054) ≈ 0.90 → score 90。既定 policy では advisory 付き allow。
+        assert_eq!(result.score, Some(90));
+        let verdict = route(
+            std::slice::from_ref(&result),
+            &SafetyPolicy {
+                require_known_csam: false,
+                ..SafetyPolicy::public_node_default()
+            },
+            "scanned-at",
+        );
+        assert!(verdict.is_labeled_allow(), "{letter}");
+        assert_eq!(verdict.advisory_labels[0].category, expected);
+        assert_eq!(basis_for_verdict(&verdict), Basis::ClassifierScore);
+    }
+
+    // json モードは `objectionable` を受理し、nsfw と別 category として返す。
+    let server = MockServer::start().await;
+    mock_chat(
+        &server,
+        chat_body(
+            r#"{"categories":[{"category":"objectionable","score":0.88}],"tags":["protest"]}"#,
+        ),
+    )
+    .await;
+    let provider = provider_for(
+        &server.uri(),
+        VlmResponseFormat::Json,
+        CapabilityProfile::General,
+    );
+    let result = provider
+        .scan(&media_request())
+        .await
+        .expect("scan succeeds");
+    assert_eq!(result.labels.len(), 1);
+    assert_eq!(result.labels[0].category, SafetyCategory::Objectionable);
+    assert_ne!(result.labels[0].category, SafetyCategory::Nsfw);
+    assert_eq!(result.score, Some(88));
+    assert_eq!(result.derived_tags, vec!["protest".to_string()]);
+}

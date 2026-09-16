@@ -30,10 +30,7 @@ use kukuri_cn_safety_runtime::{MemorySafetyArtifactStore, SafetyScanService};
 use kukuri_cn_safety_runtime::{
     SafetyOrchestrator, Secp256k1ModerationEventSigner, verify_signed_event,
 };
-use kukuri_core::{
-    KukuriKeys, KukuriMediaManifestV1, MediaManifestItem, ObjectVisibility, PayloadRef, ReplicaId,
-    TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope_with_payload,
-};
+use kukuri_core::TopicId;
 use kukuri_docs_sync::{DocOp, DocQuery, DocsSync, MemoryDocsSync, stable_key, topic_replica_id};
 
 mod ingest_support;
@@ -47,110 +44,6 @@ fn scan_failed_service() -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactSto
 /// known CSAM hash match を返す service（exclude のテスト用）。
 fn known_csam_service(post_id: &str) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
     service_with(MockSafetyProvider::known_csam("mock-known-csam").with_known_hash_match(post_id))
-}
-
-const MEDIA_MANIFEST_ID: &str = "media-manifest-test";
-/// manifest item の blob 本体（scan 対象 hash はここから導出する）。
-const MEDIA_BLOB_BYTES: &[u8] = b"tiny-png-bytes";
-/// manifest item の thumbnail blob 本体（mime metadata を持たない scan 対象）。
-const MEDIA_THUMBNAIL_BYTES: &[u8] = b"tiny-thumbnail-bytes";
-
-fn media_blob_hash() -> String {
-    blob_hash(MEDIA_BLOB_BYTES).as_str().to_string()
-}
-
-fn media_thumbnail_hash() -> String {
-    blob_hash(MEDIA_THUMBNAIL_BYTES).as_str().to_string()
-}
-
-/// manifest 参照つき media post を共有 replica に実在させる（#609: manifest は署名済み envelope
-/// として `manifests/media/<id>/{state,envelope}` に persist する。app-api と同じ key 形状）。
-///
-/// `persist_manifest = false` で「post は manifest を参照するが replica に manifest が無い」
-/// fail-closed 系の状況を作れる。返り値は object_id。
-async fn persist_media_post(
-    docs: &MemoryDocsSync,
-    replica: &ReplicaId,
-    topic: &TopicId,
-    body: &str,
-    persist_manifest: bool,
-) -> String {
-    let keys = KukuriKeys::generate();
-    let envelope = build_post_envelope_with_payload(
-        &keys,
-        topic,
-        PayloadRef::InlineText {
-            text: body.to_string(),
-        },
-        Vec::new(),
-        vec![MEDIA_MANIFEST_ID.to_string()],
-        None,
-        ObjectVisibility::Public,
-    )
-    .expect("envelope");
-    let object = envelope
-        .to_post_object()
-        .expect("post object")
-        .expect("post object present");
-    let object_id = object.object_id.as_str().to_string();
-    docs.open_replica(replica).await.expect("open");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/state")),
-            value: serde_json::to_value(&object).expect("state json"),
-        },
-    )
-    .await
-    .expect("state op");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/envelope")),
-            value: serde_json::to_value(&envelope).expect("envelope json"),
-        },
-    )
-    .await
-    .expect("envelope op");
-
-    if persist_manifest {
-        let manifest = KukuriMediaManifestV1 {
-            manifest_id: MEDIA_MANIFEST_ID.to_string(),
-            owner_pubkey: keys.public_key(),
-            created_at: 1_719_900_000,
-            items: vec![MediaManifestItem {
-                blob_hash: blob_hash(MEDIA_BLOB_BYTES),
-                mime: "image/png".to_string(),
-                size: MEDIA_BLOB_BYTES.len() as u64,
-                width: None,
-                height: None,
-                duration_ms: None,
-                codec: None,
-                thumbnail_blob_hash: Some(blob_hash(MEDIA_THUMBNAIL_BYTES)),
-            }],
-        };
-        let manifest_envelope =
-            build_media_manifest_envelope(&keys, topic, &manifest).expect("manifest envelope");
-        docs.apply_doc_op(
-            replica,
-            DocOp::SetJson {
-                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/state")),
-                value: serde_json::to_value(&manifest).expect("manifest json"),
-            },
-        )
-        .await
-        .expect("manifest state op");
-        docs.apply_doc_op(
-            replica,
-            DocOp::SetJson {
-                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/envelope")),
-                value: serde_json::to_value(&manifest_envelope).expect("manifest envelope json"),
-            },
-        )
-        .await
-        .expect("manifest envelope op");
-    }
-    object_id
 }
 
 #[tokio::test]
@@ -209,28 +102,6 @@ async fn content_not_in_shared_replica_is_not_indexed() -> Result<()> {
 ///
 /// media scan の verdict / derived タグは VLM 相当の general provider が担い、known-CSAM は
 /// `NoKnownMatch` を返す（public_node_default の require_known_csam を満たすため）。
-fn service_with_providers(
-    providers: Vec<MockSafetyProvider>,
-) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
-    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
-    let issuer = signer.issuer_node_id().to_string();
-    let store = Arc::new(MemorySafetyArtifactStore::new());
-    let mut orchestrator = SafetyOrchestrator::builder(
-        &issuer,
-        Arc::new(SystemScanClock),
-        Arc::new(UuidEventIdGenerator),
-    );
-    for provider in providers {
-        orchestrator = orchestrator.provider(Arc::new(provider));
-    }
-    let orchestrator = orchestrator.build().expect("orchestrator");
-    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
-        .signer(Arc::new(signer))
-        .build()
-        .expect("service");
-    (Arc::new(service), store)
-}
-
 #[tokio::test]
 async fn media_scan_unavailable_fails_closed_and_post_is_not_indexed() -> Result<()> {
     // media 参照 post は media blob ごとに scan する（#420、manifest 展開は #609）。media scan
@@ -502,8 +373,10 @@ async fn allow_media_post_is_indexed_and_searchable_via_derived_tags() -> Result
 
 #[tokio::test]
 async fn flagged_media_post_is_not_indexed_and_tags_do_not_leak() -> Result<()> {
-    // media scan が非 allow（general suspected → exclude）なら post 全体を index せず、
+    // media scan が非 allow（general suspected → exclude。spam）なら post 全体を index せず、
     // その scan のタグも index に流れない（derived_tags_only_for_allow_media の否定側）。
+    // nsfw は ADR 0028 §8 で advisory 付き allow になるため
+    // （`general_nsfw_is_indexed_with_advisory_label`）、非 allow 側は spam で固定する。
     let docs = Arc::new(MemoryDocsSync::default());
     let projection = Arc::new(MemoryIndexProjection::new());
     let topic = TopicId::new("rust");
@@ -518,7 +391,7 @@ async fn flagged_media_post_is_not_indexed_and_tags_do_not_leak() -> Result<()> 
     .with_score(
         media_blob_hash(),
         kukuri_cn_safety::SafetyProviderCapability::GeneralMediaModeration,
-        SafetyCategory::Nsfw,
+        SafetyCategory::Spam,
         95,
     )
     .with_derived_tags(media_blob_hash(), vec!["leaked-tag".to_string()]);

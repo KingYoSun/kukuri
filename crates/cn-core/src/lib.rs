@@ -98,8 +98,8 @@ pub use env::{parse_bool_env, parse_csv_env, parse_u32_env, parse_u64_env};
 pub use errors::{ApiError, ApiResult, auth_required_error, consent_required_error};
 pub use index_entries::{
     IndexEntryStore, MemoryIndexEntryStore, NewIndexEntry, PgIndexEntryStore, StoredIndexEntry,
-    filter_surfaceable_objects, get_index_entry, remove_index_entry, remove_index_scope,
-    upsert_index_entry,
+    SurfaceableEntry, filter_surfaceable_objects, get_index_entry, remove_index_entry,
+    remove_index_scope, upsert_index_entry,
 };
 pub use index_scope::{
     ChannelSecret, ChannelSecretCipher, ChannelSecretConflict, IndexScopeKind, IndexingRequest,
@@ -167,7 +167,9 @@ pub use safety_events::{
     persist_signed_moderation_event,
 };
 pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
-pub use scan_verdicts::{StoredScanVerdict, get_scan_verdict, upsert_scan_verdict};
+pub use scan_verdicts::{
+    StoredScanVerdict, get_scan_verdict, update_scan_verdict_advisories, upsert_scan_verdict,
+};
 pub use tester_feedback::{
     NewTesterFeedback, TesterFeedback, get_tester_feedback, insert_tester_feedback_with_retention,
     list_tester_feedback,

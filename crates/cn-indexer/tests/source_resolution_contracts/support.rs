@@ -177,7 +177,7 @@ impl IndexEntryStore for ObservedEntries {
         &self,
         kind: IndexScopeKind,
         candidates: &[(String, String)],
-    ) -> Result<Vec<(String, String)>> {
+    ) -> Result<Vec<kukuri_cn_core::SurfaceableEntry>> {
         self.inner.filter_surfaceable(kind, candidates).await
     }
     async fn list_scopes(&self) -> Result<Vec<(IndexScopeKind, String)>> {

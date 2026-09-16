@@ -231,6 +231,7 @@ async fn index_search(State(state): State<ServerState>, headers: HeaderMap) -> R
             author_pubkey: "f".repeat(64),
             text: "distant community post".to_string(),
             created_at: 42,
+            content_advisories: Vec::new(),
         }]
     };
     Json(IndexQueryResponse { entries }).into_response()

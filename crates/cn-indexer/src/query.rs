@@ -19,7 +19,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use kukuri_cn_core::{IndexEntryStore, IndexScopeKind};
+use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, SurfaceableEntry};
 
 use crate::projection::IndexedEntry;
 
@@ -73,12 +73,15 @@ impl FailClosedIndexQuery {
     }
 
     /// hit 群を真実源と突合し、surfacing してよいものだけを元の順序で返す。
+    ///
+    /// 突合で得た最新 verdict 由来の content advisory を hit に同梱する
+    /// （ADR 0025 §7.1 `index_entry_advisories_derive_from_latest_verdict`。投影の値は使わない）。
     async fn gate(&self, hits: Vec<IndexedEntry>) -> Result<Vec<IndexedEntry>> {
         if hits.is_empty() {
             return Ok(hits);
         }
         // scope_kind ごとに候補をまとめて 1 回ずつ突合する（hit 数は limit で有界）。
-        let mut surfaceable: Vec<(IndexScopeKind, String, String)> = Vec::new();
+        let mut surfaceable: Vec<(IndexScopeKind, SurfaceableEntry)> = Vec::new();
         for scope_kind in [IndexScopeKind::PublicTopic, IndexScopeKind::PrivateChannel] {
             let candidates: Vec<(String, String)> = hits
                 .iter()
@@ -88,22 +91,24 @@ impl FailClosedIndexQuery {
             if candidates.is_empty() {
                 continue;
             }
-            for (scope_id, object_id) in self
+            for entry in self
                 .entries
                 .filter_surfaceable(scope_kind, &candidates)
                 .await?
             {
-                surfaceable.push((scope_kind, scope_id, object_id));
+                surfaceable.push((scope_kind, entry));
             }
         }
         Ok(hits
             .into_iter()
-            .filter(|hit| {
-                surfaceable.iter().any(|(kind, scope_id, object_id)| {
+            .filter_map(|mut hit| {
+                let (_, entry) = surfaceable.iter().find(|(kind, entry)| {
                     *kind == hit.scope_kind
-                        && scope_id == &hit.scope_id
-                        && object_id == &hit.object_id
-                })
+                        && entry.scope_id == hit.scope_id
+                        && entry.object_id == hit.object_id
+                })?;
+                hit.content_advisories = entry.content_advisories.clone();
+                Some(hit)
             })
             .collect())
     }

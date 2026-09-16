@@ -169,6 +169,7 @@ fn category_from_arg(arg: SafetyCategoryArg) -> SafetyCategory {
         SafetyCategoryArg::Cse => SafetyCategory::Cse,
         SafetyCategoryArg::Grooming => SafetyCategory::Grooming,
         SafetyCategoryArg::Nsfw => SafetyCategory::Nsfw,
+        SafetyCategoryArg::Objectionable => SafetyCategory::Objectionable,
         SafetyCategoryArg::Spam => SafetyCategory::Spam,
         SafetyCategoryArg::Malware => SafetyCategory::Malware,
         SafetyCategoryArg::Phishing => SafetyCategory::Phishing,

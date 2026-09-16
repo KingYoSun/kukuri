@@ -251,6 +251,21 @@ typed descriptor の事実を上書きせず、「運営者による補足」と
             This is a reference translation of the Japanese authoritative text.
 ```
 
+### 文書 version を上げるときの注意（snapshot と再同意）
+
+`legal.documents[].version` は `policy_snapshot_revision` の canonical 入力である。required でない
+文書（例: `moderation_policy`）の version を 1 → 2 に上げるだけでも snapshot が変わり、全 required
+文書の同意が旧 snapshot 扱いになって client は再提示する。version の更新は他の法務変更と同じ
+反映にまとめ、再同意の回数を増やさない。
+
+- moderation-policy の文言（#1054: nsfw / objectionable を content advisory 付きで索引し、trust には
+  寄与しない旨）はコード側の `gen_moderation_policy` で生成されるため、本文の更新自体に version は
+  要らない。本番 operator-config の `moderation_policy` を `version: 2` にする反映は、利用規約
+  第3条 4 項の改訂（#1056）と同時に行い、再同意を 1 回にまとめる。
+- `safety.moderation.general_action` は未指定（既定 `label`）なら canonical 入力に現れず snapshot を
+  変えない。明示的に `hold` / `exclude` へ厳格化する設定は legal 上の扱いの変更として snapshot を
+  変える（再同意を伴う前提で行う）。
+
 `cn-user-api` は同じ config から全7正文と参考訳を Postgres へ同期し、認証不要の
 `GET /v1/policies?language=en` で現行文書を配信する。要求した同一正文 version の参考訳が無ければ
 正文を返し、`fallback` / `requested_language` / `authoritative_language` で明示する。公開済み正文は

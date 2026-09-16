@@ -52,7 +52,12 @@ pub enum SafetyCategory {
     Csam,
     Cse,
     Grooming,
+    /// 性的表現（ADR 0028 §8.2）。client 表示語彙は `adult`。
     Nsfw,
+    /// real-world crimes / unethical・hate・harassment / animal abuse の傘（ADR 0028 §8.2）。
+    /// nsfw と分ける非 critical category。index / trust / 配信の扱いは nsfw と同一で、
+    /// client 表示語彙だけ `sensitive`。
+    Objectionable,
     Spam,
     Malware,
     Phishing,
@@ -69,6 +74,24 @@ impl SafetyCategory {
             self,
             SafetyCategory::Csam | SafetyCategory::Cse | SafetyCategory::Grooming
         )
+    }
+
+    /// advisory-only category（nsfw / objectionable。ADR 0028 §8 / ADR 0026 §7）か。
+    ///
+    /// suspected は `Allow` + content advisory で index され、trust の評価計算には寄与しない
+    /// （寄与 0 の basis として利用者向け read にだけ残る）。
+    pub fn is_advisory_only(self) -> bool {
+        matches!(self, SafetyCategory::Nsfw | SafetyCategory::Objectionable)
+    }
+
+    /// client 表示語彙（ADR 0028 §8.6: nsfw → `adult`、objectionable → `sensitive`）。
+    /// advisory-only でない category は `None`。
+    pub fn advisory_display_label(self) -> Option<&'static str> {
+        match self {
+            SafetyCategory::Nsfw => Some("adult"),
+            SafetyCategory::Objectionable => Some("sensitive"),
+            _ => None,
+        }
     }
 }
 
@@ -182,8 +205,16 @@ impl SafetyLabel {
 #[serde(rename_all = "snake_case")]
 pub struct SafetyVerdict {
     pub action: SafetyAction,
+    /// 検知ラベル（何を検知したか）。action とは独立。
     #[serde(default)]
     pub labels: Vec<SafetyLabel>,
+    /// content advisory として client へ配信するラベル（ADR 0028 §8.1）。
+    ///
+    /// nsfw / objectionable の suspected を `general_action = label` で `Allow` に落としたときだけ
+    /// non-empty になる（`labels` の advisory-only 分の写し）。非 index の verdict では常に空。
+    /// 署名済み `content_labels` へは書かない。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub advisory_labels: Vec<SafetyLabel>,
     pub critical: bool,
     pub reason_code: ReasonCode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -204,6 +235,11 @@ impl SafetyVerdict {
     /// すべての fail-closed 経路（scan failure / provider unavailable / unscanned）は false。
     pub fn is_indexable(&self) -> bool {
         self.action.allows_indexing()
+    }
+
+    /// index 可能かつ content advisory を伴う（ラベル付き allow）か。
+    pub fn is_labeled_allow(&self) -> bool {
+        self.is_indexable() && !self.advisory_labels.is_empty()
     }
 }
 

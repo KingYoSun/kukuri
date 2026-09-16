@@ -300,6 +300,7 @@ fn parse_category(raw: &str) -> Option<SafetyCategory> {
         "cse" => Some(SafetyCategory::Cse),
         "grooming" => Some(SafetyCategory::Grooming),
         "nsfw" => Some(SafetyCategory::Nsfw),
+        "objectionable" => Some(SafetyCategory::Objectionable),
         "spam" => Some(SafetyCategory::Spam),
         "malware" => Some(SafetyCategory::Malware),
         "phishing" => Some(SafetyCategory::Phishing),
@@ -339,15 +340,18 @@ fn strip_code_fences(content: &str) -> &str {
 /// | guard | 内容 | 写像 |
 /// |---|---|---|
 /// | A | Sexual Content Risk | `Nsfw` |
-/// | B | Real-World Crimes & Public Safety | `Nsfw`（一般 objectionable の傘。ADR 0027 §2.3） |
-/// | C | Unethical Behavior（hate / harassment 等） | `Nsfw`（同上） |
+/// | B | Real-World Crimes & Public Safety | `Objectionable`（ADR 0028 §8.2 の傘） |
+/// | C | Unethical Behavior（hate / harassment 等） | `Objectionable`（同上） |
 /// | D | Cybersecurity & Information Manipulation | `Phishing` |
 /// | E | Agent Safety（prompt injection / abuse） | `Spam` |
 /// | F | Politically Sensitive Content | 検知にしない（政治的内容は kukuri の moderation 対象外） |
-/// | G | Animal Abuse | `Nsfw`（一般 objectionable の傘） |
+/// | G | Animal Abuse | `Objectionable`（同上） |
+///
+/// `objectionable_category_separated_from_nsfw`: B / C / G を nsfw（性的表現）と混同しない。
 fn guard_category(letter: char) -> Option<SafetyCategory> {
     match letter.to_ascii_uppercase() {
-        'A' | 'B' | 'C' | 'G' => Some(SafetyCategory::Nsfw),
+        'A' => Some(SafetyCategory::Nsfw),
+        'B' | 'C' | 'G' => Some(SafetyCategory::Objectionable),
         'D' => Some(SafetyCategory::Phishing),
         'E' => Some(SafetyCategory::Spam),
         'F' => None,

@@ -9,13 +9,15 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, TestDatabase, connect_postgres,
-    filter_surfaceable_objects, get_index_entry, get_scan_verdict, initialize_database,
-    remove_index_entry, remove_index_scope, upsert_index_entry, upsert_scan_verdict,
+    IndexScopeKind, NewIndexEntry, PgSafetyArtifactStore, SurfaceableEntry, TestDatabase,
+    connect_postgres, filter_surfaceable_objects, get_index_entry, get_scan_verdict,
+    initialize_database, remove_index_entry, remove_index_scope, update_scan_verdict_advisories,
+    upsert_index_entry, upsert_scan_verdict,
 };
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
-    MockSafetyProvider, ModerationEventSigner, ReasonCode, SafetyAction, SafetyVerdict,
+    AdvisorySubjectKind, Basis, ContentAdvisory, MockSafetyProvider, ModerationEventSigner,
+    ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict,
 };
 use kukuri_cn_safety_runtime::VerdictPersistMeta;
 use kukuri_cn_safety_runtime::{
@@ -39,6 +41,7 @@ fn verdict(action: SafetyAction, critical: bool, reason_code: ReasonCode) -> Saf
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical,
         reason_code,
         confidence: None,
@@ -318,7 +321,11 @@ async fn filter_surfaceable_objects_excludes_non_allow_and_unknown() -> Result<(
             filter_surfaceable_objects(&pool, IndexScopeKind::PublicTopic, &candidates).await?;
         assert_eq!(
             surfaceable,
-            vec![("rust".to_string(), "post-kept".to_string())]
+            vec![SurfaceableEntry {
+                scope_id: "rust".to_string(),
+                object_id: "post-kept".to_string(),
+                content_advisories: Vec::new(),
+            }]
         );
 
         // 空の候補は空を返す（クエリを発行しない）。
@@ -416,6 +423,7 @@ async fn scan_verdict_round_trips_fingerprints_and_derived_tags() -> Result<()> 
             source_fingerprint: Some("state-hash-1".to_string()),
             scan_config_fingerprint: Some("config-1".to_string()),
             derived_tags: vec!["beach".to_string(), "sunset".to_string()],
+            advisories: Vec::new(),
         };
         let stored = upsert_scan_verdict(
             &pool,
@@ -451,6 +459,160 @@ async fn scan_verdict_round_trips_fingerprints_and_derived_tags() -> Result<()> 
         assert!(refreshed.source_fingerprint.is_none());
         assert!(refreshed.derived_tags.is_empty());
         Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+/// ADR 0025 §7.1 contract: `index_entry_advisories_derive_from_latest_verdict`。
+///
+/// index entry は advisory を持たず、既存の verdict FK を通じて最新 verdict 行の
+/// `advisory_labels` を返す。post 行の和集合（blob 分を含む）もそのまま同梱され、verdict が
+/// 非 allow へ変われば entry ごと落ちる。
+#[tokio::test]
+async fn index_entry_advisories_derive_from_latest_verdict() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping cn-core index entries test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_index_entries_advisory").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+
+        let advisory =
+            |subject_kind: AdvisorySubjectKind, subject_id: &str, category| ContentAdvisory {
+                issuer_node_id: "issuer-node".to_string(),
+                subject_kind,
+                subject_id: subject_id.to_string(),
+                category,
+                label: match category {
+                    SafetyCategory::Nsfw => "adult".to_string(),
+                    _ => "sensitive".to_string(),
+                },
+                confidence: Some(84),
+                signal_id: format!("signal-{subject_id}"),
+                basis: Basis::ClassifierScore,
+            };
+        let text_advisory = advisory(
+            AdvisorySubjectKind::PostId,
+            "post-adv",
+            SafetyCategory::Nsfw,
+        );
+
+        // ラベル付き allow の verdict（本文 text の advisory 付き）。
+        let mut labeled = verdict(SafetyAction::Allow, false, ReasonCode::GeneralModeration);
+        labeled.advisory_labels = vec![SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(84)];
+        let stored = upsert_scan_verdict(
+            &pool,
+            SubjectKind::Post,
+            "post-adv",
+            &labeled,
+            &VerdictPersistMeta {
+                advisories: vec![text_advisory.clone()],
+                ..VerdictPersistMeta::default()
+            },
+        )
+        .await?;
+        assert_eq!(stored.advisory_labels, vec![text_advisory.clone()]);
+        // 再利用入力へも advisory が復元され、ラベル付き allow として扱える。
+        let record = stored.to_record();
+        assert!(record.verdict.is_labeled_allow());
+        assert_eq!(record.verdict.advisory_labels, labeled.advisory_labels);
+        assert_eq!(record.advisories, vec![text_advisory.clone()]);
+
+        let plain = upsert_scan_verdict(
+            &pool,
+            SubjectKind::Post,
+            "post-plain",
+            &verdict(SafetyAction::Allow, false, ReasonCode::NoKnownMatch),
+            &VerdictPersistMeta::default(),
+        )
+        .await?;
+        upsert_index_entry(&pool, &entry("rust", "post-adv", stored.id.as_str())).await?;
+        upsert_index_entry(&pool, &entry("rust", "post-plain", plain.id.as_str())).await?;
+
+        let candidates = vec![
+            ("rust".to_string(), "post-adv".to_string()),
+            ("rust".to_string(), "post-plain".to_string()),
+        ];
+        let surfaceable =
+            filter_surfaceable_objects(&pool, IndexScopeKind::PublicTopic, &candidates).await?;
+        assert_eq!(
+            surfaceable,
+            vec![
+                SurfaceableEntry {
+                    scope_id: "rust".to_string(),
+                    object_id: "post-adv".to_string(),
+                    content_advisories: vec![text_advisory.clone()],
+                },
+                SurfaceableEntry {
+                    scope_id: "rust".to_string(),
+                    object_id: "post-plain".to_string(),
+                    content_advisories: Vec::new(),
+                },
+            ]
+        );
+
+        // indexer が参照 blob の advisory との和集合を post 行へ確定させると、entry は
+        // 最新 verdict 行からその和集合を返す（index entry 自体は変更しない）。
+        let blob_advisory = advisory(
+            AdvisorySubjectKind::BlobCid,
+            "blob-1",
+            SafetyCategory::Objectionable,
+        );
+        let union = vec![text_advisory.clone(), blob_advisory.clone()];
+        update_scan_verdict_advisories(&pool, SubjectKind::Post, "post-adv", &union).await?;
+        let refreshed = get_scan_verdict(&pool, SubjectKind::Post, "post-adv")
+            .await?
+            .expect("verdict");
+        assert_eq!(refreshed.advisory_labels, union);
+        assert_eq!(
+            refreshed.updated_at, stored.updated_at,
+            "値の差し替えだけで updated_at は動かない"
+        );
+        // 自 subject 分だけが再利用入力の advisory_labels へ戻る。
+        assert_eq!(refreshed.own_advisories(), vec![text_advisory.clone()]);
+        assert_eq!(
+            refreshed.to_record().verdict.advisory_labels,
+            labeled.advisory_labels
+        );
+        let surfaceable =
+            filter_surfaceable_objects(&pool, IndexScopeKind::PublicTopic, &candidates[..1])
+                .await?;
+        assert_eq!(surfaceable[0].content_advisories, union);
+        assert_eq!(
+            get_index_entry(&pool, IndexScopeKind::PublicTopic, "rust", "post-adv")
+                .await?
+                .expect("entry")
+                .verdict_id,
+            stored.id
+        );
+
+        // 同じ値の再書き込みは no-op。
+        update_scan_verdict_advisories(&pool, SubjectKind::Post, "post-adv", &union).await?;
+        assert_eq!(
+            get_scan_verdict(&pool, SubjectKind::Post, "post-adv")
+                .await?
+                .expect("verdict"),
+            refreshed
+        );
+
+        // verdict が exclude へ変われば advisory の有無に関係なく entry ごと落ちる（INVAR-1）。
+        upsert_scan_verdict(
+            &pool,
+            SubjectKind::Post,
+            "post-adv",
+            &verdict(SafetyAction::Exclude, false, ReasonCode::GeneralModeration),
+            &VerdictPersistMeta::default(),
+        )
+        .await?;
+        let surfaceable =
+            filter_surfaceable_objects(&pool, IndexScopeKind::PublicTopic, &candidates).await?;
+        assert_eq!(surfaceable.len(), 1);
+        assert_eq!(surfaceable[0].object_id, "post-plain");
+        anyhow::Ok(())
     }
     .await;
     database.cleanup().await?;

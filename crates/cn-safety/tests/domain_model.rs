@@ -105,6 +105,7 @@ fn safety_verdict_round_trips_snake_case() {
                 .with_confidence(91)
                 .with_provider_capability(SafetyProviderCapability::NovelCsamImageClassifier),
         ],
+        advisory_labels: Vec::new(),
         critical: true,
         reason_code: ReasonCode::CsamSuspected,
         confidence: Some(91),
@@ -142,6 +143,7 @@ fn make_verdict(action: SafetyAction) -> SafetyVerdict {
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: false,
         reason_code: ReasonCode::Clean,
         confidence: None,

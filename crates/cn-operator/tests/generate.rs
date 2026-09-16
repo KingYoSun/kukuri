@@ -1,3 +1,6 @@
+mod generate_support;
+use generate_support::{config_with_safety_providers, doc};
+
 use kukuri_cn_operator::{
     Capability, NodeRole, SAMPLE_CONFIG, build_manifest, check_drift, generate_all,
     generate_legal_documents, load_and_validate, manifest_value, parse_config,
@@ -458,15 +461,6 @@ fn terms_content_license_section_matches_golden() {
     assert_eq!(section, expected);
 }
 
-fn doc(files: &[kukuri_cn_operator::GeneratedFile], name: &str) -> String {
-    files
-        .iter()
-        .find(|f| f.filename == name)
-        .unwrap_or_else(|| panic!("missing {name}"))
-        .content
-        .clone()
-}
-
 #[test]
 fn relay_enabled_explains_encrypted_traffic_fallback() {
     let yaml = base_config("  iroh_relay: true\n  traffic_relay_fallback: true\n", true);
@@ -501,31 +495,6 @@ fn cloudflare_enabled_emits_external_transmission() {
 
 /// safety providers 付きの config（外部送信の動的開示の検証用）。
 /// `vlm_hosting_line` は general provider 配下の行（例: `"      hosting: self_host\n"`）か空。
-fn config_with_safety_providers(vlm_hosting_line: &str) -> String {
-    let base = r#"server:
-  domain: example-kukuri.net
-  operator_name: Example Operator
-  country: JP
-  node_id: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
-features:
-  moderation: true
-retention:
-  connection_logs_days: 30
-  moderation_logs_days: 180
-safety:
-  profile: public-node
-  policy_version: 2026-06-public-node-v1
-  providers:
-    known_csam:
-      provider: project-arachnid-shield
-      required: true
-      credential_secret_id: kukuri-cn-safety-known-csam
-    general:
-      provider: openai-compatible-vlm
-"#;
-    format!("{base}{vlm_hosting_line}")
-}
-
 #[test]
 fn safety_providers_surface_in_external_transmission_notice() {
     // 自前ホスト宣言: 視覚言語モデルは運営者管理基盤、Arachnid は第三者への外部送信。
@@ -550,24 +519,6 @@ fn safety_providers_surface_in_external_transmission_notice() {
     let resolved = load_and_validate(&yaml).unwrap();
     let ext = doc(&generate_all(&resolved), "external-transmission-notice.md");
     assert!(ext.contains("外部の視覚言語モデル API"));
-}
-
-#[test]
-fn moderation_policy_describes_scan_flow_and_appeals() {
-    // #617 T6: moderation-policy が「未提供」ではなく走査の流れ・申し立て導線を説明する。
-    let yaml = config_with_safety_providers("      hosting: self_host\n");
-    let resolved = load_and_validate(&yaml).unwrap();
-    let policy = doc(&generate_all(&resolved), "moderation-policy.md");
-    for needle in [
-        "走査と判定の流れ",
-        "fail-closed",
-        "視覚言語モデル",
-        "Match Data",
-        "申し立て",
-    ] {
-        assert!(policy.contains(needle), "missing: {needle}");
-    }
-    assert!(!policy.contains("未提供"));
 }
 
 #[test]

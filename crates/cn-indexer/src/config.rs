@@ -11,7 +11,7 @@
 
 use anyhow::{Context, Result, bail};
 
-use kukuri_cn_safety::Visibility;
+use kukuri_cn_safety::{GeneralAction, Visibility};
 use kukuri_cn_safety_runtime::{
     SAFETY_SIGNING_KEY_ENV, SafetyRuntimeConfig, SafetyRuntimeProviderEntry,
     SafetyRuntimeProvidersConfig,
@@ -37,6 +37,9 @@ pub const SAFETY_SUSPECTED_THRESHOLD_ENV: &str = "COMMUNITY_NODE_SAFETY_SUSPECTE
 /// 未設定なら既定 `local`。ADR 0028 §2.4 / §2.7）。
 pub const SAFETY_SUSPECTED_SIGNAL_VISIBILITY_ENV: &str =
     "COMMUNITY_NODE_SAFETY_SUSPECTED_SIGNAL_VISIBILITY";
+/// nsfw / objectionable の suspected に対する action（`label` / `hold` / `exclude`。
+/// 未設定なら既定 `label` = content advisory 付きで index。ADR 0028 §8.7）。`allow` は受理しない。
+pub const SAFETY_GENERAL_ACTION_ENV: &str = "COMMUNITY_NODE_SAFETY_GENERAL_ACTION";
 
 /// relay validation の結果。fail-closed gate の単一判定点。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -333,6 +336,7 @@ impl IndexerConfig {
             issuer_node_id: non_empty_env(SAFETY_ISSUER_NODE_ID_ENV),
             suspected_threshold: parse_suspected_threshold_env()?,
             suspected_signal_visibility: parse_suspected_signal_visibility_env()?,
+            general_action: parse_general_action_env()?,
         };
         Ok(Self {
             database_url,
@@ -441,6 +445,24 @@ fn parse_suspected_signal_visibility_env() -> Result<Option<Visibility>> {
     }
 }
 
+/// nsfw / objectionable の suspected に対する action env を読む（`label` / `hold` / `exclude`）。
+///
+/// ラベル無しの `allow` と未知値は起動エラー（`general_action_operator_tunable_stricter_only`）。
+fn parse_general_action_env() -> Result<Option<GeneralAction>> {
+    let Some(raw) = non_empty_env(SAFETY_GENERAL_ACTION_ENV) else {
+        return Ok(None);
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "label" => Ok(Some(GeneralAction::Label)),
+        "hold" => Ok(Some(GeneralAction::Hold)),
+        "exclude" => Ok(Some(GeneralAction::Exclude)),
+        other => bail!(
+            "{SAFETY_GENERAL_ACTION_ENV} must be one of `label` / `hold` / `exclude` \
+             (got `{other}`; `allow` without a content advisory is not accepted)"
+        ),
+    }
+}
+
 /// provider slot env の値から entry を組む。空 / 空白は「slot 未構成」。
 fn safety_provider_entry(
     provider: Option<String>,
@@ -481,6 +503,9 @@ mod tests {
         SAFETY_SIGNING_KEY_ENV,
         SAFETY_EMIT_SIGNED_EVENTS_ENV,
         SAFETY_ISSUER_NODE_ID_ENV,
+        SAFETY_SUSPECTED_THRESHOLD_ENV,
+        SAFETY_SUSPECTED_SIGNAL_VISIBILITY_ENV,
+        SAFETY_GENERAL_ACTION_ENV,
         MEDIA_FETCH_MAX_BYTES_ENV,
         MEDIA_FETCH_TIMEOUT_SECS_ENV,
         SEED_PEERS_ENV,
@@ -648,6 +673,49 @@ mod tests {
             )
             .unwrap();
             assert!(service.is_none());
+        });
+    }
+
+    #[test]
+    fn general_action_env_rejects_allow_and_unknown() {
+        // ADR 0028 §8.7 / `general_action_operator_tunable_stricter_only`（env 面）:
+        // 未設定は既定（label）、label / hold / exclude を受理、allow と未知値は起動失敗。
+        with_clean_indexer_env(|| {
+            set_minimal_indexer_env();
+            let config = IndexerConfig::from_env().unwrap();
+            assert_eq!(config.safety.general_action, None);
+            assert_eq!(
+                kukuri_cn_safety_runtime::resolve_safety_policy(&config.safety)
+                    .unwrap()
+                    .general_action,
+                GeneralAction::Label
+            );
+
+            for (raw, expected) in [
+                ("label", GeneralAction::Label),
+                ("hold", GeneralAction::Hold),
+                ("EXCLUDE", GeneralAction::Exclude),
+            ] {
+                unsafe {
+                    std::env::set_var(SAFETY_GENERAL_ACTION_ENV, raw);
+                }
+                let config = IndexerConfig::from_env().unwrap();
+                assert_eq!(config.safety.general_action, Some(expected), "{raw}");
+                assert_eq!(
+                    kukuri_cn_safety_runtime::resolve_safety_policy(&config.safety)
+                        .unwrap()
+                        .general_action,
+                    expected
+                );
+            }
+
+            for raw in ["allow", "quarantine", "labelled"] {
+                unsafe {
+                    std::env::set_var(SAFETY_GENERAL_ACTION_ENV, raw);
+                }
+                let error = IndexerConfig::from_env().expect_err(raw).to_string();
+                assert!(error.contains(SAFETY_GENERAL_ACTION_ENV), "{error}");
+            }
         });
     }
 

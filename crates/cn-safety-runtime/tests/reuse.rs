@@ -12,13 +12,13 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction};
 use kukuri_cn_safety::{
-    MockSigner, RiskSignalTarget, SafetyCategory, SafetyLabel, SafetyPolicy,
-    SafetyProviderCapability, SafetyVerdict,
+    AdvisorySubjectKind, GeneralAction, MockSigner, RiskSignalTarget, SafetyCategory, SafetyLabel,
+    SafetyPolicy, SafetyProviderCapability, SafetyVerdict, Severity,
 };
 use kukuri_cn_safety_runtime::{
     EventIdGenerator, MemorySafetyArtifactStore, RescanReason, ReuseDecision, ReuseInputs,
-    SafetyOrchestrator, SafetyScanService, ScanClock, ScanDisposition, StoredVerdictRecord,
-    compute_scan_config_fingerprint, decide_verdict_reuse,
+    SafetyArtifactStore, SafetyOrchestrator, SafetyScanService, ScanClock, ScanDisposition,
+    StoredVerdictRecord, compute_scan_config_fingerprint, decide_verdict_reuse,
 };
 
 const ISSUER: &str = "issuer-node";
@@ -116,9 +116,12 @@ fn unavailable_result(provider: &str) -> ProviderScanResult {
     result
 }
 
+/// 再利用 / 集約の契約は「非 allow の verdict」で固定する（nsfw を exclude に厳格化した node）。
+/// 既定の label（advisory 付き allow）は `reused_labeled_allow_restores_advisories_without_artifacts`。
 fn general_policy() -> SafetyPolicy {
     SafetyPolicy {
         require_known_csam: false,
+        general_action: GeneralAction::Exclude,
         ..SafetyPolicy::public_node_default()
     }
 }
@@ -156,6 +159,7 @@ fn stored(
         id: "verdict-1".to_string(),
         verdict,
         derived_tags: Vec::new(),
+        advisories: Vec::new(),
         source_fingerprint: source.map(str::to_string),
         scan_config_fingerprint: config.map(str::to_string),
     }
@@ -165,6 +169,7 @@ fn verdict(action: SafetyAction, reason_code: ReasonCode) -> SafetyVerdict {
     SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: false,
         reason_code,
         confidence: None,
@@ -486,7 +491,7 @@ async fn identical_rescan_emits_no_new_event_but_verdict_change_does() {
     // 同じ鍵（nsfw / classifier_score）のまま action が変わる（policy で exclude → hold）
     // → signal は同じ行、event は新規発行。
     let mut hold_policy = general_policy();
-    hold_policy.on_high_confidence_nsfw = SafetyAction::Hold;
+    hold_policy.general_action = GeneralAction::Hold;
     let restarted = service_with(provider.clone(), hold_policy, store.clone());
     let third = restarted
         .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-2")
@@ -601,4 +606,120 @@ async fn legacy_scan_and_record_never_reuses() {
         .expect("third");
     assert_eq!(third.disposition, ScanDisposition::Fresh);
     assert_eq!(provider.calls(), 3);
+}
+
+// --- #1054: ラベル付き allow の advisory は再利用時も復元され、artifact は増えない（TR-10） ---
+
+#[tokio::test]
+async fn reused_labeled_allow_restores_advisories_without_artifacts() {
+    let provider = CountingProvider::new(
+        "general",
+        vec![SafetyProviderCapability::GeneralMediaModeration],
+        nsfw_result("general", 84),
+    );
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    // 既定の general_action = label（advisory 付き allow）。
+    let mut policy = general_policy();
+    policy.general_action = GeneralAction::Label;
+    let service = service_with(provider.clone(), policy.clone(), store.clone());
+
+    let first = service
+        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+        .await
+        .expect("first scan");
+    assert_eq!(first.disposition, ScanDisposition::Fresh);
+    assert!(first.report.verdict.is_labeled_allow());
+    // signal が先に永続化され、advisory は signal id を持つ。
+    let signal_id = first.persisted_signal_id.clone().expect("signal id");
+    assert_eq!(first.advisories.len(), 1);
+    assert_eq!(first.advisories[0].signal_id, signal_id);
+    assert_eq!(
+        first.advisories[0].subject_kind,
+        AdvisorySubjectKind::PostId
+    );
+    assert_eq!(first.advisories[0].subject_id, "post-1");
+    assert_eq!(first.advisories[0].label, "adult");
+    assert!(first.signed_event.is_some());
+    assert_eq!(store.signals().len(), 1);
+    assert_eq!(store.signals()[0].1.severity, Severity::Low);
+    assert_eq!(store.events().len(), 1);
+    assert_eq!(
+        store.events()[0].body.action,
+        kukuri_cn_safety::ModerationAction::RiskLabel
+    );
+    // verdict 行に advisory が保存される。
+    let stored = store
+        .stored_verdict_for(SubjectKind::Post, "post-1")
+        .expect("stored verdict");
+    assert_eq!(stored.advisories, first.advisories);
+
+    // 2 巡目: provider 呼び出し 0、artifact 増えず、advisory は復元される。共有 subject の
+    // 2 人目の著者も（ラベル付き allow は signal を持つので）trust 入力へ関連付けられる。
+    let second = service
+        .scan_or_reuse(&post_request("post-1"), Some("author-b"), "state-hash-1")
+        .await
+        .expect("second pass");
+    assert_eq!(second.disposition, ScanDisposition::Reused);
+    assert!(second.report.verdict.is_indexable());
+    assert_eq!(second.advisories, first.advisories);
+    assert!(second.signed_event.is_none());
+    assert_eq!(provider.calls(), 1);
+    assert_eq!(store.signals().len(), 1);
+    assert_eq!(store.events().len(), 1);
+    let authors = store.signal_subject_authors();
+    for author in ["author-a", "author-b"] {
+        assert!(
+            authors.contains(&(
+                RiskSignalTarget::PostId,
+                "post-1".to_string(),
+                author.to_string()
+            )),
+            "{author}: {authors:?}"
+        );
+    }
+
+    // indexer が post 行へ blob 分を含む和集合を確定させても、自 subject 分だけが復元される。
+    let blob_advisory = kukuri_cn_safety::ContentAdvisory {
+        issuer_node_id: ISSUER.to_string(),
+        subject_kind: AdvisorySubjectKind::BlobCid,
+        subject_id: "blob-1".to_string(),
+        category: SafetyCategory::Objectionable,
+        label: "sensitive".to_string(),
+        confidence: Some(80),
+        signal_id: "memory-signal-9".to_string(),
+        basis: kukuri_cn_safety::Basis::ClassifierScore,
+    };
+    let union = vec![first.advisories[0].clone(), blob_advisory.clone()];
+    store
+        .persist_advisories(SubjectKind::Post, "post-1", &union)
+        .await
+        .expect("persist advisories");
+    assert_eq!(
+        store
+            .stored_verdict_for(SubjectKind::Post, "post-1")
+            .expect("stored")
+            .advisories,
+        union
+    );
+    let third = service
+        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+        .await
+        .expect("third pass");
+    assert_eq!(third.disposition, ScanDisposition::Reused);
+    assert_eq!(third.advisories, first.advisories);
+
+    // 内容が変わって再 scan しても、同じ signal を再利用し event は増えない（verdict 不変）。
+    let fourth = service
+        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-2")
+        .await
+        .expect("fourth pass");
+    assert_eq!(fourth.disposition, ScanDisposition::Fresh);
+    assert_eq!(
+        fourth.persisted_signal_id.as_deref(),
+        Some(signal_id.as_str())
+    );
+    assert!(fourth.signed_event.is_none());
+    assert_eq!(fourth.advisories[0].signal_id, signal_id);
+    assert_eq!(store.signals().len(), 1);
+    assert_eq!(store.events().len(), 1);
 }
