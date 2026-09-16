@@ -122,7 +122,8 @@ test('a visible background notifications column finishes loading without marking
   expect(markAllNotificationsRead).not.toHaveBeenCalled();
 });
 
-test('refreshing a background notifications column refetches it and clears loading', async () => {
+// Issue #1053: header の更新操作も Column を active にするため、本文クリックと同じく既読化される。
+test('refreshing a background notifications column focuses it, refetches it, and marks it read', async () => {
   const api = createDesktopMockApi({
     notifications: [
       buildNotification({
@@ -153,8 +154,10 @@ test('refreshing a background notifications column refetches it and clears loadi
   await waitFor(() => {
     expect(listNotifications.mock.calls.length).toBeGreaterThan(callsBeforeRefresh);
     expect(within(column).queryByText('Loading notifications...')).not.toBeInTheDocument();
+    expect(column).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe('#/notifications?topic=kukuri%3Atopic%3Ageneral');
+    expect(markAllNotificationsRead).toHaveBeenCalled();
   });
-  expect(markAllNotificationsRead).not.toHaveBeenCalled();
 });
 
 test('clicking the active notifications action focuses the existing inbox', async () => {

@@ -153,3 +153,31 @@ test('non-active な private Column の Reply ボタンで開いた Thread も p
     );
   });
 });
+
+test('private Column 選択直後に別 Column の本文ボタンを押しても Column 順は変わらず、押した Column が active になる (Issue #1053)', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+  const privateColumn = await setUpPublicAndPrivateColumns(user);
+
+  await user.click(privateColumn);
+  await waitFor(() => {
+    expect(privateColumn).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe(CHANNEL_HASH);
+  });
+  const idsBefore = Array.from(document.querySelectorAll<HTMLElement>('[data-column-id]')).map(
+    (column) => column.dataset.columnId
+  );
+
+  const explore = screen.getByRole('region', { name: /^Explore Column,/ });
+  await user.click(within(explore).getByRole('tab', { name: 'Discover' }));
+
+  await waitFor(() => {
+    expect(explore).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe('#/explore?topic=kukuri%3Atopic%3Ageneral');
+  });
+  expect(
+    Array.from(document.querySelectorAll<HTMLElement>('[data-column-id]')).map(
+      (column) => column.dataset.columnId
+    )
+  ).toEqual(idsBefore);
+});

@@ -18,7 +18,8 @@ import {
 } from '@/shell/routes';
 import type {
   DesktopShellState,
-  DesktopShellStateValue,  DesktopShellStoreApi,
+  DesktopShellStateValue,
+  DesktopShellStoreApi,
 } from '@/shell/store';
 import { timelineStorageKeyForChannel } from '@/shell/store';
 import {
@@ -30,8 +31,8 @@ import { selectShellRoutingSlice } from '@/shell/storeSelectors';
 import {
   activeWorkspaceColumn,
   activeWorkspaceScope,
-  columnIdentityId,
   openTransientColumn,
+  timelineColumnIdForScope,
 } from '@/shell/slices/workspace';
 import { workspaceForRoute } from '@/shell/routing/routeWorkspaceProjection';
 
@@ -111,7 +112,7 @@ export function useRouteSynchronization({
       const scope = { topicId, channelId: null };
       setField('workspaceState', (current) =>
         openTransientColumn(current, {
-          id: columnIdentityId('timeline', scope),
+          id: timelineColumnIdForScope(current, scope),
           kind: 'timeline',
           scope,
           pinned: false,
@@ -151,7 +152,7 @@ export function useRouteSynchronization({
       const scope = { topicId, channelId: nextProjection[topicId] ?? null };
       setField('workspaceState', (current) =>
         openTransientColumn(current, {
-          id: columnIdentityId('timeline', scope),
+          id: timelineColumnIdForScope(current, scope),
           kind: 'timeline',
           scope,
           pinned: false,
@@ -192,7 +193,9 @@ export function useRouteSynchronization({
           pendingRouteUrlRef.current = null;
           return;
         }
-      } else if (!routeChanged) {
+      } else {
+        // pending はまだ生きている(実 hash が pending のまま)。先に commit された古い push を
+        // 投影すると、後から操作した Column の active を奪うため、pending の到着を待つ(Issue #1053)。
         return;
       }
       pendingRouteUrlRef.current = null;

@@ -157,6 +157,8 @@ Stream の seek、media viewer、Metaverse の camera / virtual stick / object d
 - `audioFocused`: 音声を出す Stream / Metaverse
 - `suspended`: render / media resource を縮退している
 
+Column 内の明示操作は、本文・header のボタンや選択 control を含めてその Column を active にし、URL をその Column の canonical target へ同期する。Metaverse の camera 等の gesture 領域は例外とする。pointer 押下で active になった Column の scroll は押下の終了後に行い、押した操作を別の要素へずらさない。
+
 Control Center と keyboard shortcut は active Column を対象とする。WASD、camera、gamepad 等は Metaverse Column を明示 focus した後だけ捕捉し、入力中、Composer 操作中、Dialog 表示中には奪わない。
 
 画面外 Stream は video 停止、低品質化、または明示的 background audio へ縮退し、画面外 Metaverse は render 停止または低 FPS 化する。network session と render lifecycle を分離し、既定の audio focus は1つに限定する。

@@ -66,6 +66,8 @@ import { useShellDialogs } from '@/shell/page/useShellDialogs';
 import { usePrivateChannelEntries } from '@/shell/page/usePrivateChannelEntries';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  activateColumn,
+  childConversationPeer,
   columnIdentityId,
   openTransientColumn,
   setColumnTimelineView,
@@ -221,7 +223,6 @@ export function DesktopShellPage({
   });
 
   const {
-    routeSection,
     syncRoute,
     setSettingsOpen,
     focusPrimarySection,
@@ -519,6 +520,11 @@ export function DesktopShellPage({
       openAuthorDetail={(authorPubkey, options) =>
         openAuthorDetail(authorPubkey, {
           ...options,
+          // Messages Column の操作は route の DM 選択を外すため、開いている Conversation を正とする(#1053)。
+          directMessagePeerPubkey:
+            options?.preserveDirectMessageContext && surfaceKind === 'messages'
+              ? childConversationPeer(workspaceState, sourceColumnId) ?? options.directMessagePeerPubkey
+              : options?.directMessagePeerPubkey,
           // A selected DM can also be projected inside the Messages Column. Preserve
           // its logical Conversation parent so opening the author does not replace it.
           parentColumnId:
@@ -673,22 +679,25 @@ export function DesktopShellPage({
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
     />
   );
+  // route だけを Column の canonical target へ同期する(Column 内操作の active 化用、Issue #1053)。
+  const syncWorkspaceColumnRoute = (column: ColumnState, preserveAuthorPane = true) => {
+    const route = routeStateForColumn(column);
+    if (!route) return;
+    syncRoute('push', {
+      ...route,
+      selectedAuthorPubkey:
+        preserveAuthorPane &&
+        column.kind === 'conversation' &&
+        column.entityId === selectedDirectMessagePeerPubkey
+          ? selectedAuthorPubkey
+          : route.selectedAuthorPubkey,
+    });
+  };
   const activateWorkspaceColumn = async (
     column: ColumnState,
     preserveAuthorPane = true
   ) => {
-    const route = routeStateForColumn(column);
-    if (route) {
-      syncRoute('push', {
-        ...route,
-        selectedAuthorPubkey:
-          preserveAuthorPane &&
-          column.kind === 'conversation' &&
-          column.entityId === selectedDirectMessagePeerPubkey
-            ? selectedAuthorPubkey
-            : route.selectedAuthorPubkey,
-      });
-    }
+    syncWorkspaceColumnRoute(column, preserveAuthorPane);
     if (column.scope) {
       const nextTopics = trackedTopics.includes(column.scope.topicId)
         ? trackedTopics
@@ -720,30 +729,23 @@ export function DesktopShellPage({
       setSelectedLiveSessionId(null);
     }
   };
-  // Timeline Column header の view tabs。正本(Column の timelineView)を更新し、
-  // その Column が route の focus 対象(timeline section + 同一 scope)の場合のみ
-  // 既存の focusTimelineView で chrome projection と route を同期する。
-  // 非 focus Column の切替では chrome / route を変えない(Issue #765)。
+  // Timeline header の view / topic 切替。正本を更新し、操作した Column を active にして route を同期する。
+  // 操作時点の route は active 化の push が未 commit のことがあるため判定に使わない(Issue #1053)。
   const selectColumnTimelineView = (column: ColumnState, view: ColumnTimelineView) => {
-    setWorkspaceState((current) => setColumnTimelineView(current, column.id, view));
-    const routeFocusedTimelineColumn =
-      routeSection === 'timeline' &&
-      column.id === workspaceState.activeColumnId;
-    if (routeFocusedTimelineColumn) focusTimelineView(view);
+    setWorkspaceState((current) =>
+      activateColumn(setColumnTimelineView(current, column.id, view), column.id)
+    );
+    focusTimelineView(view);
   };
   const selectColumnTimelineTopic = async (column: ColumnState, topicId: string) => {
     const scope = { topicId, channelId: null };
     const nextColumn = { ...column, scope };
-    setWorkspaceState((current) => setTimelineColumnTopic(current, column.id, topicId));
+    setWorkspaceState((current) =>
+      activateColumn(setTimelineColumnTopic(current, column.id, topicId), column.id)
+    );
     setTimelineScopeByTopic(setRecordEntry(topicId, privateTimelineScope(null)));
     setComposeChannelByTopic(setRecordEntry(topicId, privateComposeTarget(null)));
-    const routeFocusedTimelineColumn =
-      routeSection === 'timeline' && column.id === workspaceState.activeColumnId;
-    if (routeFocusedTimelineColumn) {
-      await activateWorkspaceColumn(nextColumn);
-      return;
-    }
-    await loadTopics(trackedTopics, topicId, null);
+    await activateWorkspaceColumn(nextColumn);
   };
   const refreshNotificationsColumn = useCallback(() => {
     setNotificationAutoReadError(null);
@@ -855,6 +857,7 @@ export function DesktopShellPage({
       onActivateColumn={(column, preserveAuthorPane) =>
         void activateWorkspaceColumn(column, preserveAuthorPane)
       }
+      onSyncColumnRoute={syncWorkspaceColumnRoute}
       renderPrimarySurface={renderPrimarySurface}
       renderMessagesSurface={(column) =>
         renderMessagesSurface('messages', undefined, column.id)

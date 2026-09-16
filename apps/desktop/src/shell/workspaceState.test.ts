@@ -15,6 +15,7 @@ import {
   setColumnPinned,
   setColumnTimelineView,
   setTimelineColumnTopic,
+  timelineColumnIdForScope,
   type ColumnState,
 } from '@/shell/slices/workspace';
 
@@ -555,5 +556,58 @@ describe('workspace state transitions', () => {
       withThread
     );
     expect(setTimelineColumnTopic(withThread, INITIAL_TIMELINE_COLUMN_ID, '')).toBe(withThread);
+  });
+
+  // Issue #1053: topic 切替後の Timeline は id が切替前 topic のままなので、scope で探して再利用する。
+  it('resolves a Timeline Column by scope even when its id still carries the previous topic', () => {
+    const initial = createDefaultWorkspaceState();
+    const devScope = { topicId: 'kukuri:topic:dev', channelId: null };
+    const switched = setTimelineColumnTopic(initial, INITIAL_TIMELINE_COLUMN_ID, devScope.topicId);
+    const exploreActive = activateColumn(
+      switched,
+      columnIdentityId('explore', initial.columns[0].scope)
+    );
+
+    expect(timelineColumnIdForScope(exploreActive, devScope)).toBe(INITIAL_TIMELINE_COLUMN_ID);
+    const reopened = openTransientColumn(exploreActive, {
+      id: timelineColumnIdForScope(exploreActive, devScope),
+      kind: 'timeline',
+      scope: devScope,
+      pinned: false,
+    });
+    expect(reopened.columns.map((column) => column.id)).toEqual(
+      exploreActive.columns.map((column) => column.id)
+    );
+    expect(reopened.activeColumnId).toBe(INITIAL_TIMELINE_COLUMN_ID);
+  });
+
+  it('prefers the active, then the identity, then the first scope-matching Timeline Column', () => {
+    const scope = { topicId: 'kukuri:topic:dev', channelId: null };
+    const identityId = columnIdentityId('timeline', scope);
+    const timeline = (id: string): ColumnState => ({
+      id,
+      kind: 'timeline',
+      scope,
+      pinned: true,
+      preferredDesktopSpan: 1,
+    });
+    const state = {
+      ...createInitialWorkspaceState(),
+      columns: [timeline('first'), timeline(identityId), timeline('active')],
+      activeColumnId: 'active',
+    };
+
+    expect(timelineColumnIdForScope(state, scope)).toBe('active');
+    expect(timelineColumnIdForScope({ ...state, activeColumnId: 'none' }, scope)).toBe(identityId);
+    expect(
+      timelineColumnIdForScope(
+        { ...state, columns: [timeline('first'), timeline('second')], activeColumnId: 'none' },
+        scope
+      )
+    ).toBe('first');
+    expect(timelineColumnIdForScope({ ...state, columns: [] }, scope)).toBe(identityId);
+    expect(
+      timelineColumnIdForScope(state, { topicId: 'kukuri:topic:dev', channelId: 'channel-1' })
+    ).toBe(columnIdentityId('timeline', { topicId: 'kukuri:topic:dev', channelId: 'channel-1' }));
   });
 });

@@ -229,7 +229,8 @@ test('messages dm headers use resolved author labels instead of You and Peer', a
   expect(screen.queryByText('Peer')).not.toBeInTheDocument();
 });
 
-test('conversation status and actions live in the column header without activating the column', async () => {
+// Issue #1053: header の操作も本文と同じく、押した Column を active にして route を同期する。
+test('conversation status and actions live in the column header and focus the column', async () => {
   const authorPubkey = 'b'.repeat(64);
   const api = createDesktopMockApi({
     authorSocialViews: {
@@ -266,22 +267,23 @@ test('conversation status and actions live in the column header without activati
   const messagesColumn = screen.getByRole('region', { name: /^Messages Column/ });
   await user.click(messagesColumn);
   expect(messagesColumn).toHaveAttribute('aria-current', 'true');
-  const hashBeforeActions = window.location.hash;
+  const conversationHash = `#/messages?topic=kukuri%3Atopic%3Ageneral&peerPubkey=${authorPubkey}`;
   const opensBeforeRefresh = openDirectMessage.mock.calls.length;
 
   await user.click(within(header).getByRole('button', { name: 'Refresh' }));
   await waitFor(() => {
     expect(openDirectMessage.mock.calls.length).toBeGreaterThan(opensBeforeRefresh);
+    expect(conversationColumn).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe(conversationHash);
   });
-  expect(messagesColumn).toHaveAttribute('aria-current', 'true');
-  expect(window.location.hash).toBe(hashBeforeActions);
+  expect(messagesColumn).not.toHaveAttribute('aria-current', 'true');
 
   await user.click(within(header).getByRole('button', { name: 'Clear' }));
   await waitFor(() => {
     expect(clearDirectMessage).toHaveBeenCalledWith(authorPubkey);
   });
-  expect(messagesColumn).toHaveAttribute('aria-current', 'true');
-  expect(window.location.hash).toBe(hashBeforeActions);
+  expect(conversationColumn).toHaveAttribute('aria-current', 'true');
+  expect(window.location.hash).toBe(conversationHash);
 });
 
 test('messages hash route restores the direct message and author pane together', async () => {
