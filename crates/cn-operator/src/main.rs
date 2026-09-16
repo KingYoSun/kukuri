@@ -378,6 +378,9 @@ fn load_config(path: &PathBuf) -> Result<kukuri_cn_operator::ResolvedConfig> {
 }
 
 fn print_planned_warning(resolved: &kukuri_cn_operator::ResolvedConfig) {
+    for warning in resolved.warnings() {
+        eprintln!("注意: {warning}");
+    }
     let planned = resolved.enabled_planned_capabilities();
     if !planned.is_empty() {
         let names = planned

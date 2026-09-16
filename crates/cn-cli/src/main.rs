@@ -337,6 +337,7 @@ enum SafetyCategoryArg {
     Cse,
     Grooming,
     Nsfw,
+    Objectionable,
     Spam,
     Malware,
     Phishing,

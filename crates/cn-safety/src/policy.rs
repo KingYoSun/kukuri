@@ -17,6 +17,40 @@ use crate::verdict::{
     Basis, ReasonCode, SafetyAction, SafetyCategory, SafetyLabel, SafetyVerdict, Visibility,
 };
 
+/// nsfw / objectionable の suspected に対する action（ADR 0028 §8.7）。
+///
+/// `label`（既定）は `Allow` + content advisory で index する。`hold` / `exclude` は operator が
+/// 厳格化する向きだけ。ラベル無しの `allow` は variant を持たせず受理しない
+/// （`general_action_operator_tunable_stricter_only`）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeneralAction {
+    #[default]
+    Label,
+    Hold,
+    Exclude,
+}
+
+impl GeneralAction {
+    /// router が採用する `SafetyAction`。`Label` だけが indexable（`Allow`）。
+    pub fn to_safety_action(self) -> SafetyAction {
+        match self {
+            GeneralAction::Label => SafetyAction::Allow,
+            GeneralAction::Hold => SafetyAction::Hold,
+            GeneralAction::Exclude => SafetyAction::Exclude,
+        }
+    }
+
+    /// serde（snake_case）と同一の文字列表現。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GeneralAction::Label => "label",
+            GeneralAction::Hold => "hold",
+            GeneralAction::Exclude => "exclude",
+        }
+    }
+}
+
 /// router の挙動を決める policy。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,8 +76,12 @@ pub struct SafetyPolicy {
     pub suspected_signal_visibility: Visibility,
     /// 未知 CSAM / CSE 疑いに対する action（`Hold` または `Quarantine`）。
     pub suspected_critical_action: SafetyAction,
-    /// 一般 nsfw（高信頼）に対する action。
-    pub on_high_confidence_nsfw: SafetyAction,
+    /// nsfw / objectionable の suspected に対する action（ADR 0028 §8.7。既定 `label`）。
+    ///
+    /// 旧名 `on_high_confidence_nsfw` は `hold` / `exclude` だけ deserialization で受理する
+    /// （`allow` / `quarantine` は値域外としてエラー）。
+    #[serde(default, alias = "on_high_confidence_nsfw")]
+    pub general_action: GeneralAction,
     /// spam に対する action。
     pub on_spam: SafetyAction,
     /// malware / phishing に対する action。
@@ -56,13 +94,13 @@ impl SafetyPolicy {
     /// public community node の最小既定（fail-closed 寄り）。
     pub fn public_node_default() -> Self {
         Self {
-            policy_version: "2026-07-public-node-v2".to_string(),
+            policy_version: "2026-09-public-node-v3".to_string(),
             index_before_scan: false,
             on_scan_error: SafetyAction::Hold,
             suspected_threshold: 70,
             suspected_signal_visibility: Visibility::Local,
             suspected_critical_action: SafetyAction::Quarantine,
-            on_high_confidence_nsfw: SafetyAction::Exclude,
+            general_action: GeneralAction::Label,
             on_spam: SafetyAction::Exclude,
             on_malware_phishing: SafetyAction::Exclude,
             require_known_csam: true,
@@ -103,6 +141,7 @@ pub fn route(
     let base = |action: SafetyAction, reason: ReasonCode, critical: bool| SafetyVerdict {
         action,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical,
         reason_code: reason,
         confidence: None,
@@ -212,17 +251,42 @@ pub fn route(
     //    classifier が score / confidence を返す検知は suspected 閾値以上のときのみ発火する
     //    （ADR 0028 §2.2。VLM が全 media に低スコアのラベルを付けても index を塞がない）。
     //    score も confidence も無い categorical な検知は従来どおり発火する。
-    if let Some((result, category)) = scan_outcomes.iter().find_map(|r| {
-        general_category(r)
-            .filter(|_| effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold))
-            .map(|category| (r, category))
-    }) {
+    //    同じ result に複数の一般ラベルが並ぶ場合は、非 index に写像される category を優先する
+    //    （nsfw と spam が並べば Exclude。advisory 化で index を緩めない）。
+    //    result 間でも同じ規則を適用し、別 provider の spam / malware / phishing（非 index）を
+    //    先頭 result の nsfw / objectionable（advisory 付き allow）が隠さないようにする。
+    let general_candidates: Vec<(&ProviderScanResult, SafetyCategory)> = scan_outcomes
+        .iter()
+        .filter_map(|r| {
+            general_category(r, policy)
+                .filter(|_| {
+                    effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold)
+                })
+                .map(|category| (r, category))
+        })
+        .collect();
+    if let Some((result, category)) = general_candidates
+        .iter()
+        .copied()
+        .find(|(_, category)| !general_action(policy, *category).allows_indexing())
+        .or_else(|| general_candidates.first().copied())
+    {
         let action = general_action(policy, category);
         let mut verdict = base(action, ReasonCode::GeneralModeration, false);
         verdict.provider = Some(result.provider.clone());
         verdict.provider_capability = Some(result.capability);
         verdict.confidence = result.score;
         verdict.labels = non_empty_labels(result, category);
+        // ADR 0028 §8.1: nsfw / objectionable を `label` で Allow に落としたときだけ、検知ラベルの
+        // advisory-only 分を content advisory として同伴する。非 index なら advisory は付けない。
+        if action.allows_indexing() && category.is_advisory_only() {
+            verdict.advisory_labels = verdict
+                .labels
+                .iter()
+                .filter(|label| label.category.is_advisory_only())
+                .cloned()
+                .collect();
+        }
         return verdict;
     }
 
@@ -324,15 +388,24 @@ fn has_known_csam_scan_result(scan_outcomes: &[ProviderScanResult]) -> bool {
 }
 
 /// result が一般 moderation（critical 以外）のラベルを持つなら、その代表カテゴリを返す。
-fn general_category(result: &ProviderScanResult) -> Option<SafetyCategory> {
+///
+/// 複数の一般ラベルが並ぶ場合は、policy 上で非 index に写像される category を優先する
+/// （advisory 化された nsfw / objectionable が spam 等の除外を隠さないため）。
+fn general_category(result: &ProviderScanResult, policy: &SafetyPolicy) -> Option<SafetyCategory> {
     if result.outcome != ScanOutcome::Completed {
         return None;
     }
-    result
+    let general: Vec<SafetyCategory> = result
         .labels
         .iter()
         .map(|l| l.category)
-        .find(|c| !c.is_critical_safety())
+        .filter(|c| !c.is_critical_safety())
+        .collect();
+    general
+        .iter()
+        .copied()
+        .find(|c| !general_action(policy, *c).allows_indexing())
+        .or_else(|| general.first().copied())
 }
 
 /// 一般カテゴリに対する action を policy から選ぶ。
@@ -343,8 +416,14 @@ fn general_action(policy: &SafetyPolicy, category: SafetyCategory) -> SafetyActi
         // provider self-test 一致は route() 規則3で先に処理されるが、万一ここへ落ちても
         // policy に依らず exclude（index に入れない）に倒す（防御の重ね）。
         SafetyCategory::ProviderTest => SafetyAction::Exclude,
-        // nsfw / その他一般。
-        _ => policy.on_high_confidence_nsfw,
+        // nsfw / objectionable（ADR 0028 §8.7: label = Allow + advisory、hold / exclude）。
+        SafetyCategory::Nsfw | SafetyCategory::Objectionable => {
+            policy.general_action.to_safety_action()
+        }
+        // critical category は規則 4 / 6 で先に処理される。万一ここへ落ちても index に入れない。
+        SafetyCategory::Csam | SafetyCategory::Cse | SafetyCategory::Grooming => {
+            SafetyAction::Exclude
+        }
     }
 }
 

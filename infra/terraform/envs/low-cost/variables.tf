@@ -420,6 +420,12 @@ variable "safety_suspected_signal_visibility" {
   default     = ""
 }
 
+variable "safety_general_action" {
+  description = "COMMUNITY_NODE_SAFETY_GENERAL_ACTION（label / hold / exclude）。空なら未設定（既定 label）。"
+  type        = string
+  default     = ""
+}
+
 variable "media_fetch_max_bytes" {
   description = "COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES。0 なら未設定。"
   type        = number

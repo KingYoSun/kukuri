@@ -18,7 +18,9 @@ use kukuri_cn_safety::{
 /// category → trust 成分の振り分け（初期規則）。
 ///
 /// critical safety（`SafetyCategory::is_critical_safety()` = Csam / Cse / Grooming）は絶対成分、
-/// それ以外（nsfw / spam / malware / phishing 等）は相対成分（ADR 0026 §2.7）。
+/// それ以外（spam / malware / phishing 等）は相対成分（ADR 0026 §2.7）。
+/// nsfw / objectionable（advisory-only。ADR 0026 §7）も wire 上は `Relative` のまま basis に
+/// 残るが、寄与は `signal_contribution` が常に 0 にする（評価値には入らない）。
 pub fn trust_component_for(category: SafetyCategory) -> TrustComponentKind {
     if category.is_critical_safety() {
         TrustComponentKind::Absolute

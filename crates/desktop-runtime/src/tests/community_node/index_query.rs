@@ -205,6 +205,7 @@ async fn mock_index_query(
             author_pubkey: state.response_author_pubkey.lock().await.clone(),
             text: "hello\nderived-tag".to_string(),
             created_at: 42,
+            content_advisories: Vec::new(),
         }],
     })
     .into_response()

@@ -530,6 +530,17 @@ variable "safety_suspected_signal_visibility" {
   default     = ""
 }
 
+variable "safety_general_action" {
+  description = "COMMUNITY_NODE_SAFETY_GENERAL_ACTION（label / hold / exclude。nsfw / objectionable の suspected の扱い。ADR 0028 §8.7）。空なら未設定（既定 label = content advisory 付きで索引）。allow は受理されない。"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = contains(["", "label", "hold", "exclude"], var.safety_general_action)
+    error_message = "safety_general_action は空 / label / hold / exclude のいずれかを指定してください。"
+  }
+}
+
 variable "media_fetch_max_bytes" {
   description = "COMMUNITY_NODE_MEDIA_FETCH_MAX_BYTES。0 なら未設定（binary 既定）。"
   type        = number

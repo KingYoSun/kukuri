@@ -78,6 +78,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
         author_pubkey: localAuthorPubkey,
         text: `result from ${request.base_url}`,
         created_at: 1,
+        content_advisories: [],
       },
     ],
   }));

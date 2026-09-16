@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use kukuri_cn_core::IndexScopeKind;
+use kukuri_cn_safety::ContentAdvisory;
 
 use crate::query::IndexQuery;
 
@@ -35,6 +36,10 @@ pub struct IndexedEntry {
     pub created_at: i64,
     /// 由来の共有 replica id（監査用。ghost 注入でないことの追跡）。
     pub source_replica_id: String,
+    /// content advisory（ADR 0028 §8.6）。投影には書かず、query 境界（`FailClosedIndexQuery`）が
+    /// 真実源の最新 verdict から充填する（ADR 0025 §7.1）。投影からの読み出しでは常に空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_advisories: Vec<ContentAdvisory>,
 }
 
 /// index 投影 store の境界。ArcadeDB / in-memory が同じ API を満たす。
@@ -255,6 +260,7 @@ mod tests {
             text: text.to_string(),
             created_at: 1,
             source_replica_id: format!("topic::{scope_id}"),
+            content_advisories: Vec::new(),
         }
     }
 

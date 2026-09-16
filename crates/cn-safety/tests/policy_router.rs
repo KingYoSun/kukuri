@@ -12,7 +12,7 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction, SafetyCategory};
 use kukuri_cn_safety::{
-    MockSafetyProvider, SafetyLabel, SafetyPolicy, SafetyProviderCapability, route,
+    GeneralAction, MockSafetyProvider, SafetyLabel, SafetyPolicy, SafetyProviderCapability, route,
 };
 
 const SCANNED_AT: &str = "2026-06-29T00:00:00Z";
@@ -220,8 +220,22 @@ fn general_moderation_is_separate_route_from_critical() {
     );
     assert_eq!(verdict.reason_code, ReasonCode::GeneralModeration);
     assert!(!verdict.critical);
-    // 既定 policy では high-confidence nsfw は exclude だが critical ではない。
+    // 既定 policy（ADR 0028 §8.1）では high-confidence nsfw は advisory 付き allow で、critical ではない。
+    assert_eq!(verdict.action, SafetyAction::Allow);
+    assert!(verdict.is_labeled_allow());
+    // operator が exclude に厳格化しても critical にはならない（route の分離は不変）。
+    let mut strict = SafetyPolicy::public_node_default();
+    strict.general_action = GeneralAction::Exclude;
+    let verdict = route(
+        &[
+            no_known_match_result(),
+            general_result(SafetyCategory::Nsfw),
+        ],
+        &strict,
+        SCANNED_AT,
+    );
     assert_eq!(verdict.action, SafetyAction::Exclude);
+    assert!(!verdict.critical);
 }
 
 #[test]
@@ -387,6 +401,7 @@ fn suspected_threshold_default_0_7_operator_tunable() {
     });
     let parsed: SafetyPolicy = serde_json::from_value(legacy).unwrap();
     assert_eq!(parsed.suspected_threshold, 85);
+    assert_eq!(parsed.general_action, GeneralAction::Exclude);
 }
 
 #[test]
@@ -539,4 +554,247 @@ async fn end_to_end_known_match_to_exclude_verdict() {
     assert_eq!(verdict.action, SafetyAction::Exclude);
     assert!(verdict.critical);
     assert!(!verdict.is_indexable());
+}
+
+// --- #1051 / #1054: general 判定の index + content advisory 化（ADR 0028 §8） ---
+
+#[test]
+fn general_nsfw_is_indexed_with_advisory_label() {
+    // ADR 0028 §8.1: nsfw / objectionable の suspected は `Allow` + `advisory_labels` で index する。
+    // 新しい action は増やさず、`is_indexable()` は `Allow` のみ indexable のまま。
+    let policy = SafetyPolicy::public_node_default();
+    assert_eq!(policy.policy_version, "2026-09-public-node-v3");
+
+    for category in [SafetyCategory::Nsfw, SafetyCategory::Objectionable] {
+        let verdict = route(
+            &[no_known_match_result(), general_result(category)],
+            &policy,
+            SCANNED_AT,
+        );
+        assert_eq!(verdict.action, SafetyAction::Allow, "{category:?}");
+        assert!(verdict.is_indexable());
+        assert!(!verdict.critical);
+        assert_eq!(verdict.reason_code, ReasonCode::GeneralModeration);
+        assert_eq!(verdict.confidence, Some(95));
+        assert_eq!(
+            verdict.advisory_labels,
+            vec![SafetyLabel::new(category).with_confidence(95)],
+            "advisory は category / confidence を運ぶ"
+        );
+        // 検知ラベル（何を検知したか）は従来どおり残る。
+        assert_eq!(verdict.labels, verdict.advisory_labels);
+        // confirmed へ昇格しない。
+        assert_eq!(
+            kukuri_cn_safety::policy::basis_for_verdict(&verdict),
+            kukuri_cn_safety::Basis::ClassifierScore
+        );
+    }
+
+    // spam / malware / phishing は従来どおり Exclude（advisory は付かない）。
+    for category in [
+        SafetyCategory::Spam,
+        SafetyCategory::Malware,
+        SafetyCategory::Phishing,
+    ] {
+        let verdict = route(
+            &[no_known_match_result(), general_result(category)],
+            &policy,
+            SCANNED_AT,
+        );
+        assert_eq!(verdict.action, SafetyAction::Exclude, "{category:?}");
+        assert!(verdict.advisory_labels.is_empty());
+    }
+
+    // 同じ result に nsfw と spam が並ぶ場合は厳しい側（Exclude）に倒す。
+    let mut mixed = general_result(SafetyCategory::Nsfw);
+    mixed
+        .labels
+        .push(SafetyLabel::new(SafetyCategory::Spam).with_confidence(90));
+    let verdict = route(&[no_known_match_result(), mixed], &policy, SCANNED_AT);
+    assert_eq!(verdict.action, SafetyAction::Exclude);
+    assert!(verdict.advisory_labels.is_empty());
+
+    // 別 provider の result に spam が並ぶ場合も同様（result 間で先頭一致に頼らない。監査指摘 4）。
+    let mut other_provider = general_result(SafetyCategory::Spam);
+    other_provider.provider = "unknown-csam-vlm".to_string();
+    other_provider.capability = SafetyProviderCapability::SpamAbuseModeration;
+    let verdict = route(
+        &[
+            no_known_match_result(),
+            general_result(SafetyCategory::Nsfw),
+            other_provider,
+        ],
+        &policy,
+        SCANNED_AT,
+    );
+    assert_eq!(verdict.action, SafetyAction::Exclude);
+    assert_eq!(verdict.provider.as_deref(), Some("unknown-csam-vlm"));
+    assert!(verdict.advisory_labels.is_empty());
+
+    // 閾値未満の nsfw は従来どおり検知なし扱い（advisory も付かない）。
+    let mut low = general_result(SafetyCategory::Nsfw);
+    low.score = Some(policy.suspected_threshold - 1);
+    low.labels = vec![
+        SafetyLabel::new(SafetyCategory::Nsfw).with_confidence(policy.suspected_threshold - 1),
+    ];
+    let verdict = route(&[no_known_match_result(), low], &policy, SCANNED_AT);
+    assert_eq!(verdict.action, SafetyAction::Allow);
+    assert!(verdict.advisory_labels.is_empty());
+
+    // known CSAM scan が欠けていれば advisory 経路でも fail-closed（規則 7 は不変）。
+    let verdict = route(&[general_result(SafetyCategory::Nsfw)], &policy, SCANNED_AT);
+    assert!(!verdict.is_indexable());
+    assert!(verdict.advisory_labels.is_empty());
+}
+
+#[test]
+fn general_action_operator_tunable_stricter_only() {
+    // ADR 0028 §8.7: `general_action` は label（既定）/ hold / exclude。allow（ラベル無し）は型に無い。
+    let policy = SafetyPolicy::public_node_default();
+    assert_eq!(policy.general_action, GeneralAction::Label);
+
+    for (action, expected) in [
+        (GeneralAction::Hold, SafetyAction::Hold),
+        (GeneralAction::Exclude, SafetyAction::Exclude),
+    ] {
+        let mut strict = SafetyPolicy::public_node_default();
+        strict.general_action = action;
+        for category in [SafetyCategory::Nsfw, SafetyCategory::Objectionable] {
+            let verdict = route(
+                &[no_known_match_result(), general_result(category)],
+                &strict,
+                SCANNED_AT,
+            );
+            assert_eq!(verdict.action, expected, "{action:?} / {category:?}");
+            assert!(!verdict.is_indexable());
+            assert!(!verdict.critical);
+            assert!(
+                verdict.advisory_labels.is_empty(),
+                "非 index の verdict に advisory は付けない"
+            );
+            assert!(!verdict.labels.is_empty(), "検知ラベルは残る");
+        }
+        // critical / spam 系は general_action に影響されない。
+        let verdict = route(
+            &[
+                no_known_match_result(),
+                general_result(SafetyCategory::Spam),
+            ],
+            &strict,
+            SCANNED_AT,
+        );
+        assert_eq!(verdict.action, SafetyAction::Exclude);
+        let verdict = route(
+            &[score_result(
+                SafetyProviderCapability::NovelCsamImageClassifier,
+                SafetyCategory::Csam,
+                95,
+            )],
+            &strict,
+            SCANNED_AT,
+        );
+        assert!(verdict.critical);
+        assert!(!verdict.is_indexable());
+    }
+
+    let base = serde_json::json!({
+        "policy_version": "test",
+        "index_before_scan": false,
+        "on_scan_error": "hold",
+        "suspected_threshold": 70,
+        "suspected_critical_action": "quarantine",
+        "on_spam": "exclude",
+        "on_malware_phishing": "exclude",
+        "require_known_csam": true
+    });
+    let with = |key: &str, value: &str| {
+        let mut json = base.clone();
+        json[key] = serde_json::Value::String(value.to_string());
+        serde_json::from_value::<SafetyPolicy>(json)
+    };
+    // 値域: label / hold / exclude。allow は受理しない。
+    assert_eq!(
+        with("general_action", "label").unwrap().general_action,
+        GeneralAction::Label
+    );
+    assert_eq!(
+        with("general_action", "hold").unwrap().general_action,
+        GeneralAction::Hold
+    );
+    assert_eq!(
+        with("general_action", "exclude").unwrap().general_action,
+        GeneralAction::Exclude
+    );
+    assert!(with("general_action", "allow").is_err());
+    assert!(with("general_action", "quarantine").is_err());
+    // 未指定なら既定 label。
+    assert_eq!(
+        serde_json::from_value::<SafetyPolicy>(base.clone())
+            .unwrap()
+            .general_action,
+        GeneralAction::Label
+    );
+    // 旧 `on_high_confidence_nsfw` は hold / exclude だけ alias で受理し、allow は拒否する。
+    assert_eq!(
+        with("on_high_confidence_nsfw", "exclude")
+            .unwrap()
+            .general_action,
+        GeneralAction::Exclude
+    );
+    assert_eq!(
+        with("on_high_confidence_nsfw", "hold")
+            .unwrap()
+            .general_action,
+        GeneralAction::Hold
+    );
+    assert!(with("on_high_confidence_nsfw", "allow").is_err());
+    // serde 表現は `general_action` で書き出す（scan 構成 fingerprint の入力）。
+    let serialized = serde_json::to_value(SafetyPolicy::public_node_default()).unwrap();
+    assert_eq!(serialized["general_action"], "label");
+    assert!(serialized.get("on_high_confidence_nsfw").is_none());
+}
+
+#[test]
+fn objectionable_category_separated_from_nsfw() {
+    // ADR 0028 §8.2 / ADR 0027 §8: `Objectionable` は general route の非 critical category で、
+    // nsfw（性的表現）と分ける。index / trust の扱いは nsfw と同一、client 表示語彙だけ異なる。
+    assert!(!SafetyCategory::Objectionable.is_critical_safety());
+    assert!(SafetyCategory::Objectionable.is_advisory_only());
+    assert!(SafetyCategory::Nsfw.is_advisory_only());
+    for category in [
+        SafetyCategory::Csam,
+        SafetyCategory::Cse,
+        SafetyCategory::Grooming,
+        SafetyCategory::Spam,
+        SafetyCategory::Malware,
+        SafetyCategory::Phishing,
+        SafetyCategory::ProviderTest,
+    ] {
+        assert!(!category.is_advisory_only(), "{category:?}");
+    }
+    assert_eq!(SafetyCategory::Nsfw.advisory_display_label(), Some("adult"));
+    assert_eq!(
+        SafetyCategory::Objectionable.advisory_display_label(),
+        Some("sensitive")
+    );
+    assert_eq!(SafetyCategory::Spam.advisory_display_label(), None);
+    assert_eq!(
+        serde_json::to_value(SafetyCategory::Objectionable).unwrap(),
+        "objectionable"
+    );
+
+    let verdict = route(
+        &[
+            no_known_match_result(),
+            general_result(SafetyCategory::Objectionable),
+        ],
+        &SafetyPolicy::public_node_default(),
+        SCANNED_AT,
+    );
+    assert_eq!(verdict.action, SafetyAction::Allow);
+    assert_eq!(
+        verdict.advisory_labels[0].category,
+        SafetyCategory::Objectionable
+    );
+    assert_ne!(verdict.advisory_labels[0].category, SafetyCategory::Nsfw);
 }

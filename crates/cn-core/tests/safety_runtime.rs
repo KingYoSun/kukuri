@@ -14,8 +14,8 @@ use kukuri_cn_safety::provider::{
     FetchedMedia, MediaFetcher, ProviderScanRequest, ScanError, SubjectKind,
 };
 use kukuri_cn_safety::{
-    MockSafetyProvider, ModerationEventSigner, ReasonCode, RiskSignalTarget, SafetyCategory,
-    SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
+    ContentAdvisory, MockSafetyProvider, ModerationEventSigner, ReasonCode, RiskSignalTarget,
+    SafetyCategory, SafetyProvider, SafetyRiskSignal, SafetyVerdict, SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
     EventIdGenerator, MemorySafetyArtifactStore, PersistedSignal, SafetyArtifactStore,
@@ -137,6 +137,15 @@ impl SafetyArtifactStore for FailingSafetyArtifactStore {
         _subject_id: &str,
     ) -> Result<Option<StoredVerdictRecord>> {
         Ok(None)
+    }
+
+    async fn persist_advisories(
+        &self,
+        _subject_kind: SubjectKind,
+        _subject_id: &str,
+        _advisories: &[ContentAdvisory],
+    ) -> Result<()> {
+        Ok(())
     }
 
     async fn attribute_subject_author(

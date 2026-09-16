@@ -166,6 +166,29 @@ fn every_canonical_legal_input_category_changes_the_snapshot() {
 }
 
 #[test]
+fn general_action_default_keeps_snapshot_but_explicit_value_changes_it() {
+    // #1054: `safety.moderation.general_action` は未指定なら canonical 入力に現れず、既定（label）の
+    // まま運用する限り法務 snapshot（再同意）は変わらない。明示すると legal 上の扱いが変わるため
+    // snapshot も変わる（operator は再同意を伴うことを前提に設定する）。
+    let baseline = baseline();
+    let baseline_revision = revision(&baseline);
+
+    let mut unset = baseline.clone();
+    unset.raw.safety.as_mut().unwrap().moderation.general_action = None;
+    assert_eq!(revision(&unset), baseline_revision);
+
+    let mut explicit = baseline.clone();
+    explicit
+        .raw
+        .safety
+        .as_mut()
+        .unwrap()
+        .moderation
+        .general_action = Some(kukuri_cn_operator::GeneralAction::Exclude);
+    assert_ne!(revision(&explicit), baseline_revision);
+}
+
+#[test]
 fn technical_identity_secrets_order_and_reference_translation_do_not_change_snapshot() {
     let baseline = baseline();
     let baseline_revision = revision(&baseline);

@@ -120,6 +120,7 @@ fn exclude_critical_verdict() -> SafetyVerdict {
     SafetyVerdict {
         action: SafetyAction::Exclude,
         labels: Vec::new(),
+        advisory_labels: Vec::new(),
         critical: true,
         reason_code: ReasonCode::CsamConfirmed,
         confidence: None,
@@ -222,6 +223,7 @@ async fn projection_residue_without_authoritative_entry_is_not_surfaced() -> Res
             text: "ghost searchable text".to_string(),
             created_at: 1,
             source_replica_id: "topic::rust".to_string(),
+            content_advisories: Vec::new(),
         })
         .await?;
 

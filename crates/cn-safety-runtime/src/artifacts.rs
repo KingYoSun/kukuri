@@ -9,7 +9,9 @@
 //! - `docs/adr/0027-deterministic-moderation-critical-safety.md` §2.5 / §2.6（signed events / advisory / visibility 規則）
 //!
 //! 生成ガードレール:
-//! - indexable（`allow`）な verdict では artifact を生成しない。
+//! - indexable（`allow`）な verdict では artifact を生成しない。例外は content advisory を伴う
+//!   ラベル付き allow（ADR 0028 §8.4）で、`RiskLabel` event と severity `Low` の risk signal を
+//!   生成する（appeal 経路の入口になる）。
 //! - target（subject_kind / subject_id）が欠けている場合は artifact を生成しない
 //!   （空 target_id / 不明 target_type の moderation event は監査上危険なため）。
 //! - operational fail-closed（scan_failed / provider_unavailable / unscanned）は content の
@@ -39,8 +41,9 @@ pub(crate) fn build_artifacts(
     ids: &dyn EventIdGenerator,
     policy: &SafetyPolicy,
 ) -> (Option<ModerationEventBody>, Option<SafetyRiskSignal>) {
-    // indexable（allow）な verdict では moderation artifact を作らない。
-    if verdict.is_indexable() {
+    // indexable（allow）な verdict では moderation artifact を作らない。ラベル付き allow
+    // （nsfw / objectionable の advisory。ADR 0028 §8.4）だけは RiskLabel event + Low signal を作る。
+    if verdict.is_indexable() && !verdict.is_labeled_allow() {
         return (None, None);
     }
 
@@ -118,7 +121,7 @@ fn severity_for(verdict: &SafetyVerdict) -> Severity {
     match verdict.action {
         SafetyAction::Exclude | SafetyAction::Quarantine => Severity::High,
         SafetyAction::Hold => Severity::Medium,
-        // allow は呼び出し前に弾かれている。安全側に倒す。
+        // ラベル付き allow（content advisory）は Low（ADR 0027 §8 / ADR 0028 §8.4）。
         SafetyAction::Allow => Severity::Low,
     }
 }
@@ -155,7 +158,7 @@ fn build_event(
     category: Option<SafetyCategory>,
     policy: &SafetyPolicy,
 ) -> Option<ModerationEventBody> {
-    let action = moderation_action_for(verdict.action)?;
+    let action = moderation_action_for(verdict)?;
     Some(ModerationEventBody {
         id: ids.next_id(),
         issuer_node_id: issuer_node_id.to_string(),
@@ -199,14 +202,16 @@ fn build_risk_signal(
     })
 }
 
-/// `SafetyAction` を moderation event の `ModerationAction` に写像する。
+/// verdict を moderation event の `ModerationAction` に写像する。
 ///
-/// `allow` は event を作らない（呼び出し前に弾かれているが安全側に `None`）。
-fn moderation_action_for(action: SafetyAction) -> Option<ModerationAction> {
-    match action {
+/// `allow` はラベル付き（content advisory 同伴）のときだけ既存語彙の `RiskLabel` を使い
+/// （ADR 0027 §8）、それ以外の allow は event を作らない（安全側に `None`）。
+fn moderation_action_for(verdict: &SafetyVerdict) -> Option<ModerationAction> {
+    match verdict.action {
         SafetyAction::Hold => Some(ModerationAction::Hold),
         SafetyAction::Quarantine => Some(ModerationAction::Quarantine),
         SafetyAction::Exclude => Some(ModerationAction::Exclude),
+        SafetyAction::Allow if verdict.is_labeled_allow() => Some(ModerationAction::RiskLabel),
         SafetyAction::Allow => None,
     }
 }

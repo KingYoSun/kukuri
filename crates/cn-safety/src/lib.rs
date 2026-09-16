@@ -22,6 +22,7 @@
 //! serde 表現は既存 community-node crate（`cn-core` / `desktop-runtime`）に合わせて
 //! すべて `snake_case`。client（TS）向けの wire 変換が必要になった段階で別途変換層を入れる。
 
+pub mod advisory;
 pub mod capability;
 pub mod event;
 pub mod policy;
@@ -37,13 +38,14 @@ pub mod verdict;
 #[cfg(feature = "mock")]
 pub mod mock;
 
+pub use advisory::{AdvisorySubjectKind, ContentAdvisory};
 pub use capability::SafetyProviderCapability;
 pub use event::{
     ModerationEventBody, ModerationEventSigner, SignedModerationEvent, issue_signed_event,
 };
 #[cfg(feature = "mock")]
 pub use mock::{MockSafetyProvider, MockSigner};
-pub use policy::{SafetyPolicy, route};
+pub use policy::{GeneralAction, SafetyPolicy, route};
 pub use provider::{
     FetchedMedia, MediaFetcher, ProviderScanRequest, ProviderScanResult, SafetyProvider, ScanError,
     ScanOutcome, SubjectKind,

@@ -325,6 +325,17 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         "safety_operator_review                = {}",
         safety.moderation.operator_review
     );
+    let _ = writeln!(
+        out,
+        "safety_general_action                 = {}",
+        hcl_string(
+            safety
+                .moderation
+                .general_action
+                .map(|action| action.as_str())
+                .unwrap_or("")
+        )
+    );
     let _ = writeln!(out);
     let _ = writeln!(
         out,

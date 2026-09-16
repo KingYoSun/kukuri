@@ -15,7 +15,7 @@
 //! `hold`）は再利用しない。次の pass で必ず再試行し、provider 復旧時に allow へ更新できるように
 //! する（#1050 INVAR-2）。
 
-use kukuri_cn_safety::{ReasonCode, SafetyAction, SafetyVerdict};
+use kukuri_cn_safety::{ContentAdvisory, ReasonCode, SafetyAction, SafetyVerdict};
 
 /// 永続化層から読み戻した verdict（再利用判定の入力）。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,9 +24,12 @@ pub struct StoredVerdictRecord {
     pub id: String,
     /// 保存済み verdict。labels / provider_capability は永続化していないため空になり得る。
     /// index gate は `is_indexable()` だけを参照するので判定には影響しない。
+    /// `advisory_labels` は `advisories` のうち自 subject 分から復元する。
     pub verdict: SafetyVerdict,
     /// 同じ scan で確定した descriptive 検索タグ（`allow` のみ非空）。
     pub derived_tags: Vec<String>,
+    /// 保存済み content advisory（ADR 0028 §8.6。post 行は text + 参照 blob の和集合）。
+    pub advisories: Vec<ContentAdvisory>,
     /// 保存時の内容 fingerprint。旧行（#1050 以前）は `None`。
     pub source_fingerprint: Option<String>,
     /// 保存時の scan 構成 fingerprint。旧行は `None`。
@@ -39,6 +42,8 @@ pub struct VerdictPersistMeta {
     pub source_fingerprint: Option<String>,
     pub scan_config_fingerprint: Option<String>,
     pub derived_tags: Vec<String>,
+    /// この scan で確定した content advisory（signal id 込み。ラベル付き allow のみ非空）。
+    pub advisories: Vec<ContentAdvisory>,
 }
 
 /// 今回の scan 対象の fingerprint。

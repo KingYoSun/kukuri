@@ -17,6 +17,7 @@ const entry: IndexEntryView = {
   author_pubkey: 'a'.repeat(64),
   text: 'indexed text\nderived-tag',
   created_at: 1_700_000_000,
+  content_advisories: [],
 };
 
 const knownAuthor: AuthorSocialView = {

@@ -376,7 +376,35 @@ export type IndexScopeKind = "public_topic" | "private_channel";
 
 export type IndexingRequestStatus = "pending" | "approved" | "rejected";
 
-export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, object_id: string, author_pubkey: string, text: string, created_at: number, };
+export type AdvisorySubjectKind = "post_id" | "blob_cid";
+
+export type ContentAdvisory = { 
+/**
+ * 発行 node（署名鍵の x-only 公開鍵 hex = manifest `node_id`）。
+ */
+issuer_node_id: string, subject_kind: AdvisorySubjectKind, 
+/**
+ * post id または blob hash。
+ */
+subject_id: string, category: SafetyCategory, 
+/**
+ * client 表示語彙（nsfw → `adult`、objectionable → `sensitive`）。
+ */
+label: string, 
+/**
+ * classifier confidence（0-100）。
+ */
+confidence?: number | null, 
+/**
+ * 対応する risk signal id（appeal の入口）。
+ */
+signal_id: string, 
+/**
+ * 常に `classifier_score`（confirmed へ昇格しない）。
+ */
+basis: Basis, };
+
+export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, object_id: string, author_pubkey: string, text: string, created_at: number, content_advisories: Array<ContentAdvisory>, };
 
 export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
 
@@ -460,7 +488,7 @@ export type CommunityNodeTesterFeedbackError = { code: string, message: string, 
 
 export type TrustComponentKind = "absolute" | "relative";
 
-export type SafetyCategory = "csam" | "cse" | "grooming" | "nsfw" | "spam" | "malware" | "phishing" | "provider_test";
+export type SafetyCategory = "csam" | "cse" | "grooming" | "nsfw" | "objectionable" | "spam" | "malware" | "phishing" | "provider_test";
 
 export type Severity = "critical" | "high" | "medium" | "low";
 
