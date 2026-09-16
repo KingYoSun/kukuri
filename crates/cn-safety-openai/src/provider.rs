@@ -181,6 +181,14 @@ fn normalize_image(bytes: &[u8]) -> Result<Vec<u8>, ScanError> {
     limits.max_image_width = Some(3840);
     limits.max_image_height = Some(3840);
     limits.max_alloc = Some(64 * 1024 * 1024);
+    if reader.format() == Some(ImageFormat::Png)
+        && image::codecs::png::PngDecoder::new(Cursor::new(bytes))
+            .map_err(|_| invalid("invalid PNG image"))?
+            .is_apng()
+            .map_err(|_| invalid("invalid PNG animation metadata"))?
+    {
+        return Err(invalid("animated images require a temporal scan"));
+    }
     if reader.format() == Some(ImageFormat::WebP)
         && image::codecs::webp::WebPDecoder::new(Cursor::new(bytes))
             .map_err(|_| invalid("invalid WebP image"))?

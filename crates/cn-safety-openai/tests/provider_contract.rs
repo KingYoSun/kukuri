@@ -200,6 +200,45 @@ fn credentials_are_required_redacted_and_configuration_invalidates_identity() {
 }
 
 struct ImageFetcher(Vec<u8>);
+
+#[tokio::test]
+async fn animated_png_is_rejected_before_http() {
+    use image::AnimationDecoder;
+    // Locally generated 8x8 red/blue fixture: no third-party or user content.
+    let bytes = include_bytes!("fixtures/two-frame-apng.png").to_vec();
+    let decoder =
+        image::codecs::png::PngDecoder::new(std::io::Cursor::new(&bytes)).expect("PNG fixture");
+    assert!(decoder.is_apng().expect("animation metadata"));
+    let frames = decoder
+        .apng()
+        .expect("APNG decoder")
+        .into_frames()
+        .collect_frames()
+        .expect("APNG frames");
+    assert_eq!(frames.len(), 2);
+    assert_ne!(
+        frames[0].buffer().get_pixel(0, 0),
+        frames[1].buffer().get_pixel(0, 0)
+    );
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(response(true, &[])))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let p = provider(
+        config(&server.uri()),
+        Arc::new(MemoryModerationBudget::default()),
+    )
+    .with_media_fetcher(Arc::new(ImageFetcher(bytes)));
+    assert!(
+        p.scan(
+            &ProviderScanRequest::for_subject(SubjectKind::Blob, "apng").with_media_hint("apng")
+        )
+        .await
+        .is_err()
+    );
+}
 #[async_trait]
 impl MediaFetcher for ImageFetcher {
     async fn fetch(&self, _: &str, _: Option<&str>) -> Result<FetchedMedia, ScanError> {
