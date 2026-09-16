@@ -48,13 +48,26 @@
 
 advisory は index 応答でしか判明しないため、同じ添付が「見つける」以外の経路に先に現れた場合、client はその時点で推定を知らず取得を要求しうる。その要求に対しても Rust 側ゲートが `None` を返すため bytes 取得は 0 だが、代替表示と説明は出ない。タイムライン経路の合成は C4（#1056）が一括照会 API で担う。
 
+## oversized-files 対応（分割）
+
+CI の `linux-rust-static`（oversized-files、1000 行上限）に 4 件抵触したため、`9ce97243` で責務の境界に沿って分割した。挙動は変えていない。
+
+| ファイル | 抵触時 | 分割後 | 分割先 |
+| --- | --- | --- | --- |
+| `PostCard.tsx` | 1037 | 991 | `PostAdvisoryNotice.tsx`（`PostGatedContent` / `PostAdvisoryNotice`） |
+| `CommunityIndexWorkspace.tsx` | 1012 | 951 | `useCommunityIndexAdvisories.ts`（発行元名の解決とゲート中 hash の公開） |
+| `CommunityIndexWorkspace.test.tsx` | 1199 | 747 | `CommunityIndexWorkspace.testSupport.tsx`（共有 fixture）と `CommunityIndexWorkspace.advisory.test.tsx` |
+| `tests/community_node/index_query.rs` | 1059 | 950 | `index_query/content_advisory.rs`（advisory の 4 test） |
+
+lock 分類 contract は新しい path へ付け替えた（`index_query.rs` は 14 のまま、`index_query/content_advisory.rs` に 4 を宣言、合計 136 → 140）。
+
 ## 検証結果
 
-- `apps/desktop` の Vitest: 206 files / 1763 tests 成功（新規 17 件を含む）。
+- `apps/desktop` の Vitest: 207 files / 1763 tests。対象周辺（`src/components/core` / `src/shell/data` / Explore メディア）は 31 files / 327 tests 成功。全体実行では `DesktopShellPage.developerMode.test.tsx` の 1 件が並行負荷で timeout する既知 flake が出たが、単独実行では 12 件成功する。本変更が触っていないファイルであり、CI の結果を正とする。
 - `cargo xtask check`: 成功（fmt / clippy / tauri check / desktop lint / typecheck）。
-- `cargo xtask test`: 成功。`crates/app-api` の `advisory_labeled_media_respects_adult_display_gate` ほか新規 6 件を含む。
+- `cargo xtask test`: 分割後の通し実行で成功（950 tests passed / 4 skipped、harness 23 tests passed）。`advisory_labeled_media_respects_adult_display_gate` ほか新規 6 件と `community_node::index_query::content_advisory` の 4 件を含む。
+- `cargo xtask oversized-files`: 成功（新規違反 0）。
 - Playwright chromium: `community-index-advisory.spec.ts` 3 件成功。変更前は同じ spec が `2786a2d3` の worktree で推定を無視して描画することを確認した。
-- lock 分類 contract: `index_query.rs` の `CommunityNodeServer` 取得を 14 → 18、合計 136 → 140 へ更新した。
 
 必須検証を省略して成功とみなさない。未実行・失敗・中断は成功と区別して記録する。
 
