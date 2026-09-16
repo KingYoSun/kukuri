@@ -200,6 +200,13 @@ export function timelineColumnIdForScope(state: WorkspaceState, scope: ColumnSco
   );
 }
 
+// 一覧 Column(Messages)から開いている Conversation Column の相手。
+export function childConversationPeer(state: WorkspaceState, parentColumnId: string) {
+  return state.columns.find(
+    (column) => column.kind === 'conversation' && column.parentColumnId === parentColumnId
+  )?.entityId;
+}
+
 export function primarySectionForColumn(column: ColumnState): PrimarySection {
   switch (column.kind) {
     case 'notifications':

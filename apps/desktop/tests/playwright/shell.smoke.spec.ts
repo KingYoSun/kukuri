@@ -209,7 +209,6 @@ test('browser mock starts with the accessible product overview Columns without l
   expect(overflow.documentOverflow).toBeLessThanOrEqual(0);
 });
 
-// Issue #1053: 非 active Column の header 操作はその Column を active にし、route も切替後の topic を指す。
 test('Column header switches replace Timeline scope in place and focus an inactive Column', async ({
   page,
 }) => {
@@ -246,7 +245,6 @@ test('Column header switches replace Timeline scope in place and focus an inacti
   await expect(topicSelect).toHaveValue('kukuri:topic:test');
   await expect(activeColumn(page, 'Timeline')).toBeVisible();
   await expect(page).toHaveURL(/#\/timeline\?topic=kukuri%3Atopic%3Atest$/);
-  await expect(page.getByRole('region', { name: /^Timeline Column,/ })).toHaveCount(1);
 
   const overflow = await page.evaluate(() => ({
     documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,

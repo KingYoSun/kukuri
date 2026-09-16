@@ -67,6 +67,7 @@ import { usePrivateChannelEntries } from '@/shell/page/usePrivateChannelEntries'
 import { useShallow } from 'zustand/react/shallow';
 import {
   activateColumn,
+  childConversationPeer,
   columnIdentityId,
   openTransientColumn,
   setColumnTimelineView,
@@ -519,14 +520,10 @@ export function DesktopShellPage({
       openAuthorDetail={(authorPubkey, options) =>
         openAuthorDetail(authorPubkey, {
           ...options,
-          // Messages Column 内の操作はその Column へ route を移し、route の DM 選択を外す
-          // (Issue #1053)。保持すべき DM は、この一覧から開いている Conversation Column を正とする。
+          // Messages Column の操作は route の DM 選択を外すため、開いている Conversation を正とする(#1053)。
           directMessagePeerPubkey:
             options?.preserveDirectMessageContext && surfaceKind === 'messages'
-              ? workspaceState.columns.find(
-                  (column) =>
-                    column.kind === 'conversation' && column.parentColumnId === sourceColumnId
-                )?.entityId ?? options.directMessagePeerPubkey
+              ? childConversationPeer(workspaceState, sourceColumnId) ?? options.directMessagePeerPubkey
               : options?.directMessagePeerPubkey,
           // A selected DM can also be projected inside the Messages Column. Preserve
           // its logical Conversation parent so opening the author does not replace it.
@@ -682,8 +679,7 @@ export function DesktopShellPage({
       handleOpenOriginalTopic={shellActions.handleOpenOriginalTopic}
     />
   );
-  // route だけを Column の canonical target へ同期する。Column 内の操作で active 化した場合は
-  // 押された handler と競合させないため、文脈の読み込みはせず route のずれだけを防ぐ(Issue #1053)。
+  // route だけを Column の canonical target へ同期する(Column 内操作の active 化用、Issue #1053)。
   const syncWorkspaceColumnRoute = (column: ColumnState, preserveAuthorPane = true) => {
     const route = routeStateForColumn(column);
     if (!route) return;
@@ -733,10 +729,8 @@ export function DesktopShellPage({
       setSelectedLiveSessionId(null);
     }
   };
-  // Timeline Column header の view tabs / topic 切替。操作した Column は active になるため
-  // (Issue #1053)、正本(Column の timelineView / scope)を更新したうえで、その Column を
-  // active にして chrome projection と route を同期する。操作時点の route は active 化の
-  // push が未 commit のことがあるため、route section では判定しない。
+  // Timeline header の view / topic 切替。正本を更新し、操作した Column を active にして route を同期する。
+  // 操作時点の route は active 化の push が未 commit のことがあるため判定に使わない(Issue #1053)。
   const selectColumnTimelineView = (column: ColumnState, view: ColumnTimelineView) => {
     setWorkspaceState((current) =>
       activateColumn(setColumnTimelineView(current, column.id, view), column.id)
