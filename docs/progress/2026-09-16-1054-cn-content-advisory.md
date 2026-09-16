@@ -154,7 +154,11 @@ test に対応付けた。未分類 0。
 - 1 回目（対象 `e8feaaf2`、別コンテキストの subagent）: 判定 **FAIL**。blocker 0 件、inventory 12 件中 適合 10 /
   不適合 2（AC-5 / AC-6 の named contract 欠落）/ 未分類 0、必須 validation（cn-check / CI）赤。記録は PR #1067 の
   comment。是正は上記「監査後の是正」。
-- 2 回目（delta `e8feaaf2..<最終 head>`）: （実施後に追記）
+- 2 回目（delta `e8feaaf2..120d9055`、同じ監査者）: 判定 **PASS**。inventory 12 件全適合 / 未分類 0、
+  AC-5 / AC-6 の named contract 追加を Postgres / 単体で確認、分割 refactor は本体 byte 一致で挙動不変、規則 8 の
+  変更は規則 1〜7 の順序と fail-closed を崩さない。監査側で `cn-check` / `oversized-files` / 対象 crate 385 件 /
+  Postgres 統合 137 件を独立に再現。blocker 0 件。記録は PR #1067 の comment。本記録の追記（docs のみ）は
+  監査後の delta だが対象 surface に変更は無い。
 
 ## 本番反映
 
