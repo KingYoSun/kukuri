@@ -48,18 +48,73 @@ fn changed_keys_classify_objects_withdrawals_and_fallback() {
         ]),
         ChangedKeys::Objects(vec!["a".to_string(), "b".to_string()])
     );
+    // #1065: 索引 key は無視し、同じ batch の object だけを残す。
+    assert_eq!(
+        classify_changed_keys([
+            "indexes/thread/a/s/a",
+            "indexes/timeline/s/a",
+            "objects/a/envelope",
+            "objects/a/state",
+        ]),
+        ChangedKeys::Objects(vec!["a".to_string()])
+    );
+    assert_eq!(
+        classify_changed_keys([
+            "indexes/timeline/s/a",
+            "reactions/a/r/state",
+            "envelopes/e",
+            "sessions/live/s/state",
+            "channels/metadata",
+            "metaverse/dome-hosting/i/x",
+        ]),
+        ChangedKeys::Ignored
+    );
     assert_eq!(
         classify_changed_keys(["objects/a/state", "manifests/media/m1/envelope"]),
-        ChangedKeys::WholeScope
+        ChangedKeys::WholeScope {
+            reason: "manifests/media".to_string()
+        }
+    );
+    assert_eq!(
+        classify_changed_keys(["objects/a/state", "unknown/secret-id/state"]),
+        ChangedKeys::WholeScope {
+            reason: "unregistered:unknown".to_string()
+        }
     );
     assert_eq!(
         classify_changed_keys(["objects//state"]),
-        ChangedKeys::WholeScope
+        ChangedKeys::WholeScope {
+            reason: "malformed:objects".to_string()
+        }
     );
     assert_eq!(
         classify_changed_keys(Vec::<&str>::new()),
-        ChangedKeys::WholeScope
+        ChangedKeys::WholeScope {
+            reason: "empty".to_string()
+        }
     );
+}
+
+/// #1065 INVAR-3: 無視する種別は indexer が読む種別と交わらず、読む種別はすべて取り込みの契機になる。
+#[test]
+fn ignored_key_families_never_include_what_the_indexer_reads() {
+    use kukuri_cn_indexer::ingest::{INDEXER_READ_FAMILIES, KeyDisposition, key_disposition};
+    use kukuri_docs_sync::SharedReplicaKeyFamily;
+    for family in SharedReplicaKeyFamily::ALL {
+        if key_disposition(family) == KeyDisposition::Ignore {
+            assert!(
+                !INDEXER_READ_FAMILIES.contains(&family),
+                "{family:?} is read by the indexer and must not be ignored"
+            );
+        }
+    }
+    for family in INDEXER_READ_FAMILIES {
+        assert_ne!(
+            key_disposition(family),
+            KeyDisposition::Ignore,
+            "{family:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -389,5 +444,212 @@ async fn ingest_changed_keys_processes_only_the_changed_object() -> Result<()> {
         (3, 0, 3)
     );
     assert_eq!(provider.subjects().len(), 3);
+    Ok(())
+}
+
+/// #1065 TR-1: 実クライアントの 1 投稿に伴う key 集合（state / envelope / timeline 索引 / thread 索引）
+/// は当該 object だけを取り込み、scope 全体を見直さない。
+#[tokio::test]
+async fn client_post_change_keys_ingest_only_that_object() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    persist_post(&docs, &replica, &topic, "first").await;
+    persist_post(&docs, &replica, &topic, "second").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service(store.clone());
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (service, store));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(provider.subjects().len(), 2);
+
+    let (third, _, _, _, changed) = persist_client_post(&docs, &replica, &topic, "third").await;
+    assert_eq!(changed.len(), 4, "state / envelope / timeline / thread");
+    let summary = pipeline
+        .ingest_changed_keys(IndexScopeKind::PublicTopic, "rust", &replica, &changed)
+        .await?;
+    assert_eq!(
+        (
+            summary.scanned,
+            summary.indexed,
+            summary.scans_fresh,
+            summary.scans_reused
+        ),
+        (1, 1, 1, 0),
+        "only the changed object is read; the other two are not revisited"
+    );
+    assert_eq!(provider.subjects().len(), 3);
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &third));
+    Ok(())
+}
+
+/// #1065 TR-2: 索引に影響しない key だけの batch は ingest を起こさない。
+#[tokio::test]
+async fn non_indexing_change_keys_do_not_ingest() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let (object_id, _, _, _, written) =
+        persist_client_post(&docs, &replica, &topic, "already indexed").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service(store.clone());
+    let (pipeline, _, _) = pipeline_with(&docs, &projection, (service, store));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(provider.subjects().len(), 1);
+
+    let index_only: Vec<String> = written
+        .iter()
+        .filter(|key| key.starts_with("indexes/"))
+        .cloned()
+        .collect();
+    let reaction_only = vec![
+        stable_key("reactions", &format!("{object_id}/r1/state")),
+        stable_key("reactions", &format!("{object_id}/r1/envelope")),
+        stable_key("envelopes", "reaction-envelope-id"),
+    ];
+    let others = vec![
+        stable_key("sessions/live", "s1/state"),
+        stable_key("sessions/game", "g1/state"),
+        stable_key("channels", "metadata"),
+        stable_key("channels/participants", "p1/envelope"),
+        stable_key("metaverse/dome-deletions", "h1/state"),
+    ];
+    for batch in [index_only, reaction_only, others] {
+        let summary = pipeline
+            .ingest_changed_keys(IndexScopeKind::PublicTopic, "rust", &replica, &batch)
+            .await?;
+        assert_eq!(
+            summary,
+            kukuri_cn_indexer::ingest::IngestSummary::default(),
+            "batch {batch:?} must not ingest"
+        );
+    }
+    assert_eq!(provider.subjects().len(), 1);
+    Ok(())
+}
+
+/// #1065 TR-4: 撤回 key と索引 key が同じ batch に入っても対象 object を de-index する。
+#[tokio::test]
+async fn withdrawal_with_index_keys_still_deindexes() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    let (object_id, keys, envelope, _, written) =
+        persist_client_post(&docs, &replica, &topic, "withdrawn with index keys").await;
+
+    let (allow, store) = allow_service();
+    let (pipeline, entries, _) = pipeline_with(&docs, &projection, (allow, store));
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert!(entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+
+    let withdrawal = kukuri_core::build_post_withdrawal_envelope(
+        &keys,
+        &envelope,
+        1,
+        None,
+        kukuri_core::WithdrawalReasonVisibility::Public,
+        Some(kukuri_core::PostWithdrawalReason::AuthorRequest),
+    )?;
+    let withdrawal_key = stable_key("withdrawals", &format!("{object_id}/state"));
+    docs.apply_doc_op(
+        &replica,
+        DocOp::SetJson {
+            key: withdrawal_key.clone(),
+            value: serde_json::to_value(&withdrawal)?,
+        },
+    )
+    .await?;
+
+    let mut batch: Vec<String> = written
+        .iter()
+        .filter(|key| key.starts_with("indexes/"))
+        .cloned()
+        .collect();
+    batch.push(withdrawal_key);
+    batch.sort();
+    let summary = pipeline
+        .ingest_changed_keys(IndexScopeKind::PublicTopic, "rust", &replica, &batch)
+        .await?;
+    assert_eq!((summary.scanned, summary.deindexed), (1, 1));
+    assert!(!entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id));
+    assert!(
+        !projection
+            .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+            .await?
+    );
+    Ok(())
+}
+
+/// #1065 TR-3: 未登録 key を含む batch は scope 全体へ倒れ、回数と理由（識別子を含まない）を記録する。
+#[tokio::test]
+async fn unregistered_change_key_falls_back_to_whole_scope_and_is_observed() -> Result<()> {
+    let docs = Arc::new(MemoryDocsSync::default());
+    let projection = Arc::new(MemoryIndexProjection::new());
+    let topic = TopicId::new("rust");
+    let replica = topic_replica_id("rust");
+    persist_post(&docs, &replica, &topic, "first").await;
+    let (second, _, _, _, written) = persist_client_post(&docs, &replica, &topic, "second").await;
+
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let (service, provider) = recording_service(store.clone());
+    let metrics = Arc::new(kukuri_cn_indexer::state::IndexerRuntimeState::default());
+    let (pipeline, _, _) = pipeline_with(&docs, &projection, (service, store));
+    let pipeline = pipeline.with_metrics(metrics.clone());
+    pipeline
+        .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+        .await?;
+    assert_eq!(provider.subjects().len(), 2);
+
+    // 投稿 1 件分の key だけなら全体見直しは起きず、観測値も増えない。
+    pipeline
+        .ingest_changed_keys(IndexScopeKind::PublicTopic, "rust", &replica, &written)
+        .await?;
+    let snapshot = metrics.snapshot();
+    assert_eq!(snapshot.event_whole_scope_fallbacks, 0);
+    assert_eq!(snapshot.last_whole_scope_fallback_reason, None);
+
+    let mut batch = written.clone();
+    batch.push(format!("future-feature/{second}/state"));
+    let summary = pipeline
+        .ingest_changed_keys(IndexScopeKind::PublicTopic, "rust", &replica, &batch)
+        .await?;
+    assert_eq!(
+        (summary.scanned, summary.scans_reused),
+        (2, 2),
+        "whole scope is revisited"
+    );
+    let snapshot = metrics.snapshot();
+    assert_eq!(snapshot.event_whole_scope_fallbacks, 1);
+    assert_eq!(
+        snapshot.last_whole_scope_fallback_reason.as_deref(),
+        Some("unregistered:future-feature")
+    );
+
+    // media manifest も全体見直しの契機として記録される。
+    pipeline
+        .ingest_changed_keys(
+            IndexScopeKind::PublicTopic,
+            "rust",
+            &replica,
+            &[stable_key("manifests/media", "m1/envelope")],
+        )
+        .await?;
+    let snapshot = metrics.snapshot();
+    assert_eq!(snapshot.event_whole_scope_fallbacks, 2);
+    assert_eq!(
+        snapshot.last_whole_scope_fallback_reason.as_deref(),
+        Some("manifests/media")
+    );
+    assert_eq!(provider.subjects().len(), 2);
     Ok(())
 }

@@ -65,6 +65,12 @@ pub struct IndexerStateSnapshot {
     /// 近似値。#1050）。
     #[serde(default)]
     pub last_index_lag_secs: Option<i64>,
+    /// 変更通知の key から対象 object を特定できず scope 全体の見直しへ倒した回数の累計（#1065）。
+    #[serde(default)]
+    pub event_whole_scope_fallbacks: u64,
+    /// 直近の全体見直しへ倒した理由（key の種別 prefix。object id 等は含めない。#1065）。
+    #[serde(default)]
+    pub last_whole_scope_fallback_reason: Option<String>,
 }
 
 /// 共有の観測状態。ワーカー・取り込みパイプライン・メディア取得器が更新する。
@@ -91,6 +97,8 @@ pub struct IndexerRuntimeState {
     last_pass_duration_ms: RwLock<Option<u64>>,
     last_event_ingest_duration_ms: RwLock<Option<u64>>,
     last_index_lag_secs: RwLock<Option<i64>>,
+    event_whole_scope_fallbacks: AtomicU64,
+    last_whole_scope_fallback_reason: RwLock<Option<String>>,
 }
 
 impl IndexerRuntimeState {
@@ -190,6 +198,16 @@ impl IndexerRuntimeState {
         self.media_fetch_unavailable.load(Ordering::Relaxed)
     }
 
+    /// 変更通知の取り込みが scope 全体の見直しへ倒れたことと、その理由 prefix を記録する（#1065）。
+    pub fn record_whole_scope_fallback(&self, reason: &str) {
+        self.event_whole_scope_fallbacks
+            .fetch_add(1, Ordering::Relaxed);
+        *self
+            .last_whole_scope_fallback_reason
+            .write()
+            .expect("last_whole_scope_fallback_reason poisoned") = Some(reason.to_string());
+    }
+
     pub fn record_media_fetch_timeout(&self) {
         self.media_fetch_timeout.fetch_add(1, Ordering::Relaxed);
     }
@@ -237,6 +255,12 @@ impl IndexerRuntimeState {
                 .last_index_lag_secs
                 .read()
                 .expect("last_index_lag_secs poisoned"),
+            event_whole_scope_fallbacks: self.event_whole_scope_fallbacks.load(Ordering::Relaxed),
+            last_whole_scope_fallback_reason: self
+                .last_whole_scope_fallback_reason
+                .read()
+                .expect("last_whole_scope_fallback_reason poisoned")
+                .clone(),
         }
     }
 }
@@ -276,6 +300,8 @@ mod tests {
         state.record_media_fetch_timeout();
         state.record_media_fetch_oversize();
         state.record_error(Some("topic::rust"), "boom");
+        state.record_whole_scope_fallback("unregistered:a");
+        state.record_whole_scope_fallback("manifests/media");
 
         let snapshot = state.snapshot();
         assert!(snapshot.worker_running);
@@ -303,6 +329,11 @@ mod tests {
             snapshot.last_index_lag_secs,
             Some(0),
             "negative lag is clamped"
+        );
+        assert_eq!(snapshot.event_whole_scope_fallbacks, 2);
+        assert_eq!(
+            snapshot.last_whole_scope_fallback_reason.as_deref(),
+            Some("manifests/media")
         );
     }
 
@@ -334,6 +365,8 @@ mod tests {
         assert_eq!(snapshot.scans_reused, 0);
         assert_eq!(snapshot.last_pass_duration_ms, None);
         assert_eq!(snapshot.last_index_lag_secs, None);
+        assert_eq!(snapshot.event_whole_scope_fallbacks, 0);
+        assert_eq!(snapshot.last_whole_scope_fallback_reason, None);
     }
 
     #[test]
@@ -347,5 +380,7 @@ mod tests {
         assert!(json.get("last_sync_at").is_some());
         assert!(json.get("provider_unavailable").is_some());
         assert!(json.get("media_fetch_timeout").is_some());
+        assert!(json.get("event_whole_scope_fallbacks").is_some());
+        assert!(json.get("last_whole_scope_fallback_reason").is_some());
     }
 }

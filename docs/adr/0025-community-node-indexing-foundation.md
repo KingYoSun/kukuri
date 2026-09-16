@@ -384,8 +384,24 @@ fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装し�
 - 変更通知（DocEvent）駆動の取り込みは、変更 key に対応する object（`objects/<id>/…` と
   `withdrawals/<id>/state`）だけを処理し、対象を特定できない key は scope 全体の見直しへ倒す。
   300 秒の全件見直しは reconciliation として不変。
+- 変更 key は共有 replica の key 種別表（`kukuri_docs_sync::SharedReplicaKeyFamily`、#1065）で分類する。
+
+  | 種別 | prefix | 取り込み |
+  | --- | --- | --- |
+  | 投稿 object / 撤回 | `objects/`、`withdrawals/` | 当該 object だけ |
+  | media manifest | `manifests/media/` | scope 全体（参照元 object を特定しない） |
+  | 索引・reaction・envelope・session・channel・metaverse | `indexes/timeline/`、`indexes/thread/`、`reactions/`、`envelopes/`、`sessions/`、`channels/`、`metaverse/` | 無視 |
+  | 未登録 | それ以外 | scope 全体 |
+
+  無視できる種別は indexer が読む種別（`objects/`・`withdrawals/`・`manifests/media/`）と交わらない。
+  種別の追加は cn-indexer の `key_disposition` で取り込み方の判断を強制する（ワイルドカードを置かない）。
+  scope 全体へ倒した回数と直近の理由（種別 prefix。識別子は含めない）は `/v1/status` の
+  `event_whole_scope_fallbacks` / `last_whole_scope_fallback_reason` に出す。
 - contract: `second_pass_with_unchanged_content_performs_no_provider_calls`、
   `held_verdict_is_never_reused`、`rescan_with_same_key_updates_signal_instead_of_inserting`、
   `cleared_signal_with_same_key_is_not_resurrected`、
   `identical_rescan_emits_no_new_event_but_verdict_change_does`、
-  `dedupe_migration_compresses_duplicates_keeping_referenced_disputed_and_oldest`。
+  `dedupe_migration_compresses_duplicates_keeping_referenced_disputed_and_oldest`、
+  `client_post_change_keys_ingest_only_that_object`、`non_indexing_change_keys_do_not_ingest`、
+  `ignored_key_families_never_include_what_the_indexer_reads`、
+  `shared_replica_writes_use_only_registered_key_families`（app-api）。

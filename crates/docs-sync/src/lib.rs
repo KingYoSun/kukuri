@@ -1,5 +1,6 @@
 mod access;
 mod iroh_sync;
+mod keys;
 mod memory;
 
 mod replicas;
@@ -8,6 +9,7 @@ mod tests;
 mod types;
 
 pub use iroh_sync::IrohDocsSync;
+pub use keys::SharedReplicaKeyFamily;
 pub use memory::MemoryDocsSync;
 
 pub use replicas::{

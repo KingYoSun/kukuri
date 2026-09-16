@@ -30,7 +30,7 @@ use kukuri_cn_safety_runtime::{
     MemorySafetyArtifactStore, SafetyOrchestrator, SafetyScanService,
     Secp256k1ModerationEventSigner,
 };
-use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
+use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope, timeline_sort_key};
 use kukuri_docs_sync::{
     DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync, stable_key,
 };
@@ -136,6 +136,25 @@ async fn persist_post(
     )
     .await
     .expect("envelope op");
+    // 実クライアント（app-api `persist_post_object`）は索引 key も同時に書く（#1065）。
+    let sort_key = timeline_sort_key(object.created_at, &object.object_id);
+    for key in [
+        stable_key("indexes/timeline", &format!("{sort_key}/{object_id}")),
+        stable_key(
+            "indexes/thread",
+            &format!("{object_id}/{sort_key}/{object_id}"),
+        ),
+    ] {
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key,
+                value: serde_json::json!({ "object_id": object_id }),
+            },
+        )
+        .await
+        .expect("index op");
+    }
     object_id
 }
 
@@ -662,6 +681,9 @@ async fn worker_event_ingest_processes_only_changed_object_and_records_metrics()
         snapshot.scans_fresh, 2,
         "only the new object reached the provider"
     );
+    // #1065: 索引 key を含む実クライアントの key 集合でも全体見直しへ倒れない。
+    assert_eq!(snapshot.event_whole_scope_fallbacks, 0);
+    assert_eq!(snapshot.last_whole_scope_fallback_reason, None);
     assert_eq!(snapshot.scans_reused, 0);
 
     handle.shutdown().await;
