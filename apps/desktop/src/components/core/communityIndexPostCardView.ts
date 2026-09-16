@@ -4,11 +4,11 @@ import type {
   CommunityIndexResolvedPostView,
   IndexEntryView,
 } from '@/lib/api';
-import { isAdultLabeledPost } from '@/shell/media';
+import { isAdultLabeledPost, primaryContentAdvisory } from '@/shell/media';
 import { authorDisplayLabel, resolveProfilePictureSrc } from '@/shell/presentation';
 import { buildPostMediaView } from '@/shell/viewModels/postMediaView';
 
-import type { PostCardView } from './types';
+import type { ContentAdvisoryView, PostCardView } from './types';
 
 export type CommunityIndexOperation = 'search' | 'discovery' | 'recommendations';
 
@@ -25,6 +25,8 @@ type CommunityIndexPostCardViewOptions = {
   /// #1052: 解決済み投稿の添付メディアをタイムラインと同じ規則で組み立てるために使う。
   unsupportedVideoManifests?: Record<string, true>;
   locale?: string | null;
+  /// #1055: index を返した node の manifest 表示名。取得できていなければ null を渡す。
+  nodeName?: string | null;
 };
 
 function audienceLabel(entry: IndexEntryView): string {
@@ -131,14 +133,43 @@ export function communityIndexPostCardView(
       };
 
   // #858: canonical post の top-level / quote / reply-preview labels を検索でも共有する。
-  const adultContentGated =
-    !options.adultContentEnabled && resolvedPost !== null && isAdultLabeledPost(resolvedPost);
+  // #1055: 第 2 のラベル源として、index を返した設定済み node が発行した content advisory も
+  // 同じゲートへ合成する(ADR 0046 §6.1)。desktop-runtime が issuer 照合済みの advisory だけを
+  // 渡すため、ここでは採用可否を再判定しない。advisory は canonical 解決の前後で変わらないので、
+  // 解決済みになっても代替表示を維持する。
+  const advisory = primaryContentAdvisory(entry.content_advisories);
+  const selfLabeled = resolvedPost !== null && isAdultLabeledPost(resolvedPost);
+  const adultContentGated = !options.adultContentEnabled && (selfLabeled || advisory !== null);
+  // advisory は投稿の canonical でも署名対象でもないため `content_labels` へ書き戻さない。
+  // 表示用の説明だけを別欄で運ぶ(`content_advisories_are_separate_from_signed_content_labels`)。
+  // 両方あるときは投稿者自身の申告を根拠として示す(利用者にとって強い根拠であり、
+  // node への申し立て対象でもない)。advisory の説明は別途添える。
+  const gatedBy = adultContentGated ? (selfLabeled ? 'self_label' : 'advisory') : undefined;
+  const contentAdvisory: ContentAdvisoryView | null =
+    adultContentGated && advisory
+      ? {
+          issuerNodeId: advisory.issuer_node_id,
+          nodeBaseUrl: options.nodeBaseUrl,
+          nodeName: options.nodeName ?? null,
+          category: advisory.category,
+          label: advisory.label,
+          confidence: advisory.confidence ?? null,
+          basis: advisory.basis,
+          signalId: advisory.signal_id,
+          subjectKind: advisory.subject_kind,
+          subjectId: advisory.subject_id,
+        }
+      : null;
 
   return {
     post: displayPost,
     actionPost: resolvedPost,
     context: 'timeline',
     adultContentGated,
+    gatedBy,
+    // #1055: canonical 解決前は隠すべき本文がまだ無い。代替表示にしつつ待機文言を保つ。
+    gatedBodyText: resolvedPost === null ? displayPost.content : null,
+    contentAdvisory,
     authorLabel,
     authorPicture: knownAuthor
       ? resolveProfilePictureSrc(knownAuthor, options.mediaObjectUrls)
@@ -158,6 +189,7 @@ export function communityIndexPostCardView(
     // 描画されない(推測補完しない)。解決済みだけがタイムラインと同じ表示になる。
     media: buildPostMediaView(displayPost, {
       adultContentGated,
+      gatedBy,
       locale: options.locale ?? i18n.resolvedLanguage ?? null,
       mediaObjectUrls: options.mediaObjectUrls,
       unsupportedVideoManifests: options.unsupportedVideoManifests ?? {},

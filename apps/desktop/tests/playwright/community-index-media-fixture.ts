@@ -8,6 +8,8 @@ import { WORKSPACE_LAYOUT_STORAGE_KEY } from '../../src/shell/workspacePersisten
 
 export const OBJECT_ID = 'explore-media-post';
 const IMAGE_HASH = 'b'.repeat(64);
+// #1055: 発行 node の manifest `node_id`(署名鍵の x-only 公開鍵 hex)。
+const ADVISORY_ISSUER_NODE_ID = 'd'.repeat(64);
 const AUTHOR_PUBKEY = 'a'.repeat(64);
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAABmklEQVR42u3E0YaQYQBF0f04SZIkSZIkSZIkSZIkSZIkI0lGkowkSZIkSUaSjCQZSTKSZCTJJ0l6jb/zFvvmXKzFipkxlYeVqTysSuVhdSoPa1J5WJvKw7pUHtan8rBhdkzlYWMqD5tSedicysOWVB62pvKwLZWH7ak87JgbU3nYmcrDrlQedqfysCeVh72pPOxL5WF/Kg8H7oypPBxM5eFQKg+HU3k4ksrD0VQejqXycDyVhxMPx1QeTqbycCqVh9OpPJxJ5eFsKg/nUnk4n8rDzPyYysOFVB4upvJwKZWHy6k8zKbycCWVh6upPFxbGFN5uJ7Kw1wqDzdSebiZysOtVB5up/JwJ5WHu4tjKg/3Unm4n8rDg1QeHqby8CiVh8epPDxJ5eHp0pjKw3wqD89SeXieysOLVB5epvKwkMrDq1QeXi+PqTy8SeXhbSoPi6k8vEvl4X0qDx9SefiYysPSGFN5+JTKw+dUHr6k8vA1lYflVB6+pfLwPZWHH//GVB5+pvIwUnn4lcrD71Qe/qTy8DeVh3+pPP8B+DNqc6Zh66kAAAAASUVORK5CYII=';
 export const SHOT_PREFIX = process.env.KUKURI_1052_SHOT_PREFIX ?? 'after';
@@ -17,9 +19,14 @@ export type SeedOptions = {
   locale: 'ja' | 'en';
   theme: 'dark' | 'light';
   adultLabeled?: boolean;
+  /// #1055: 設定済み Community Node が発行した content advisory を index 応答へ載せる。
+  advisoryLabeled?: boolean;
 };
 
-export async function seedExploreMedia(page: Page, { locale, theme, adultLabeled = false }: SeedOptions) {
+export async function seedExploreMedia(
+  page: Page,
+  { locale, theme, adultLabeled = false, advisoryLabeled = false }: SeedOptions
+) {
   const scope = { topicId: 'kukuri:topic:general', channelId: null };
   const columns = (['timeline', 'explore'] as const).map((kind) => ({
     id: columnIdentityId(kind, scope),
@@ -30,7 +37,19 @@ export async function seedExploreMedia(page: Page, { locale, theme, adultLabeled
   }));
 
   await page.addInitScript(
-    ({ locale, theme, adultLabeled, columns, layoutKey, objectId, imageHash, authorPubkey, png }) => {
+    ({
+      locale,
+      theme,
+      adultLabeled,
+      advisoryLabeled,
+      columns,
+      layoutKey,
+      objectId,
+      imageHash,
+      authorPubkey,
+      issuerNodeId,
+      png,
+    }) => {
       localStorage.setItem('kukuri.desktop.locale', locale);
       localStorage.setItem('kukuri.desktop.theme', theme);
       localStorage.setItem(
@@ -91,7 +110,20 @@ export async function seedExploreMedia(page: Page, { locale, theme, adultLabeled
             author_pubkey: authorPubkey,
             text: 'indexed text',
             created_at: 1_700_000_000,
-            content_advisories: [],
+            content_advisories: advisoryLabeled
+              ? [
+                  {
+                    issuer_node_id: issuerNodeId,
+                    subject_kind: 'blob_cid',
+                    subject_id: imageHash,
+                    category: 'nsfw',
+                    label: 'adult',
+                    confidence: 84,
+                    signal_id: 'signal-1',
+                    basis: 'classifier_score',
+                  },
+                ]
+              : [],
           };
           const queryResponse = async () => ({ entries: [entry] });
           api.searchCommunityNodeIndex = queryResponse;
@@ -115,6 +147,39 @@ export async function seedExploreMedia(page: Page, { locale, theme, adultLabeled
           });
           api.getBlobMediaPayload = async (hash: string, mime: string) =>
             hash === imageHash ? { bytes_base64: png, mime } : null;
+          if (advisoryLabeled) {
+            api.fetchCommunityNodeManifest = async () => ({
+              status: 'ok',
+              manifest: {
+                node_id: issuerNodeId,
+                node_name: 'index.kukuri.example',
+                node_role: 'default-onboarding-node',
+                server_name: 'index.kukuri.example',
+                manifest_version: 'v1',
+                capability_scope: {
+                  available_enabled: ['community_index', 'community_local_trust'],
+                  planned_enabled: [],
+                },
+                authority_scope: {
+                  applies_to: [
+                    'communities_indexed_by_this_node',
+                    'trust_signals_issued_by_this_node',
+                  ],
+                  does_not_apply_to: ['kukuri_network_as_a_whole'],
+                },
+                p2p_boundary: {
+                  identity_authority: false,
+                  profile_canonical_store: false,
+                  social_graph_canonical_store: false,
+                  content_truth_source: false,
+                  network_wide_authority: false,
+                },
+                abuse_contact: 'abuse@index.kukuri.example',
+                report_endpoint: 'https://index.kukuri.example/v1/report',
+                terms_url: 'https://index.kukuri.example/terms',
+              },
+            });
+          }
         },
       });
     },
@@ -122,11 +187,13 @@ export async function seedExploreMedia(page: Page, { locale, theme, adultLabeled
       locale,
       theme,
       adultLabeled,
+      advisoryLabeled,
       columns,
       layoutKey: WORKSPACE_LAYOUT_STORAGE_KEY,
       objectId: OBJECT_ID,
       imageHash: IMAGE_HASH,
       authorPubkey: AUTHOR_PUBKEY,
+      issuerNodeId: ADVISORY_ISSUER_NODE_ID,
       png: PNG_BASE64,
     }
   );

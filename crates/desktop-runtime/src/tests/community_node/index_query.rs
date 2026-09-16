@@ -2,10 +2,13 @@ use super::super::*;
 use axum::extract::Query;
 use axum::http::{Uri, header::RETRY_AFTER};
 use kukuri_cn_protocol::{
-    ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
-    IndexingRequestStatus, IndexingRequestView, IndexingStatusParams, IndexingStatusResponse,
-    IndexingTargetStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
+    AdvisorySubjectKind, ApiErrorBody, Basis, ContentAdvisory, IndexEntryView, IndexQueryParams,
+    IndexQueryResponse, IndexScopeKind, IndexingRequestStatus, IndexingRequestView,
+    IndexingStatusParams, IndexingStatusResponse, IndexingTargetStatus, SafetyCategory,
+    SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
+
+mod content_advisory;
 
 pub(super) type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
 /// #975: 索引状況読取りの (query, 所属証明ヘッダ) 記録。
@@ -22,6 +25,41 @@ pub(super) struct MockIndexQueryState {
     pub(super) unauthorized_remaining: Arc<AtomicUsize>,
     pub(super) response_object_id: Arc<Mutex<String>>,
     pub(super) response_author_pubkey: Arc<Mutex<String>>,
+    /// #1055: index entry へ同梱する content advisory。
+    pub(super) response_advisories: Arc<Mutex<Vec<ContentAdvisory>>>,
+    /// #1055: `/v1/node/manifest` が返す node_id。`None` は manifest 未公開(404)。
+    pub(super) manifest_node_id: Arc<Mutex<Option<String>>>,
+    pub(super) manifest_hits: Arc<AtomicUsize>,
+}
+
+/// #1055: index を返した node の manifest。advisory の issuer 照合に使う。
+async fn mock_index_manifest(State(state): State<MockIndexQueryState>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    state.manifest_hits.fetch_add(1, Ordering::SeqCst);
+    let Some(node_id) = state.manifest_node_id.lock().await.clone() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    Json(serde_json::json!({
+        "node_id": node_id,
+        "node_name": "index-node.example",
+        "manifest_version": "v1",
+    }))
+    .into_response()
+}
+
+/// #1055: 検証に使う advisory。既定は issuer 一致・`adult` ラベルの blob 対象。
+pub(super) fn blob_advisory(issuer_node_id: &str, blob_hash: &str) -> ContentAdvisory {
+    ContentAdvisory {
+        issuer_node_id: issuer_node_id.to_string(),
+        subject_kind: AdvisorySubjectKind::BlobCid,
+        subject_id: blob_hash.to_string(),
+        category: SafetyCategory::Nsfw,
+        label: "adult".to_string(),
+        confidence: Some(84),
+        signal_id: "signal-1".to_string(),
+        basis: Basis::ClassifierScore,
+    }
 }
 
 async fn mock_indexing_request(
@@ -205,7 +243,7 @@ async fn mock_index_query(
             author_pubkey: state.response_author_pubkey.lock().await.clone(),
             text: "hello\nderived-tag".to_string(),
             created_at: 42,
-            content_advisories: Vec::new(),
+            content_advisories: state.response_advisories.lock().await.clone(),
         }],
     })
     .into_response()
@@ -249,6 +287,9 @@ pub(super) async fn index_runtime(
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
         response_object_id: Arc::new(Mutex::new("post-1".to_string())),
         response_author_pubkey: Arc::new(Mutex::new("author".to_string())),
+        response_advisories: Arc::new(Mutex::new(Vec::new())),
+        manifest_node_id: Arc::new(Mutex::new(Some(INDEX_NODE_ID.to_string()))),
+        manifest_hits: Arc::new(AtomicUsize::new(0)),
     };
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
@@ -268,6 +309,7 @@ pub(super) async fn index_runtime(
         .route("/v1/index/recommendations", get(mock_index_query))
         .route("/v1/indexing/requests", post(mock_indexing_request))
         .route("/v1/indexing/status", get(mock_indexing_status))
+        .route("/v1/node/manifest", get(mock_index_manifest))
         .route(
             "/v1/rendezvous/topics/heartbeat",
             post(mock_index_rendezvous),
@@ -300,6 +342,11 @@ pub(super) async fn index_runtime(
     seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     (runtime, base_url, managed, index, server, dir)
 }
+
+/// #1055: mock node の署名鍵 x-only 公開鍵 hex 相当(manifest `node_id`)。
+pub(super) const INDEX_NODE_ID: &str =
+    "1111111111111111111111111111111111111111111111111111111111111111";
+const ADVISORY_BLOB_HASH: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 
 fn scoped_request(base_url: &str) -> CommunityNodeIndexQueryRequest {
     CommunityNodeIndexQueryRequest {

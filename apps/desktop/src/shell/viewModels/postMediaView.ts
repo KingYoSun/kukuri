@@ -11,6 +11,8 @@ export type BuildPostMediaViewOptions = {
   mediaObjectUrls: Record<string, string | null>;
   /// #858: 表示許可前の成人向けラベル付き投稿。取得済み object URL があっても参照しない。
   adultContentGated: boolean;
+  /// #1055: ゲートの判定元。Community Node の advisory 由来なら代替表示の文言を変える。
+  gatedBy?: 'self_label' | 'advisory';
   unsupportedVideoManifests: Record<string, true>;
   locale?: string | null;
 };
@@ -20,6 +22,7 @@ export function buildPostMediaView(
   {
     mediaObjectUrls,
     adultContentGated,
+    gatedBy,
     unsupportedVideoManifests,
     locale,
   }: BuildPostMediaViewOptions
@@ -84,6 +87,7 @@ export function buildPostMediaView(
     objectId: post.object_id,
     kind: mediaKind,
     extraAttachmentCount,
+    gatedBy: adultContentGated && mediaKind !== null ? gatedBy ?? 'self_label' : undefined,
     state:
       adultContentGated && mediaKind !== null
         ? 'gated'

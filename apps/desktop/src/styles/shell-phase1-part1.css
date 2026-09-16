@@ -827,6 +827,59 @@
   color: var(--destructive);
 }
 
+/* #1055: Community Node の content advisory による代替表示の説明。断定表現を避け、
+   発行元と根拠を同じカード内で読めるようにする(ADR 0046 §6.3)。 */
+.post-advisory-note {
+  display: grid;
+  gap: var(--space-2xs);
+  margin-top: var(--space-2xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-panel-muted);
+  min-width: 0;
+}
+
+.post-advisory-title {
+  color: var(--foreground);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+
+.post-advisory-facts {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  min-width: 0;
+}
+
+.post-advisory-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-sm);
+  min-width: 0;
+}
+
+.post-advisory-facts dt {
+  color: var(--muted-foreground-soft);
+  font-size: var(--text-caption);
+}
+
+.post-advisory-facts dd {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.post-advisory-issuer-id {
+  margin-left: var(--space-2xs);
+  color: var(--muted-foreground-soft);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
 .post-list,
 .thread-tree {
   display: grid;

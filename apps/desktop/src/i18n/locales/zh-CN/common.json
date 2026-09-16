@@ -131,7 +131,8 @@
     "reposted": "已转发",
     "repostedBy": "{{author}} 已转发",
     "withdrawnPost": "此帖子已被发帖用户撤回。",
-    "adultContentHidden": "该帖子被发布者标记为成人内容。在设置中启用成人内容显示后即可查看。"
+    "adultContentHidden": "该帖子被发布者标记为成人内容。在设置中启用成人内容显示后即可查看。",
+    "advisoryContentHidden": "您配置的 Community Node 推测该帖子可能包含成人内容。在设置中启用成人内容显示后即可查看。"
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"
@@ -199,7 +200,8 @@
     "unsupportedOnClient": "此客户端不支持",
     "video": "视频",
     "videoPosterAlt": "视频预览",
-    "adultGated": "发布者标记为成人内容的媒体。在设置中启用显示后才会加载。"
+    "adultGated": "发布者标记为成人内容的媒体。在设置中启用显示后才会加载。",
+    "advisoryGated": "Community Node 推测该媒体可能包含成人内容。在设置中启用显示后即可加载。"
   },
   "reactions": {
     "custom": "自定义",
@@ -234,5 +236,25 @@
     "unknown": "未知",
     "waiting": "等待中",
     "yes": "是"
+  },
+  "advisory": {
+    "title": "Community Node 的推测",
+    "description": "这是 {{node}} 做出的推测，既不是发布者的自我标记，也不是 kukuri 网络整体的判定。",
+    "issuer": "发出节点",
+    "category": "分类",
+    "confidence": "置信度",
+    "confidenceValue": "{{value}}（满分 100）",
+    "basis": "依据",
+    "appeal": "提出异议",
+    "categoryValue": {
+      "nsfw": "可能的性相关内容",
+      "objectionable": "可能的不适内容"
+    },
+    "basisValue": {
+      "classifier_score": "自动分类分数",
+      "known_hash_match": "已知哈希匹配",
+      "provider_verdict": "提供方判定",
+      "local_policy": "节点本地策略"
+    }
   }
 }

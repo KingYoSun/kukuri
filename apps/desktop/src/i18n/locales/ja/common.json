@@ -131,7 +131,8 @@
     "reposted": "リポスト",
     "repostedBy": "{{author}}さんがリポスト",
     "withdrawnPost": "この投稿は投稿者により撤回されました。",
-    "adultContentHidden": "この投稿は投稿者により成人向けとして申告されています。設定で成人向け表現の表示を有効にすると表示されます。"
+    "adultContentHidden": "この投稿は投稿者により成人向けとして申告されています。設定で成人向け表現の表示を有効にすると表示されます。",
+    "advisoryContentHidden": "この投稿は、設定済みのコミュニティノードにより成人向けの可能性があると推定されています。設定で成人向け表現の表示を有効にすると表示されます。"
   },
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"
@@ -199,7 +200,8 @@
     "unsupportedOnClient": "このクライアントでは未対応です",
     "video": "動画",
     "videoPosterAlt": "動画プレビュー",
-    "adultGated": "成人向けとして申告されたメディアです。設定で表示を有効にすると読み込まれます。"
+    "adultGated": "成人向けとして申告されたメディアです。設定で表示を有効にすると読み込まれます。",
+    "advisoryGated": "コミュニティノードが成人向けの可能性を推定したメディアです。設定で表示を有効にすると読み込まれます。"
   },
   "reactions": {
     "custom": "カスタム",
@@ -234,5 +236,25 @@
     "unknown": "不明",
     "waiting": "待機中",
     "yes": "はい"
+  },
+  "advisory": {
+    "title": "コミュニティノードによる推定",
+    "description": "これは {{node}} による推定であり、投稿した人自身の申告でも、kukuri ネットワーク全体の判断でもありません。",
+    "issuer": "発行ノード",
+    "category": "分類",
+    "confidence": "確信度",
+    "confidenceValue": "{{value}}（100 点中）",
+    "basis": "根拠",
+    "appeal": "異議を申し立てる",
+    "categoryValue": {
+      "nsfw": "性的表現の可能性",
+      "objectionable": "不快・有害表現の可能性"
+    },
+    "basisValue": {
+      "classifier_score": "自動分類のスコア",
+      "known_hash_match": "既知ハッシュの一致",
+      "provider_verdict": "提供元の判定",
+      "local_policy": "ノードのローカル方針"
+    }
   }
 }

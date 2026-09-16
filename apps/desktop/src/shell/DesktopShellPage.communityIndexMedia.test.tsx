@@ -31,12 +31,22 @@ function indexedImagePost(overrides?: Partial<PostView>): PostView {
   });
 }
 
-function createIndexedApi(post: PostView): DesktopApi {
+// #1055: desktop-runtime が issuer 照合を済ませた advisory だけが client へ届く。
+const ADVISORY_ISSUER_NODE_ID = 'd'.repeat(64);
+
+function createIndexedApi(post: PostView, withAdvisory = false): DesktopApi {
   const api = createDesktopMockApi({
     seedPosts: {
       [INDEXED_TOPIC]: [post],
     },
   });
+  if (withAdvisory) {
+    // mock の `listProfileTimeline` は著者で絞らずに seed 済み投稿を返すため、Explore 以外の
+    // 経路からも同じ添付がプリフェッチ対象になってしまう。advisory は index 応答でしか
+    // 判明せず、C3 の対象は「見つける」経路であるため、ここでは他経路を空にして分離する
+    // (タイムライン経路の合成は C4 = #1056。Rust 側の取得ゲートは経路によらず効く)。
+    vi.spyOn(api, 'listProfileTimeline').mockResolvedValue({ items: [], next_cursor: null });
+  }
   vi.spyOn(api, 'searchCommunityNodeIndex').mockResolvedValue({
     entries: [
       {
@@ -46,7 +56,20 @@ function createIndexedApi(post: PostView): DesktopApi {
         author_pubkey: post.author_pubkey,
         text: 'indexed text',
         created_at: 1,
-        content_advisories: [],
+        content_advisories: withAdvisory
+          ? [
+              {
+                issuer_node_id: ADVISORY_ISSUER_NODE_ID,
+                subject_kind: 'blob_cid',
+                subject_id: IMAGE_HASH,
+                category: 'nsfw',
+                label: 'adult',
+                confidence: 84,
+                signal_id: 'signal-1',
+                basis: 'classifier_score',
+              },
+            ]
+          : [],
       },
     ],
   });
@@ -150,4 +173,54 @@ test('enabling adult display renders Explore media and disabling clears it again
   expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === IMAGE_HASH)).toHaveLength(
     callsBeforeDisable
   );
+});
+
+// #1055 / AC-3 / INVAR-3: 投稿者の自己申告が無くても、設定済み Community Node の advisory が
+// 付いた添付は表示設定 OFF の間 bytes を要求しない。プレースホルダーと説明だけを出す。
+test('advisory-labeled Explore results stay gated and never request their media', async () => {
+  const user = userEvent.setup();
+  const api = createIndexedApi(indexedImagePost(), true);
+  const getBlobMediaPayload = vi.fn(api.getBlobMediaPayload);
+  api.getBlobMediaPayload = getBlobMediaPayload;
+
+  const explore = await openExploreResults(user, api);
+
+  expect(await within(explore).findByTestId(`media-adult-gated-${OBJECT_ID}`)).toBeInTheDocument();
+  expect(
+    await within(explore).findByTestId(`post-advisory-gated-${OBJECT_ID}`)
+  ).toBeInTheDocument();
+  expect(within(explore).queryByText('explore image caption')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === IMAGE_HASH)).toHaveLength(0);
+  });
+});
+
+// #1055 / TR-4: 表示設定 ON で advisory 付きメディアを取得し、OFF へ戻すと取得を止めて破棄する。
+test('enabling adult display renders advisory Explore media and disabling clears it again', async () => {
+  const user = userEvent.setup();
+  const api = createIndexedApi(indexedImagePost(), true);
+  const getBlobMediaPayload = vi.fn(api.getBlobMediaPayload);
+  api.getBlobMediaPayload = getBlobMediaPayload;
+
+  const explore = await openExploreResults(user, api);
+  expect(await within(explore).findByTestId(`media-adult-gated-${OBJECT_ID}`)).toBeInTheDocument();
+  expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === IMAGE_HASH)).toHaveLength(0);
+
+  await toggleAdultContentDisplay(user);
+  await waitFor(() => {
+    expect(getBlobMediaPayload.mock.calls.some(([hash]) => hash === IMAGE_HASH)).toBe(true);
+  });
+  expect(
+    await within(exploreColumn()).findByTestId(`media-preview-${OBJECT_ID}`)
+  ).toBeInTheDocument();
+
+  await toggleAdultContentDisplay(user);
+  await waitFor(() => {
+    expect(
+      within(exploreColumn()).queryByTestId(`media-preview-${OBJECT_ID}`)
+    ).not.toBeInTheDocument();
+  });
+  expect(
+    await within(exploreColumn()).findByTestId(`media-adult-gated-${OBJECT_ID}`)
+  ).toBeInTheDocument();
 });

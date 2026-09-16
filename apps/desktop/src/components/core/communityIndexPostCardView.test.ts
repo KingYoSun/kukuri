@@ -5,6 +5,7 @@ import type {
   AttachmentView,
   AuthorSocialView,
   CommunityIndexResolvedPostView,
+  ContentAdvisory,
   IndexEntryView,
   PostView,
 } from '@/lib/api';
@@ -141,6 +142,28 @@ function imageCardView(
     adultContentEnabled: overrides.adultContentEnabled,
     locale: 'en',
   });
+}
+
+// #1055: index を返した node が発行した content advisory(ADR 0028 §8.6)。issuer 照合は
+// desktop-runtime が済ませているため、view fixture では採用済みのものだけを置く。
+const ISSUER_NODE_ID = 'd'.repeat(64);
+
+function blobAdvisory(overrides: Partial<ContentAdvisory> = {}): ContentAdvisory {
+  return {
+    issuer_node_id: ISSUER_NODE_ID,
+    subject_kind: 'blob_cid',
+    subject_id: PRIMARY_IMAGE_HASH,
+    category: 'nsfw',
+    label: 'adult',
+    confidence: 84,
+    signal_id: 'signal-1',
+    basis: 'classifier_score',
+    ...overrides,
+  };
+}
+
+function advisoryEntry(advisories: ContentAdvisory[]): IndexEntryView {
+  return { ...entry, content_advisories: advisories };
 }
 
 beforeEach(async () => {
@@ -394,5 +417,185 @@ describe('communityIndexPostCardView', () => {
     });
     expect(view.canReply).toBe(false);
     expect(view.canRepost).toBe(false);
+  });
+
+  // #1055 / AC-1 / TR-2: 設定済み node の advisory は self-label と同じ代替表示にする。
+  // 添付があるので media も gated になり、preview source を出さない。
+  test('gates advisory-labeled resolved media and exposes the advisory', () => {
+    const view = communityIndexPostCardView(advisoryEntry([blobAdvisory()]), {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search',
+      topicId: null,
+      knownAuthor,
+      resolutionStatus: 'resolved',
+      resolvedEntry: resolvedImageEntry(),
+      mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary' },
+      adultContentEnabled: false,
+      nodeName: 'index-node.example',
+      locale: 'en',
+    });
+
+    expect(view.adultContentGated).toBe(true);
+    expect(view.media.state).toBe('gated');
+    expect(view.media.imagePreviewSrc).toBeNull();
+    expect(view.media.imageGalleryItems).toEqual([]);
+    expect(view.contentAdvisory).toEqual({
+      issuerNodeId: ISSUER_NODE_ID,
+      nodeBaseUrl: 'https://node.example',
+      nodeName: 'index-node.example',
+      category: 'nsfw',
+      label: 'adult',
+      confidence: 84,
+      basis: 'classifier_score',
+      signalId: 'signal-1',
+      subjectKind: 'blob_cid',
+      subjectId: PRIMARY_IMAGE_HASH,
+    });
+    // canonical 解決済みなので待機文言の差し替えは行わない。
+    expect(view.gatedBodyText).toBeNull();
+  });
+
+  // #1055 / INVAR-1: advisory を署名済み `content_labels` へ書き戻さない
+  // (`content_advisories_are_separate_from_signed_content_labels`)。
+  test('content_advisories_are_separate_from_signed_content_labels', () => {
+    const view = communityIndexPostCardView(advisoryEntry([blobAdvisory()]), {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search',
+      topicId: null,
+      knownAuthor,
+      resolutionStatus: 'resolved',
+      resolvedEntry: resolvedImageEntry(),
+      mediaObjectUrls: {},
+      adultContentEnabled: false,
+      locale: 'en',
+    });
+
+    expect(view.post.content_labels).toEqual([]);
+    expect(view.actionPost?.content_labels).toEqual([]);
+    expect(view.adultContentGated).toBe(true);
+  });
+
+  // #1055 / AC-1 / TR-1: canonical 解決前でも advisory だけで代替表示にする。隠すべき本文が
+  // まだ無いので、待機文言を保ったまま gated にする。
+  test('gates an advisory-labeled unresolved entry and keeps the resolving notice', () => {
+    const view = communityIndexPostCardView(advisoryEntry([blobAdvisory()]), {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search',
+      topicId: null,
+      knownAuthor,
+      resolutionStatus: 'loading',
+      resolvedEntry: null,
+      mediaObjectUrls: {},
+      adultContentEnabled: false,
+      locale: 'en',
+    });
+
+    expect(view.adultContentGated).toBe(true);
+    expect(view.gatedBodyText).toBe(i18n.t('shell:communityIndex.contentResolving'));
+    // 未解決 entry は添付を持たないので、メディアそのものが描画対象にならない。
+    expect(view.media.kind).toBeNull();
+    expect(view.contentAdvisory?.signalId).toBe('signal-1');
+  });
+
+  // #1055 / AC-1: 表示設定 ON では advisory があっても通常表示に戻る(ephemeral fetch)。
+  test('renders advisory-labeled media once adult display is enabled', () => {
+    const view = communityIndexPostCardView(advisoryEntry([blobAdvisory()]), {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search',
+      topicId: null,
+      knownAuthor,
+      resolutionStatus: 'resolved',
+      resolvedEntry: resolvedImageEntry(),
+      mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary' },
+      adultContentEnabled: true,
+      locale: 'en',
+    });
+
+    expect(view.adultContentGated).toBe(false);
+    expect(view.media.state).toBe('ready');
+    expect(view.media.imagePreviewSrc).toBe('blob:primary');
+    expect(view.contentAdvisory).toBeNull();
+  });
+
+  // #1055: 未知ラベルの advisory ではゲートしない(前方互換。node が語彙を増やしても
+  // client が勝手に隠さない)。
+  test('ignores advisories with unknown labels', () => {
+    const view = communityIndexPostCardView(
+      advisoryEntry([blobAdvisory({ label: 'experimental-future-label' })]),
+      {
+        nodeBaseUrl: 'https://node.example',
+        operation: 'search',
+        topicId: null,
+        knownAuthor,
+        resolutionStatus: 'resolved',
+        resolvedEntry: resolvedImageEntry(),
+        mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary' },
+        adultContentEnabled: false,
+        locale: 'en',
+      }
+    );
+
+    expect(view.adultContentGated).toBe(false);
+    expect(view.contentAdvisory).toBeNull();
+    expect(view.media.imagePreviewSrc).toBe('blob:primary');
+  });
+
+  // #1055: 説明に出す advisory は添付そのものへの判定(`blob_cid`)を優先する。
+  test('prefers a blob advisory over a post advisory for the explanation', () => {
+    const view = communityIndexPostCardView(
+      advisoryEntry([
+        blobAdvisory({
+          subject_kind: 'post_id',
+          subject_id: entry.object_id,
+          category: 'objectionable',
+          label: 'sensitive',
+          signal_id: 'signal-post',
+        }),
+        blobAdvisory(),
+      ]),
+      {
+        nodeBaseUrl: 'https://node.example',
+        operation: 'search',
+        topicId: null,
+        knownAuthor,
+        resolutionStatus: 'resolved',
+        resolvedEntry: resolvedImageEntry(),
+        mediaObjectUrls: {},
+        adultContentEnabled: false,
+        locale: 'en',
+      }
+    );
+
+    expect(view.contentAdvisory?.subjectKind).toBe('blob_cid');
+    expect(view.contentAdvisory?.signalId).toBe('signal-1');
+  });
+
+  // #1055: `post_id` だけの advisory でも投稿カード全体を代替表示にする(ADR 0046 §6.3)。
+  test('gates the whole card for a post-level advisory', () => {
+    const view = communityIndexPostCardView(
+      advisoryEntry([
+        blobAdvisory({
+          subject_kind: 'post_id',
+          subject_id: entry.object_id,
+          category: 'objectionable',
+          label: 'sensitive',
+        }),
+      ]),
+      {
+        nodeBaseUrl: 'https://node.example',
+        operation: 'search',
+        topicId: null,
+        knownAuthor,
+        resolutionStatus: 'resolved',
+        resolvedEntry: resolvedImageEntry(),
+        mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary' },
+        adultContentEnabled: false,
+        locale: 'en',
+      }
+    );
+
+    expect(view.adultContentGated).toBe(true);
+    expect(view.media.state).toBe('gated');
+    expect(view.contentAdvisory?.label).toBe('sensitive');
   });
 });

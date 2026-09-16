@@ -137,6 +137,43 @@ export const ImageReady: Story = {
   },
 };
 
+// #1055: Community Node の content advisory による代替表示。断定せず推定であることと、
+// 発行元 / 分類 / 確信度 / 根拠を示し、異議申し立てへの導線を持つ(ADR 0046 §6.3)。
+export const AdvisoryGated: Story = {
+  args: {
+    view: createView({
+      adultContentGated: true,
+      gatedBy: 'advisory',
+      contentAdvisory: {
+        issuerNodeId: 'd'.repeat(64),
+        nodeBaseUrl: 'https://index-a.example',
+        nodeName: 'index-a.example',
+        category: 'nsfw',
+        label: 'adult',
+        confidence: 84,
+        basis: 'classifier_score',
+        signalId: 'signal-1',
+        subjectKind: 'blob_cid',
+        subjectId: 'a'.repeat(64),
+      },
+      media: {
+        objectId: 'image-post',
+        kind: 'image',
+        extraAttachmentCount: 0,
+        state: 'gated',
+        gatedBy: 'advisory',
+        metaMime: 'image/png',
+        metaBytesLabel: '2.0 KB',
+        imagePreviewSrc: null,
+        imageGalleryItems: [],
+        videoPosterPreviewSrc: null,
+        videoPlaybackSrc: null,
+        videoUnsupportedOnClient: false,
+      },
+    }),
+  },
+};
+
 export const UnavailableContentAndMedia: Story = {
   args: {
     view: createView({

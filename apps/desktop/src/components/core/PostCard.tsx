@@ -14,7 +14,8 @@ import type {
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
 } from '@/lib/api';
-import { planReportRouting } from '@/lib/api/reportRouting';
+import { planAppealReportRouting, planReportRouting } from '@/lib/api/reportRouting';
+import { PostGatedContent } from './PostAdvisoryNotice';
 import { useReportManifests } from './useReportManifests';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
@@ -38,11 +39,15 @@ import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
-import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
+import {
+  ReportRoutingDialog,
+  type ReportAppealContext,
+  type ReportSubmitInput,
+} from './ReportRoutingDialog';
 import type { ReportRoutingSubject } from './ReportRoutingDialog';
 import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
-import { type PostCardView } from './types';
+import { type ContentAdvisoryView, type PostCardView } from './types';
 
 function sourceAuthorLabel(
   view: PostCardView['post']['repost_of'],
@@ -151,6 +156,9 @@ export function PostCard({
   const [reportProvenance, setReportProvenance] = useState<ContentProvenance | undefined>(
     view.provenance
   );
+  // #1055: Community Node の content advisory に対する異議申し立て。通報と同じ dialog を
+  // appeal mode で使い、対象 risk signal を発行した node だけを送信先候補にする。
+  const [reportAppeal, setReportAppeal] = useState<ReportAppealContext | null>(null);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -229,10 +237,30 @@ export function PostCard({
     fetchManifest: onFetchReportManifest,
   });
   const reportPlan = useMemo(
-    () => planReportRouting(reportProvenance, reportManifests),
-    [reportProvenance, reportManifests]
+    () =>
+      reportAppeal
+        ? planAppealReportRouting(reportAppeal.issuerNodeId, reportManifests)
+        : planReportRouting(reportProvenance, reportManifests),
+    [reportAppeal, reportProvenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport) && (!readOnly || view.allowReadOnlyReport === true);
+
+  /// #1055: content advisory への異議申し立てを、通報と同じ dialog で開く。
+  /// 対象は添付そのものへの判定なら media、投稿への判定なら post(#707 と同じ subject 規則)。
+  const openAdvisoryAppeal = (advisory: ContentAdvisoryView | null | undefined) => {
+    if (!advisory) return;
+    setReportSubject(
+      advisory.subjectKind === 'blob_cid'
+        ? { kind: 'media', id: advisory.subjectId, label: view.authorLabel }
+        : { kind: 'post', id: advisory.subjectId, label: view.authorLabel }
+    );
+    setReportProvenance(view.provenance);
+    setReportAppeal({
+      riskSignalId: advisory.signalId,
+      issuerNodeId: advisory.issuerNodeId,
+    });
+    setReportDialogOpen(true);
+  };
 
   const handleSubmitReport = async (
     input: ReportSubmitInput
@@ -250,6 +278,8 @@ export function PostCard({
       reason,
       details: details.trim() ? details.trim() : null,
       reporter_contact: reporterContact.trim() ? reporterContact.trim() : null,
+      // #1055: 異議申し立ては対象 risk signal を伴う(ADR 0046 §6.3)。
+      appeal: input.appeal,
     };
     return onSubmitReport(request);
   };
@@ -453,13 +483,26 @@ export function PostCard({
           </p>
         ) : view.adultContentGated ? (
           // #858: 成人向けとして申告された投稿は、表示設定 OFF の間は本文も代替表示にする。
-          <p
-            className='topic-diagnostic topic-diagnostic-secondary'
-            role='status'
-            data-testid={`post-adult-gated-${post.object_id}`}
-          >
-            {t('feed.adultContentHidden')}
-          </p>
+          // #1055: 判定元が Community Node の推定のときは、断定せず発行元・根拠を示し、
+          // 異議申し立てへの導線を添える(ADR 0046 §6.3)。
+          <PostGatedContent
+            objectId={post.object_id}
+            gatedBy={view.gatedBy}
+            bodyText={view.gatedBodyText}
+            advisory={view.contentAdvisory}
+            appealAction={
+              showReportAction && onSubmitReport ? (
+                <Button
+                  variant='secondary'
+                  type='button'
+                  data-testid={`post-advisory-appeal-${post.object_id}`}
+                  onClick={() => openAdvisoryAppeal(view.contentAdvisory)}
+                >
+                  {t('advisory.appeal')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : isUnavailableText ? (
           view.showUnavailableDiagnostics ? (
             <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
@@ -911,7 +954,12 @@ export function PostCard({
       {showReportAction && onSubmitReport ? (
         <ReportRoutingDialog
           open={reportDialogOpen}
-          onOpenChange={setReportDialogOpen}
+          onOpenChange={(open) => {
+            setReportDialogOpen(open);
+            // 通常の通報へ戻すため、閉じるときに appeal 文脈を捨てる(#1055)。
+            if (!open) setReportAppeal(null);
+          }}
+          appeal={reportAppeal}
           subject={reportSubject}
           plan={reportPlan}
           onSubmit={handleSubmitReport}

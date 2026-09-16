@@ -58,7 +58,7 @@ pub(crate) use consent_storage_support::{
 };
 pub use dome_hosting_support::DomeHostingRequestError;
 pub(crate) use http_client_support::*;
-pub(crate) use index_query_support::IndexOperation;
+pub(crate) use index_query_support::{CONTENT_ADVISORY_SYNTHESIS_DEFAULT, IndexOperation};
 pub use index_query_support::{CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest};
 pub use indexing_request_support::{
     CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError,

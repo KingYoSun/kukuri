@@ -284,3 +284,144 @@ async fn create_post_rejects_unknown_content_labels() {
         .expect_err("unknown label must be rejected");
     assert!(error.to_string().contains("unknown content label"));
 }
+
+// #1055 / ADR 0046 §6.2: 設定済み Community Node が発行した content advisory の対象 hash も、
+// self-label と同じ取得ゲートで扱う。表示設定 OFF の間は blob がローカルにあってもバイト列を
+// 返さず、ON では ephemeral fetch で返す。OFF へ戻すと以後の取得も再び止まる。
+// advisory は投稿の署名済み `content_labels` を書き換えない(INVAR-1)。
+#[tokio::test]
+async fn advisory_labeled_media_respects_adult_display_gate() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+    let app = AppService::new(store.clone(), transport);
+    let topic = "kukuri:topic:advisory-gate";
+
+    // self-label の無い通常の投稿。CN の advisory だけがラベル源になる。
+    let object_id = app
+        .create_post_with_attachments(
+            topic,
+            "plain caption",
+            None,
+            vec![PendingAttachment {
+                mime: "image/png".into(),
+                bytes: b"advisory-labeled-image".to_vec(),
+                role: AssetRole::ImageOriginal,
+            }],
+        )
+        .await
+        .expect("create advisory target post");
+
+    let timeline = app.list_timeline(topic, None, 10).await.expect("timeline");
+    let post = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("advisory target post");
+    assert!(post.content_labels.is_empty());
+    let attachment_hash = post.attachments[0].hash.clone();
+
+    // self-label 由来の逆引き記録は付かない。ゲートは advisory 集合だけで成立する。
+    assert!(
+        !ObjectProjectionStore::is_adult_media_hash(
+            store.as_ref(),
+            &kukuri_core::BlobHash::new(attachment_hash.clone())
+        )
+        .await
+        .expect("is_adult_media_hash")
+    );
+    assert!(!app.is_advisory_media_hash(attachment_hash.as_str()).await);
+
+    // 登録前は通常どおり取得できる(ラベル源が無い投稿は fail-open)。
+    assert!(!app.adult_content_display_enabled());
+    assert!(
+        app.blob_media_payload(attachment_hash.as_str(), "image/png")
+            .await
+            .expect("pre-registration payload result")
+            .is_some()
+    );
+
+    app.register_advisory_media_hashes(std::slice::from_ref(&attachment_hash))
+        .await;
+    assert!(app.is_advisory_media_hash(attachment_hash.as_str()).await);
+
+    // 既定 OFF: バイト列はローカルにあっても返さない。
+    assert!(
+        app.blob_media_payload(attachment_hash.as_str(), "image/png")
+            .await
+            .expect("gated payload result")
+            .is_none()
+    );
+
+    // 明示的に有効化した場合だけ返す。
+    app.set_adult_content_display_enabled(true);
+    let payload = app
+        .blob_media_payload(attachment_hash.as_str(), "image/png")
+        .await
+        .expect("enabled payload result")
+        .expect("payload present after enabling");
+    assert_eq!(payload.mime, "image/png");
+
+    // OFF へ戻すと以後の取得は再び止まる。
+    app.set_adult_content_display_enabled(false);
+    assert!(
+        app.blob_media_payload(attachment_hash.as_str(), "image/png")
+            .await
+            .expect("re-disabled payload result")
+            .is_none()
+    );
+
+    // INVAR-1: advisory は署名済み `content_labels` へ書き戻さない。
+    let timeline = app
+        .list_timeline(topic, None, 10)
+        .await
+        .expect("timeline after advisory registration");
+    let post = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("advisory target post after registration");
+    assert!(post.content_labels.is_empty());
+}
+
+// #1055: advisory が付いていない hash は、登録済みの別 hash があっても影響を受けない。
+#[tokio::test]
+async fn advisory_registration_does_not_gate_unrelated_media() {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(FakeTransport::new("app", FakeNetwork::default()));
+    let app = AppService::new(store, transport);
+    let topic = "kukuri:topic:advisory-unrelated";
+
+    let object_id = app
+        .create_post_with_attachments(
+            topic,
+            "unrelated caption",
+            None,
+            vec![PendingAttachment {
+                mime: "image/png".into(),
+                bytes: b"unrelated-image".to_vec(),
+                role: AssetRole::ImageOriginal,
+            }],
+        )
+        .await
+        .expect("create unrelated post");
+    let timeline = app.list_timeline(topic, None, 10).await.expect("timeline");
+    let post = timeline
+        .items
+        .iter()
+        .find(|post| post.object_id == object_id)
+        .expect("unrelated post");
+    let attachment_hash = post.attachments[0].hash.clone();
+
+    app.register_advisory_media_hashes(&[
+        "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+    ])
+    .await;
+
+    assert!(!app.adult_content_display_enabled());
+    assert!(
+        app.blob_media_payload(attachment_hash.as_str(), "image/png")
+            .await
+            .expect("payload result")
+            .is_some()
+    );
+}

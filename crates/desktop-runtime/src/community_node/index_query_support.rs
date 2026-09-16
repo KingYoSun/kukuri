@@ -2,16 +2,25 @@ use std::fmt;
 
 use chrono::Utc;
 use kukuri_cn_protocol::{
-    AUTH_REQUIRED_CODE, ApiErrorBody, CHANNEL_MEMBERSHIP_SECRET_HEADER, CONSENT_REQUIRED_CODE,
-    INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH, IndexQueryParams,
-    IndexQueryResponse, IndexScopeKind, normalize_http_url,
+    AUTH_REQUIRED_CODE, AdvisorySubjectKind, ApiErrorBody, CHANNEL_MEMBERSHIP_SECRET_HEADER,
+    CONSENT_REQUIRED_CODE, INDEX_DISCOVERY_PATH, INDEX_RECOMMENDATIONS_PATH, INDEX_SEARCH_PATH,
+    IndexQueryParams, IndexQueryResponse, IndexScopeKind, normalize_http_url,
 };
 use kukuri_store::{ContentObservationRow, ContentObservationStore};
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
+
+/// #1055 / ADR 0046 §6.4: content advisory の成人向けゲートへの合成は、利用規約 第3条 4 項の
+/// 改訂と再同意(C4 = #1056)が merge されるまで有効化しない。既定 OFF。
+pub(crate) const CONTENT_ADVISORY_SYNTHESIS_DEFAULT: bool = false;
+
+/// #1055: client が成人向けゲートの対象として扱う advisory の表示ラベル(ADR 0028 §8.6)。
+/// 未知ラベルは無視する(前方互換。node が将来増やしても勝手にゲートしない)。
+const GATING_ADVISORY_LABELS: [&str; 2] = ["adult", "sensitive"];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -251,9 +260,95 @@ impl DesktopRuntime {
             }
             result => result,
         }?;
+        let mut response = response;
+        self.apply_content_advisories(base_url.as_str(), &mut response)
+            .await;
         self.record_index_observations(base_url.as_str(), operation, &response)
             .await?;
         Ok(response)
+    }
+
+    /// #1055 / ADR 0046 §6.4: content advisory の成人向けゲートへの合成を切り替える。
+    /// 本番の有効化は C4(#1056)が利用規約改訂・再同意と同じ変更で
+    /// `CONTENT_ADVISORY_SYNTHESIS_DEFAULT` を切り替えて行うため、実行時の setter は
+    /// 有効時の挙動を検証する test だけが使う。
+    #[cfg(test)]
+    pub(crate) fn set_content_advisory_synthesis_enabled(&self, enabled: bool) {
+        self.content_advisory_synthesis_enabled
+            .store(enabled, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// #1055 / ADR 0046 §6: index 応答に同梱された content advisory を、client が採用できる形へ
+    /// 揃える単一の choke point。
+    ///
+    /// - 合成が無効(C4 前)なら、すべての advisory を落として取得ゲートにも登録しない。
+    /// - 有効なら、index を返した設定済み node の manifest `node_id` と `issuer_node_id` が一致する
+    ///   advisory だけを残す(AC-4)。manifest を取得できない場合も採用しない(fail-closed)。
+    /// - 残った advisory のうち blob 対象のものを、`blob_media_payload` の取得ゲートへ登録する。
+    ///
+    /// advisory は投稿の canonical でも署名対象でもないため、`content_labels` へは書き戻さない。
+    async fn apply_content_advisories(&self, base_url: &str, response: &mut IndexQueryResponse) {
+        let synthesis_enabled = self
+            .content_advisory_synthesis_enabled
+            .load(std::sync::atomic::Ordering::SeqCst);
+        if !synthesis_enabled {
+            for entry in &mut response.entries {
+                entry.content_advisories.clear();
+            }
+            return;
+        }
+        if response
+            .entries
+            .iter()
+            .all(|entry| entry.content_advisories.is_empty())
+        {
+            return;
+        }
+
+        // advisory を含む応答のときだけ manifest を引く。issuer を確認できなければ採用しない。
+        let issuer_node_id = match self.request_community_node_manifest(base_url).await {
+            Ok(fetch) => fetch
+                .manifest
+                .map(|manifest| manifest.node_id.trim().to_string())
+                .filter(|node_id| !node_id.is_empty()),
+            Err(error) => {
+                warn!(
+                    base_url = %base_url,
+                    error = %error,
+                    "content advisories dropped because the issuing node manifest was unavailable"
+                );
+                None
+            }
+        };
+        let Some(issuer_node_id) = issuer_node_id else {
+            for entry in &mut response.entries {
+                entry.content_advisories.clear();
+            }
+            return;
+        };
+
+        let mut gated_blob_hashes = Vec::new();
+        for entry in &mut response.entries {
+            entry
+                .content_advisories
+                .retain(|advisory| advisory.issuer_node_id.trim() == issuer_node_id);
+            for advisory in &entry.content_advisories {
+                if !GATING_ADVISORY_LABELS.contains(&advisory.label.trim()) {
+                    continue;
+                }
+                if advisory.subject_kind != AdvisorySubjectKind::BlobCid {
+                    continue;
+                }
+                let subject_id = advisory.subject_id.trim();
+                if subject_id.is_empty() {
+                    continue;
+                }
+                gated_blob_hashes.push(subject_id.to_string());
+            }
+        }
+        self.app_service
+            .register_advisory_media_hashes(&gated_blob_hashes)
+            .await;
     }
 
     async fn record_index_observations(

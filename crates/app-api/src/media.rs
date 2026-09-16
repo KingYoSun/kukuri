@@ -13,6 +13,28 @@ impl AppService {
             .load(std::sync::atomic::Ordering::SeqCst)
     }
 
+    /// #1055: Community Node の content advisory が付いた添付 blob hash を取得ゲートへ登録する
+    /// (insert-only)。desktop-runtime が index 応答の advisory を issuer 照合した後に呼ぶ。
+    /// self-label 由来の hash と違い永続化しない(ADR 0028 §8.10 の transient 分類)。
+    pub async fn register_advisory_media_hashes(&self, hashes: &[String]) {
+        if hashes.is_empty() {
+            return;
+        }
+        let mut registered = self.advisory_media_hashes.lock().await;
+        for hash in hashes {
+            let hash = hash.trim();
+            if hash.is_empty() {
+                continue;
+            }
+            registered.insert(hash.to_string());
+        }
+    }
+
+    /// #1055: 対象 hash が advisory 付き添付として観測済みか。
+    pub async fn is_advisory_media_hash(&self, hash: &str) -> bool {
+        self.advisory_media_hashes.lock().await.contains(hash)
+    }
+
     pub async fn blob_media_payload(
         &self,
         hash: &str,
@@ -28,11 +50,15 @@ impl AppService {
         // #858 fail-closed バックストップ: 成人向けラベル付き投稿の添付として観測済みの
         // hash は、表示設定が OFF の間はネットワーク取得もローカル読み出しも行わない。
         // ON の場合も ephemeral fetch でローカル blob store へ永続化しない(ADR 0046)。
+        // #1055: 投稿者の self-label に加えて、設定済み Community Node が発行した content
+        // advisory の対象 hash も同じゲートで扱う(ADR 0046 §6.2)。ラベル源は 2 つだが、
+        // 取得を止める判定点はここ 1 箇所のままにする。
         let adult_labeled = self
             .services
             .projection_store
             .is_adult_media_hash(&blob_hash)
-            .await?;
+            .await?
+            || self.is_advisory_media_hash(hash).await;
         if adult_labeled && !self.adult_content_display_enabled() {
             info!(
                 hash = %hash,

@@ -38,6 +38,10 @@ import {
   communityIndexEmptyGuidance,
 } from './communityIndexEmptyGuidance';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
+import {
+  useCommunityIndexAdvisories,
+  usePublishedAdvisoryHashes,
+} from './useCommunityIndexAdvisories';
 import { PostCard } from './PostCard';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -76,6 +80,9 @@ type CommunityIndexWorkspaceProps = {
   /// #1052: 表示中の解決済み投稿。呼出元がメディアのプリフェッチと成人向け取得ゲートの
   /// 対象へ加えるために使う。結果の失効と Column の終了では空配列を通知する。
   onResolvedPostsChange?: (posts: PostView[]) => void;
+  /// #1055: 表示設定 OFF のため advisory でゲート中の添付 blob hash。呼出元がプリフェッチの
+  /// 除外集合に使う。結果の失効と Column の終了では空配列を通知する。
+  onAdvisoryGatedMediaHashesChange?: (hashes: string[]) => void;
   onOpenAuthor: (pubkey: string) => void;
   onOpenThread?: (threadId: string) => void;
   onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
@@ -267,6 +274,7 @@ export function CommunityIndexWorkspace({
   unsupportedVideoManifests = EMPTY_UNSUPPORTED_VIDEO_MANIFESTS,
   locale = null,
   onResolvedPostsChange,
+  onAdvisoryGatedMediaHashesChange,
   onOpenAuthor,
   onOpenThread,
   onOpenThreadInTopic,
@@ -354,6 +362,16 @@ export function CommunityIndexWorkspace({
         : {},
     [resolvedPostState, visibleResult]
   );
+  // #1055: 発行元の表示名とゲート中の添付 hash は専用フックが持つ。
+  const { issuerNodeName: advisoryIssuerNodeName, gatedMediaHashes: advisoryGatedMediaHashes } =
+    useCommunityIndexAdvisories({
+      api,
+      entries: visibleResult?.entries ?? null,
+      nodeBaseUrl: visibleResult?.context.nodeBaseUrl ?? null,
+      adultContentEnabled,
+    });
+  usePublishedAdvisoryHashes(advisoryGatedMediaHashes, onAdvisoryGatedMediaHashesChange);
+
   const resolvedAuthorsByPubkey = useMemo(
     () =>
       visibleResult && resolvedAuthorState?.contextKey === visibleResult.context.key
@@ -392,11 +410,13 @@ export function CommunityIndexWorkspace({
             adultContentEnabled,
             unsupportedVideoManifests,
             locale,
+            nodeName: advisoryIssuerNodeName,
           }),
         };
       }) ?? [],
     [
       adultContentEnabled,
+      advisoryIssuerNodeName,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,
@@ -412,10 +432,14 @@ export function CommunityIndexWorkspace({
 
   // #1052: 表示中の解決済み投稿を呼出元へ公開し、タイムラインと同じプリフェッチ・
   // 成人向け取得ゲートの対象に含める。同じ添付集合を繰り返し通知しない。
+  // #1055: advisory でゲート中の投稿は公開しない。self-label 由来のゲートは
+  // `usePreviewableMediaAttachments` が `isAdultLabeledPost` で除外するが、advisory は
+  // `PostView` に現れないため、判定を持つこの層で外す。Rust 側の hash ゲート
+  // (`blob_media_payload`)は独立した fail-closed backstop として別に効く。
   const resolvedPosts = useMemo(
     () =>
-      visiblePostCards.flatMap(({ resolvedEntry }) =>
-        resolvedEntry?.post ? [resolvedEntry.post] : []
+      visiblePostCards.flatMap(({ resolvedEntry, view }) =>
+        resolvedEntry?.post && view.gatedBy !== 'advisory' ? [resolvedEntry.post] : []
       ),
     [visiblePostCards]
   );
