@@ -105,3 +105,23 @@ operator_adjusted_at IS NULL` が更新せず、訂正版の行を返す。
 - `cargo xtask ipc-types`: `types.generated.ts` に `operator_adjusted_at?: string | null` を追加。
 - `cargo clippy -p kukuri-cn-protocol -p kukuri-harness --all-targets -- -D warnings`: 成功。
 - `cargo xtask cn-test` は CI で確認する。
+
+## 独立監査
+
+- 2026-09-16、対象 commit `5e17fc33`（PR #1075 head）、Scope revision 2026-09-16、区分 C。別コンテキストの
+  監査担当が登録点から inventory を再構築した。inventory 合計 14 / 適合 14 / 不適合 0 / 未分類 0、
+  blocker 0、判定 PASS。
+- non-blocker と扱い:
+  - N1（Regression・test）: `trust_read_is_explainable_with_basis` の合成値再構成の assert が、新 test の
+    挿入位置の誤りで新 test 側へ移っていた。元の test へ戻した（delta commit）。
+  - N2（Regression・fail-closed）: `cn-cli moderation reissue` は集約経路を通さないため、失効・cleared 行の
+    再発行や category 変更で同じ鍵の活性行と衝突すると、部分 UNIQUE index で失敗して取引ごと巻き戻る
+    （変更前は既存の活性行を黙って上書きしていた）。誤った永続変更は無いため現状のままとする。
+  - N3（Optional-hardening）: 失効・cleared 行の category を cn-cli で変える操作と再 scan が文単位で
+    重なった場合に、元の category の行が作られる理論上の余地。審査経路は活性行の行ロックで直列化される。
+  - N4（Existing-gap、本 Issue の AC 外）: 「見つける」の verdict 行の content advisory は operator の訂正と
+    同期しない（変更前から同じ）。タイムライン一括照会は risk_signals を正とするため影響しない。
+  - N5（既知の制約）: cn-cli の過去操作は印を復元できない。保持期限で印付き行が削除された後の再 scan は
+    新規行を作る（保持のライフサイクルとして対象外）。
+  - N6（記録）: 計画の `operator_adjusted: bool` は、既存の `expires_at` と同じ形の RFC3339 時刻
+    `operator_adjusted_at` で実装した（TS で省略可能になり既存 fixture を壊さない）。

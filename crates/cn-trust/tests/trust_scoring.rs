@@ -470,6 +470,11 @@ fn trust_read_is_explainable_with_basis() {
     assert_eq!(rel.relation_weight, 0.8);
     assert!((rel.contribution - rel.raw_contribution * rel.decay_factor * 0.8).abs() < 1e-12);
     assert_eq!(rel.operator_adjusted_at, None, "未訂正の判定は印を持たない");
+
+    // 合成値と成分・適用重みが view から再構成できる（説明可能性）。
+    let recomposed = compose_trust(&TrustParams::default(), view.absolute, view.relative);
+    assert_eq!(view.trust, recomposed.trust);
+    assert_eq!(view.w_abs_applied, recomposed.w_abs_applied);
 }
 
 /// #1058 AC-3: operator が値を確定した判定は、根拠一覧で確定時刻（RFC3339）として判別できる。
@@ -501,11 +506,6 @@ fn trust_read_basis_marks_operator_adjusted_signals() {
         entry("sig-adjusted").contribution,
         entry("sig-plain").contribution
     );
-
-    // 合成値と成分・適用重みが view から再構成できる（説明可能性）。
-    let recomposed = compose_trust(&TrustParams::default(), view.absolute, view.relative);
-    assert_eq!(view.trust, recomposed.trust);
-    assert_eq!(view.w_abs_applied, recomposed.w_abs_applied);
 }
 
 // --- scenario: CSAM 系 risk は relation / 通報数で揺れない ---
