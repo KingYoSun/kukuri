@@ -6,6 +6,7 @@ import type {
 } from '@/lib/api';
 import { isAdultLabeledPost } from '@/shell/media';
 import { authorDisplayLabel, resolveProfilePictureSrc } from '@/shell/presentation';
+import { buildPostMediaView } from '@/shell/viewModels/postMediaView';
 
 import type { PostCardView } from './types';
 
@@ -21,6 +22,9 @@ type CommunityIndexPostCardViewOptions = {
   resolvedEntry?: CommunityIndexResolvedPostView | null;
   mediaObjectUrls: Record<string, string | null>;
   adultContentEnabled?: boolean;
+  /// #1052: 解決済み投稿の添付メディアをタイムラインと同じ規則で組み立てるために使う。
+  unsupportedVideoManifests?: Record<string, true>;
+  locale?: string | null;
 };
 
 function audienceLabel(entry: IndexEntryView): string {
@@ -85,7 +89,9 @@ export function communityIndexPostCardView(
         // locally resolved, signed post after its labels are available (#858).
         content: resolvedPost.content,
         content_status: 'Available' as const,
-        attachments: [],
+        // #1052: 添付はローカル解決済みの署名付き envelope 由来であり、node の index
+        // メタデータからの推測ではない。タイムラインと同じ表示経路へそのまま渡す。
+        attachments: resolvedPost.attachments,
         created_at: resolvedPost.created_at,
       }
     : {
@@ -124,13 +130,15 @@ export function communityIndexPostCardView(
         my_reactions: [],
       };
 
+  // #858: canonical post の top-level / quote / reply-preview labels を検索でも共有する。
+  const adultContentGated =
+    !options.adultContentEnabled && resolvedPost !== null && isAdultLabeledPost(resolvedPost);
+
   return {
     post: displayPost,
     actionPost: resolvedPost,
     context: 'timeline',
-    // #858: canonical post の top-level / quote / reply-preview labels を検索でも共有する。
-    adultContentGated:
-      !options.adultContentEnabled && resolvedPost !== null && isAdultLabeledPost(resolvedPost),
+    adultContentGated,
     authorLabel,
     authorPicture: knownAuthor
       ? resolveProfilePictureSrc(knownAuthor, options.mediaObjectUrls)
@@ -146,13 +154,14 @@ export function communityIndexPostCardView(
     canReply: capabilities.reply,
     canRepost: capabilities.repost || capabilities.quote_repost,
     canReact: capabilities.react,
-    media: {
-      objectId: entry.object_id,
-      kind: null,
-      extraAttachmentCount: 0,
-      state: 'ready',
-      videoUnsupportedOnClient: false,
-    },
+    // #1052: 未解決 entry は attachments が空のままなので、同じ builder でもメディアは
+    // 描画されない(推測補完しない)。解決済みだけがタイムラインと同じ表示になる。
+    media: buildPostMediaView(displayPost, {
+      adultContentGated,
+      locale: options.locale ?? i18n.resolvedLanguage ?? null,
+      mediaObjectUrls: options.mediaObjectUrls,
+      unsupportedVideoManifests: options.unsupportedVideoManifests ?? {},
+    }),
     provenance: {
       canonicalSource: 'unknown',
       observedVia: [{ nodeBaseUrl: options.nodeBaseUrl, capability }],

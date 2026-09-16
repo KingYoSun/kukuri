@@ -222,6 +222,7 @@ export function DesktopShellPrimarySurface({
     localProfile,
     adultContentEnabled,
     mediaObjectUrls,
+    unsupportedVideoManifests,
     communityNodeManifests,
     communityNodeConfig,
     communityIndexNodeBaseUrl,
@@ -272,6 +273,7 @@ export function DesktopShellPrimarySurface({
       localProfile: s.localProfile,
       adultContentEnabled: s.adultContentEnabled,
       mediaObjectUrls: s.mediaObjectUrls,
+      unsupportedVideoManifests: s.unsupportedVideoManifests,
       communityNodeManifests: s.communityNodeManifests,
       communityNodeConfig: s.communityNodeConfig,
       communityIndexNodeBaseUrl: s.communityIndexNodeBaseUrl,
@@ -566,6 +568,11 @@ export function DesktopShellPrimarySurface({
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
             adultContentEnabled={adultContentEnabled}
+            unsupportedVideoManifests={unsupportedVideoManifests}
+            locale={locale}
+            onResolvedPostsChange={(posts) =>
+              patchState({ communityIndexResolvedPosts: posts })
+            }
             onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
             onOpenThread={openThreadInSurfaceScope}
             onOpenThreadInTopic={openThreadInTopicFromSurface}

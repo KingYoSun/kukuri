@@ -25,6 +25,9 @@ import type { DesktopShellState } from '@/shell/store';
 type UsePreviewableMediaAttachmentsArgs = {
   activeTimeline: PostView[];
   activePublicTimeline: PostView[];
+  /// #1052: 「見つける」Column の解決済み投稿。タイムラインと同じ規則でメディアを
+  /// プリフェッチする(未解決 entry は attachments を持たないため対象にならない)。
+  communityIndexResolvedPosts: PostView[];
   profileTimeline: PostView[];
   selectedAuthorTimeline: PostView[];
   thread: PostView[];
@@ -41,6 +44,7 @@ type UsePreviewableMediaAttachmentsArgs = {
 export function usePreviewableMediaAttachments({
   activeTimeline,
   activePublicTimeline,
+  communityIndexResolvedPosts,
   profileTimeline,
   selectedAuthorTimeline,
   thread,
@@ -84,6 +88,7 @@ export function usePreviewableMediaAttachments({
       ...profileTimeline,
       ...selectedAuthorTimeline,
       ...thread,
+      ...communityIndexResolvedPosts,
     ]) {
       if (post.author_picture_asset) {
         tryAddAttachment({
@@ -176,6 +181,7 @@ export function usePreviewableMediaAttachments({
     activeTimeline,
     adultContentEnabled,
     bookmarkedReactionAssets,
+    communityIndexResolvedPosts,
     knownAuthorsByPubkey,
     localProfile?.picture_asset,
     notifications,
