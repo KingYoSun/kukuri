@@ -21,7 +21,11 @@ use kukuri_cn_safety_runtime::{
     MemorySafetyArtifactStore, SafetyOrchestrator, SafetyScanService,
     Secp256k1ModerationEventSigner,
 };
-use kukuri_core::{KukuriEnvelope, KukuriKeys, ReplicaId, TopicId, build_post_envelope};
+use kukuri_core::{
+    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, MediaManifestItem, ObjectVisibility,
+    PayloadRef, ReplicaId, TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope,
+    build_post_envelope_with_payload,
+};
 use kukuri_docs_sync::{DocOp, DocsSync, MemoryDocsSync, stable_key};
 
 pub const TEST_SECRET: &str = "0000000000000000000000000000000000000000000000000000000000000001";
@@ -210,4 +214,132 @@ impl SafetyProvider for RecordingProvider {
         result.outcome = ScanOutcome::NoKnownMatch;
         Ok(result)
     }
+}
+
+// --- media 参照 post と複数 provider の fixture（`ingestion_contracts.rs` から共有化。#1054） ---
+
+pub const MEDIA_MANIFEST_ID: &str = "media-manifest-test";
+/// manifest item の blob 本体（scan 対象 hash はここから導出する）。
+pub const MEDIA_BLOB_BYTES: &[u8] = b"tiny-png-bytes";
+/// manifest item の thumbnail blob 本体（mime metadata を持たない scan 対象）。
+pub const MEDIA_THUMBNAIL_BYTES: &[u8] = b"tiny-thumbnail-bytes";
+
+pub fn media_blob_hash() -> String {
+    blob_hash(MEDIA_BLOB_BYTES).as_str().to_string()
+}
+
+pub fn media_thumbnail_hash() -> String {
+    blob_hash(MEDIA_THUMBNAIL_BYTES).as_str().to_string()
+}
+
+/// manifest 参照つき media post を共有 replica に実在させる（#609: manifest は署名済み envelope
+/// として `manifests/media/<id>/{state,envelope}` に persist する。app-api と同じ key 形状）。
+///
+/// `persist_manifest = false` で「post は manifest を参照するが replica に manifest が無い」
+/// fail-closed 系の状況を作れる。返り値は object_id。
+pub async fn persist_media_post(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+    persist_manifest: bool,
+) -> String {
+    let keys = KukuriKeys::generate();
+    let envelope = build_post_envelope_with_payload(
+        &keys,
+        topic,
+        PayloadRef::InlineText {
+            text: body.to_string(),
+        },
+        Vec::new(),
+        vec![MEDIA_MANIFEST_ID.to_string()],
+        None,
+        ObjectVisibility::Public,
+    )
+    .expect("envelope");
+    let object = envelope
+        .to_post_object()
+        .expect("post object")
+        .expect("post object present");
+    let object_id = object.object_id.as_str().to_string();
+    docs.open_replica(replica).await.expect("open");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/state")),
+            value: serde_json::to_value(&object).expect("state json"),
+        },
+    )
+    .await
+    .expect("state op");
+    docs.apply_doc_op(
+        replica,
+        DocOp::SetJson {
+            key: stable_key("objects", &format!("{object_id}/envelope")),
+            value: serde_json::to_value(&envelope).expect("envelope json"),
+        },
+    )
+    .await
+    .expect("envelope op");
+
+    if persist_manifest {
+        let manifest = KukuriMediaManifestV1 {
+            manifest_id: MEDIA_MANIFEST_ID.to_string(),
+            owner_pubkey: keys.public_key(),
+            created_at: 1_719_900_000,
+            items: vec![MediaManifestItem {
+                blob_hash: blob_hash(MEDIA_BLOB_BYTES),
+                mime: "image/png".to_string(),
+                size: MEDIA_BLOB_BYTES.len() as u64,
+                width: None,
+                height: None,
+                duration_ms: None,
+                codec: None,
+                thumbnail_blob_hash: Some(blob_hash(MEDIA_THUMBNAIL_BYTES)),
+            }],
+        };
+        let manifest_envelope =
+            build_media_manifest_envelope(&keys, topic, &manifest).expect("manifest envelope");
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/state")),
+                value: serde_json::to_value(&manifest).expect("manifest json"),
+            },
+        )
+        .await
+        .expect("manifest state op");
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: stable_key("manifests/media", &format!("{MEDIA_MANIFEST_ID}/envelope")),
+                value: serde_json::to_value(&manifest_envelope).expect("manifest envelope json"),
+            },
+        )
+        .await
+        .expect("manifest envelope op");
+    }
+    object_id
+}
+
+pub fn service_with_providers(
+    providers: Vec<MockSafetyProvider>,
+) -> (Arc<SafetyScanService>, Arc<MemorySafetyArtifactStore>) {
+    let signer = Secp256k1ModerationEventSigner::from_secret(TEST_SECRET).expect("signer");
+    let issuer = signer.issuer_node_id().to_string();
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let mut orchestrator = SafetyOrchestrator::builder(
+        &issuer,
+        Arc::new(SystemScanClock),
+        Arc::new(UuidEventIdGenerator),
+    );
+    for provider in providers {
+        orchestrator = orchestrator.provider(Arc::new(provider));
+    }
+    let orchestrator = orchestrator.build().expect("orchestrator");
+    let service = SafetyScanService::builder(Arc::new(orchestrator), store.clone())
+        .signer(Arc::new(signer))
+        .build()
+        .expect("service");
+    (Arc::new(service), store)
 }

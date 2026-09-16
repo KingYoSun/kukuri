@@ -311,3 +311,14 @@ fn default_policy_version() -> String {
 fn default_emit_signed_moderation_events() -> bool {
     true
 }
+
+impl crate::config::ResolvedConfig {
+    /// 起動を止めない注意事項（deprecated key の使用など）。CLI が表示する。
+    pub fn warnings(&self) -> Vec<String> {
+        self.raw
+            .safety
+            .as_ref()
+            .map(safety_config_warnings)
+            .unwrap_or_default()
+    }
+}

@@ -12,7 +12,7 @@ use crate::capability::{Availability, Capability};
 use crate::manifest::{AuthorityScopeOverride, NodeRole};
 use crate::profile::Profile;
 use crate::retention_config::{RetentionConfig, validate_retention};
-use crate::safety_config::{SafetyConfig, safety_config_warnings, validate_safety_config};
+use crate::safety_config::{SafetyConfig, validate_safety_config};
 
 /// `operator-config.yaml` の生表現。
 ///
@@ -469,15 +469,6 @@ pub struct ResolvedConfig {
 impl ResolvedConfig {
     pub fn enabled(&self, capability: Capability) -> bool {
         self.enabled.get(&capability).copied().unwrap_or(false)
-    }
-
-    /// 起動を止めない注意事項（deprecated key の使用など）。CLI が表示する。
-    pub fn warnings(&self) -> Vec<String> {
-        self.raw
-            .safety
-            .as_ref()
-            .map(safety_config_warnings)
-            .unwrap_or_default()
     }
 
     /// `Capability::ALL` の順序で有効な capability を返す。

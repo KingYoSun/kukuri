@@ -13,6 +13,7 @@ pub mod capability_risk;
 pub mod config;
 pub mod deploy;
 pub mod docs;
+mod docs_moderation_policy;
 pub mod drift;
 pub mod manifest;
 pub mod policy_catalog;
