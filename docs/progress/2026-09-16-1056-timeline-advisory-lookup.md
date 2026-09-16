@@ -62,7 +62,27 @@ TR-13（token 無し）は、runtime の門が token 読み出し失敗で `AUTH
 
 ## 検証結果
 
-実行結果は PR の検証欄に記録する（`cargo xtask check` / `cargo xtask test` / `cargo xtask cn-check` / `cargo xtask cn-test` / desktop Vitest / Playwright / `cargo xtask oversized-files`）。必須検証を省略して成功とみなさない。
+| 検証 | 結果 |
+| --- | --- |
+| `cargo xtask check` | 成功 |
+| `cargo xtask oversized-files` | 成功（構築関数への置換で行数超過を解消） |
+| `cargo xtask cn-check` | 成功 |
+| `cargo xtask test` | 969 件中 968 件成功。失敗 1 件は lock 分類表の宣言漏れで、`0c031d03` で修正し単独実行で成功 |
+| `cargo xtask cn-test` | 623 件成功（1 回目は MSVC linker の一時障害 LNK1104 で中断し、`CARGO_BUILD_JOBS=4` で再実行） |
+| desktop Vitest 全体 | 212 files / 1795 件成功 |
+| Playwright chromium 全体 | 354 件成功。1 件は `net::ERR_NO_BUFFER_SPACE`（Windows のネットワーク資源不足）で失敗し、単独再実行で成功 |
+| Playwright `timeline-advisory.spec.ts` | 4 件成功 |
+| Tauri lib test | 未実行（Windows で変更前の main でも起動不能。必須文言は同条件を Python で再現して確認） |
+
+CI で見つかり修正したもの（いずれも本 PR の差分による Regression）:
+
+- `linux-rust-tests`: Linux 限定の CLI test が command 数 141 を固定していた（142 へ更新）。
+- `linux-desktop-ui`: 照会フックを起動しない view model test が照会中の初期状態のまま残った。#867 の「自動同意チェックボックスが無い」assert が採用切替に反応した。
+- `linux-desktop-browser`: Draft 保存の待ち時間が、Draft 以外の store 更新（照会状態）でやり直され、300ms 以内に保存されなかった。`columnDraftPersistence.ts` を、予約済みの内容と同じなら待ち時間をやり直さない形に修正し、回帰 test を追加した。
+- 視覚回帰: 同意画面（English dark）の baseline が legal bundle version 6 の表示（版・施行日・変更概要）で変わったため、`kukuri-visual-baseline.yml` をブランチで実行して再生成した（run 35096232129）。
+- browser test が #992 の記録画像を上書きしていたため、元の状態へ戻した。
+
+独立監査は 3 回（`a964ffab` FAIL → `b2897171` PASS → `51bcde4f` PASS）。記録は PR #1072 の comment。
 
 ## 引き継ぎ
 
