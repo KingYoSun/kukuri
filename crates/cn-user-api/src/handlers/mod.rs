@@ -1,5 +1,6 @@
 //! ドメイン別ハンドラ(routes.rs から参照される)。
 
+pub(crate) mod advisories;
 pub(crate) mod auth;
 pub(crate) mod bootstrap;
 pub(crate) mod consents;

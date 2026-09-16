@@ -8,6 +8,7 @@
 //! **ここにある型・関数の serde 表現と挙動は cn endpoint contract の一部**
 //! (REFACTORING.md の凍結境界)。変更は互換性の検討とセットで行うこと。
 
+pub mod advisory_lookup;
 pub mod auth;
 pub mod dome_hosting;
 pub mod error_codes;
@@ -23,6 +24,7 @@ pub mod rights_request;
 pub mod tester_feedback;
 pub mod trust_relation;
 
+pub use advisory_lookup::*;
 pub use auth::*;
 pub use dome_hosting::*;
 pub use error_codes::*;

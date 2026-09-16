@@ -20,6 +20,8 @@ pub const INDEXING_STATUS_PATH: &str = "/v1/indexing/status";
 pub const INDEX_SEARCH_PATH: &str = "/v1/index/search";
 pub const INDEX_DISCOVERY_PATH: &str = "/v1/index/discovery";
 pub const INDEX_RECOMMENDATIONS_PATH: &str = "/v1/index/recommendations";
+/// タイムライン向け content advisory 一括照会(#1056)。
+pub const ADVISORY_LOOKUP_PATH: &str = "/v1/advisories/lookup";
 pub const TRUST_USERS_PATH_PREFIX: &str = "/v1/trust/users/";
 pub const TRUST_USERS_ROUTE: &str = "/v1/trust/users/{pubkey}";
 pub const RELATION_USERS_PATH_PREFIX: &str = "/v1/relation/users/";

@@ -116,6 +116,8 @@ pub(crate) enum IndexingOperation {
     FilterRelationVisibility,
     VerifyChannelMembership,
     ReadStatus,
+    /// #1056: タイムライン向け content advisory 一括照会。
+    LookupAdvisories,
 }
 
 #[derive(Debug, thiserror::Error)]
