@@ -37,6 +37,7 @@ fn input(
         appeal_status: AppealStatus::None,
         expires_at: Some("2026-12-31T00:00:00Z".to_string()),
         persisted_at: now(),
+        operator_adjusted_at: None,
     }
 }
 

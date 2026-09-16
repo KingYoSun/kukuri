@@ -31,6 +31,7 @@ fn trust_read_wire_contract_keeps_flattened_view_and_explainable_basis() {
                 visibility: Visibility::Local,
                 appeal_status: AppealStatus::None,
                 expires_at: None,
+                operator_adjusted_at: Some("2026-08-12T00:00:00Z".to_string()),
                 raw_contribution: -0.4,
                 decay_factor: 0.5,
                 relation_weight: 1.0,
@@ -47,9 +48,22 @@ fn trust_read_wire_contract_keeps_flattened_view_and_explainable_basis() {
     assert_eq!(json["basis"][0]["target"], "post_id");
     assert_eq!(json["basis"][0]["target_id"], "post-1");
     assert_eq!(
-        serde_json::from_value::<TrustUserReadResponse>(json).unwrap(),
+        json["basis"][0]["operator_adjusted_at"],
+        "2026-08-12T00:00:00Z"
+    );
+    assert_eq!(
+        serde_json::from_value::<TrustUserReadResponse>(json.clone()).unwrap(),
         response
     );
+
+    // #1058: 印を持たない旧 node の応答も読める（未訂正として扱う）。
+    let mut legacy = json;
+    legacy["basis"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("operator_adjusted_at");
+    let legacy = serde_json::from_value::<TrustUserReadResponse>(legacy).unwrap();
+    assert_eq!(legacy.view.basis[0].operator_adjusted_at, None);
 }
 
 #[test]

@@ -166,6 +166,7 @@ async fn trust_user(
                 visibility: Visibility::SubscribedNodes,
                 appeal_status,
                 expires_at: None,
+                operator_adjusted_at: None,
                 raw_contribution: contribution,
                 decay_factor: 1.0,
                 relation_weight: 1.0,

@@ -9,10 +9,11 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    DistributionAudience, RiskSignalCorrection, RiskSignalMetadataEdit, TestDatabase,
-    connect_postgres, dispute_risk_signal, edit_risk_signal_detection_metadata, get_risk_signal,
-    initialize_database, list_distributable_risk_signals, list_trust_risk_inputs,
-    persist_risk_signal, reissue_corrected_risk_signal, update_risk_signal_appeal_status,
+    DistributionAudience, PersistedRiskSignal, RiskSignalCorrection, RiskSignalMetadataEdit,
+    TestDatabase, connect_postgres, dispute_risk_signal, edit_risk_signal_detection_metadata,
+    get_risk_signal, initialize_database, list_distributable_risk_signals, list_trust_risk_inputs,
+    persist_risk_signal, persist_risk_signal_deduplicated, reissue_corrected_risk_signal,
+    update_risk_signal_appeal_status,
 };
 use kukuri_cn_safety::{
     AppealStatus, Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
@@ -260,6 +261,171 @@ async fn operator_review_can_edit_detection_metadata() -> Result<()> {
         )
         .await?;
         assert!(distributable.iter().all(|s| s.id != stored.id));
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+async fn count_signals(pool: &sqlx::PgPool, target_id: &str) -> Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_safety.risk_signals WHERE target_id = $1",
+    )
+    .bind(target_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// 構成変更後の再 scan（scanner 経路）。operator の訂正値と異なる値で保存を試みる。
+async fn rescan(
+    pool: &sqlx::PgPool,
+    target_id: &str,
+    category: SafetyCategory,
+) -> Result<PersistedRiskSignal> {
+    let mut signal = suspected_signal(target_id, category);
+    signal.severity = Severity::High;
+    signal.confidence = Some(99);
+    signal.visibility = Visibility::Public;
+    persist_risk_signal_deduplicated(pool, ISSUER, &signal, None).await
+}
+
+/// #1058 AC-1 / AC-2: cn-cli の編集・再発行で operator が確定した値は、再 scan の集約更新で
+/// 上書きされず、元の鍵での新規 insert も起きない。
+#[tokio::test]
+async fn operator_adjusted_signal_survives_rescan() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!(
+            "skipping cn-core safety appeals integration test; set KUKURI_CN_RUN_INTEGRATION_TESTS=1"
+        );
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_core_operator_rescan").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+        let nsfw = SafetyCategory::Nsfw;
+
+        // 1. 同じ category の編集: 値が再 scan で戻らない。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("edit-same", nsfw)).await?;
+        let edit = RiskSignalMetadataEdit {
+            severity: Some(Severity::Low),
+            confidence: Some(20),
+            ..RiskSignalMetadataEdit::default()
+        };
+        let edited = edit_risk_signal_detection_metadata(&pool, &stored.id, &edit, true).await?;
+        let again = rescan(&pool, "edit-same", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.id, stored.id);
+        let after = get_risk_signal(&pool, &stored.id).await?.expect("exists");
+        assert_eq!(after.signal.severity, Severity::Low);
+        assert_eq!(after.signal.confidence, Some(20));
+        assert_eq!(after.signal.visibility, Visibility::SubscribedNodes);
+        assert_eq!(after.signal.expires_at, None);
+        assert_eq!(count_signals(&pool, "edit-same").await?, 1);
+        assert!(edited.operator_adjusted_at.is_some());
+        assert_eq!(after.operator_adjusted_at, edited.operator_adjusted_at);
+
+        // 2. category を変える編集: 元の category の再 scan でも新しい行を作らない。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("edit-category", nsfw)).await?;
+        let edit = RiskSignalMetadataEdit {
+            category: Some(SafetyCategory::Spam),
+            confidence: Some(15),
+            ..RiskSignalMetadataEdit::default()
+        };
+        edit_risk_signal_detection_metadata(&pool, &stored.id, &edit, true).await?;
+        let again = rescan(&pool, "edit-category", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.id, stored.id);
+        // 訂正後の category で再 scan されても値は変わらない。
+        let again = rescan(&pool, "edit-category", SafetyCategory::Spam).await?;
+        assert!(!again.newly_created);
+        let after = get_risk_signal(&pool, &stored.id).await?.expect("exists");
+        assert_eq!(after.signal.category, SafetyCategory::Spam);
+        assert_eq!(after.signal.confidence, Some(15));
+        assert_eq!(after.signal.severity, Severity::Critical);
+        assert_eq!(count_signals(&pool, "edit-category").await?, 1);
+
+        // 3. 期限を付ける編集: 失効後も再 scan で新しい行を作らず、期限も変えない。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("edit-expiry", nsfw)).await?;
+        let edit = RiskSignalMetadataEdit {
+            expires_at: Some(NOW.to_string()),
+            ..RiskSignalMetadataEdit::default()
+        };
+        edit_risk_signal_detection_metadata(&pool, &stored.id, &edit, true).await?;
+        let again = rescan(&pool, "edit-expiry", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.id, stored.id);
+        let after = get_risk_signal(&pool, &stored.id).await?.expect("exists");
+        assert_eq!(after.signal.expires_at.as_deref(), Some(NOW));
+        assert_eq!(after.signal.confidence, Some(90));
+        assert_eq!(count_signals(&pool, "edit-expiry").await?, 1);
+
+        // 4. 同じ category の再発行: 訂正版の値が再 scan で戻らない。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("reissue-same", nsfw)).await?;
+        let correction = RiskSignalCorrection {
+            confidence: Some(20),
+            ..RiskSignalCorrection::default()
+        };
+        let reissued =
+            reissue_corrected_risk_signal(&pool, &stored.id, &correction, NOW, true).await?;
+        let again = rescan(&pool, "reissue-same", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.id, reissued.id);
+        let after = get_risk_signal(&pool, &reissued.id).await?.expect("exists");
+        assert_eq!(after.signal.confidence, Some(20));
+        assert_eq!(after.signal.severity, Severity::Critical);
+        assert_eq!(after.signal.visibility, Visibility::SubscribedNodes);
+        assert_eq!(after.signal.expires_at, None);
+        assert_eq!(count_signals(&pool, "reissue-same").await?, 2);
+        assert!(reissued.operator_adjusted_at.is_some());
+
+        // 訂正済みの行も再発行でき、新しい訂正版が作られる（scanner の抑止に掛からない）。
+        let correction = RiskSignalCorrection {
+            confidence: Some(5),
+            ..RiskSignalCorrection::default()
+        };
+        let second =
+            reissue_corrected_risk_signal(&pool, &reissued.id, &correction, NOW, true).await?;
+        assert_ne!(second.id, reissued.id);
+        assert_eq!(second.signal.confidence, Some(5));
+        assert!(second.operator_adjusted_at.is_some());
+        assert_eq!(count_signals(&pool, "reissue-same").await?, 3);
+
+        // 5. category を変える再発行: 元の category の再 scan でも新しい行を作らない。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("reissue-category", nsfw)).await?;
+        let correction = RiskSignalCorrection {
+            category: Some(SafetyCategory::Spam),
+            ..RiskSignalCorrection::default()
+        };
+        let reissued =
+            reissue_corrected_risk_signal(&pool, &stored.id, &correction, NOW, true).await?;
+        let again = rescan(&pool, "reissue-category", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(count_signals(&pool, "reissue-category").await?, 2);
+        let after = get_risk_signal(&pool, &reissued.id).await?.expect("exists");
+        assert_eq!(after.signal.category, SafetyCategory::Spam);
+        assert_eq!(after.signal.confidence, Some(90));
+
+        // INVAR-1: 訂正されていない行は #1050 の集約更新を維持する。別 category の新しい判定も
+        // 訂正の抑止に巻き込まれず新規行になる。
+        let untouched =
+            persist_risk_signal(&pool, ISSUER, &suspected_signal("untouched", nsfw)).await?;
+        assert!(untouched.operator_adjusted_at.is_none());
+        let again = rescan(&pool, "untouched", nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.signal.confidence, Some(99));
+        let csam = rescan(&pool, "edit-category", SafetyCategory::Csam).await?;
+        assert!(
+            csam.newly_created,
+            "訂正されていない category の判定は抑止しない"
+        );
 
         Ok::<(), anyhow::Error>(())
     }

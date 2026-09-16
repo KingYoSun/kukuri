@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 use kukuri_cn_core::{
-    AppealReviewOperation, NewCommunityNodeReport, RiskSignalCorrection, RiskSignalMetadataEdit,
-    TestDatabase, apply_appeal_review_action, connect_postgres, get_appeal_review,
-    get_community_node_report, get_risk_signal, initialize_database, insert_community_node_appeal,
-    list_appeal_reviews, list_operator_actions, list_trust_risk_inputs, persist_risk_signal,
+    AppealReviewOperation, AppealReviewVersion, NewCommunityNodeReport, PersistedRiskSignal,
+    RiskSignalCorrection, RiskSignalMetadataEdit, TestDatabase, apply_appeal_review_action,
+    connect_postgres, get_appeal_review, get_community_node_report, get_risk_signal,
+    initialize_database, insert_community_node_appeal, list_appeal_reviews, list_operator_actions,
+    list_trust_risk_inputs, persist_risk_signal, persist_risk_signal_deduplicated,
 };
 use kukuri_cn_safety::{
     AppealStatus, Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal, Severity, Visibility,
@@ -344,6 +345,178 @@ async fn operator_review_revalidates_and_commits_state_reports_and_audit_togethe
         let serialized = serde_json::to_string(&audit)?;
         assert!(!serialized.contains("監査へ入れてはならない本文"));
         assert!(!serialized.contains("must-not-be-stored@example.com"));
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+    database.cleanup().await?;
+    result
+}
+
+async fn count_signals(pool: &sqlx::PgPool, target_id: &str) -> Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cn_safety.risk_signals WHERE target_id = $1",
+    )
+    .bind(target_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// 構成変更後の再 scan（scanner 経路）。審査の訂正値と異なる値で保存を試みる。
+async fn rescan(
+    pool: &sqlx::PgPool,
+    target_id: &str,
+    category: SafetyCategory,
+) -> Result<PersistedRiskSignal> {
+    let mut rescanned = signal(target_id, AppealStatus::None);
+    rescanned.category = category;
+    rescanned.severity = Severity::Critical;
+    rescanned.confidence = Some(84);
+    rescanned.visibility = Visibility::Public;
+    persist_risk_signal_deduplicated(pool, ISSUER, &rescanned, None).await
+}
+
+async fn open_review(
+    pool: &sqlx::PgPool,
+    signal_id: &str,
+    target_id: &str,
+) -> Result<AppealReviewVersion> {
+    insert_community_node_appeal(pool, ISSUER, signal_id, &report(target_id, "誤検知")).await?;
+    Ok(get_appeal_review(pool, signal_id)
+        .await?
+        .expect("review")
+        .version())
+}
+
+/// #1058 AC-1 / AC-2: 審査の訂正版再発行・検知メタデータ編集で確定した値は、構成変更後の
+/// 再 scan で上書きされず、signal の新規 insert も起きない。
+#[tokio::test]
+async fn appeal_review_adjustments_survive_rescan() -> Result<()> {
+    let Some(admin_url) = integration_test_admin_database_url() else {
+        eprintln!("skipping appeal review integration test");
+        return Ok(());
+    };
+    let database = TestDatabase::create(admin_url.as_str(), "cn_appeal_rescan_1058").await?;
+    let pool = connect_postgres(database.database_url.as_str()).await?;
+    let result = async {
+        initialize_database(&pool).await?;
+
+        // Issue の再現 sequence: 申し立て → 審査で confidence 20 に訂正して再発行 → 再 scan。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &signal("frank", AppealStatus::None)).await?;
+        let expected = open_review(&pool, &stored.id, "frank").await?;
+        apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &stored.id,
+            &AppealReviewOperation::Reissue {
+                expected,
+                correction: RiskSignalCorrection {
+                    confidence: Some(20),
+                    ..RiskSignalCorrection::default()
+                },
+            },
+            true,
+        )
+        .await?;
+        let corrected_id = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM cn_safety.risk_signals WHERE target_id = 'frank' AND id <> $1",
+        )
+        .bind(&stored.id)
+        .fetch_one(&pool)
+        .await?;
+        let again = rescan(&pool, "frank", SafetyCategory::Nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.id, corrected_id);
+        let after = get_risk_signal(&pool, &corrected_id)
+            .await?
+            .expect("corrected");
+        assert_eq!(after.signal.confidence, Some(20));
+        assert_eq!(after.signal.severity, Severity::High);
+        assert_eq!(after.signal.visibility, Visibility::Local);
+        assert_eq!(after.signal.expires_at, None);
+        assert_eq!(after.signal.appeal_status, Some(AppealStatus::None));
+        assert_eq!(count_signals(&pool, "frank").await?, 2);
+        assert!(after.operator_adjusted_at.is_some());
+        let old = get_risk_signal(&pool, &stored.id).await?.expect("old");
+        assert_eq!(old.signal.appeal_status, Some(AppealStatus::Cleared));
+        assert!(
+            old.operator_adjusted_at.is_none(),
+            "cleared で終結した旧判定は訂正の印を持たない"
+        );
+
+        // 審査の編集で category を変えた行: 元の category の再 scan でも新しい行を作らず、
+        // その後の訂正版再発行も元の category を引き継いで保護される。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &signal("grace", AppealStatus::None)).await?;
+        let expected = open_review(&pool, &stored.id, "grace").await?;
+        apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &stored.id,
+            &AppealReviewOperation::Edit {
+                expected,
+                edit: RiskSignalMetadataEdit {
+                    category: Some(SafetyCategory::Spam),
+                    confidence: Some(30),
+                    ..RiskSignalMetadataEdit::default()
+                },
+            },
+            true,
+        )
+        .await?;
+        let again = rescan(&pool, "grace", SafetyCategory::Nsfw).await?;
+        assert!(!again.newly_created);
+        assert_eq!(count_signals(&pool, "grace").await?, 1);
+        let again = rescan(&pool, "grace", SafetyCategory::Spam).await?;
+        assert!(!again.newly_created);
+        let after = get_risk_signal(&pool, &stored.id).await?.expect("edited");
+        assert_eq!(after.signal.confidence, Some(30));
+        assert_eq!(after.signal.severity, Severity::High);
+        assert_eq!(after.signal.appeal_status, Some(AppealStatus::Disputed));
+        assert!(after.operator_adjusted_at.is_some());
+
+        let expected = get_appeal_review(&pool, &stored.id)
+            .await?
+            .expect("review")
+            .version();
+        apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &stored.id,
+            &AppealReviewOperation::Reissue {
+                expected,
+                correction: RiskSignalCorrection {
+                    confidence: Some(10),
+                    ..RiskSignalCorrection::default()
+                },
+            },
+            true,
+        )
+        .await?;
+        assert_eq!(count_signals(&pool, "grace").await?, 2);
+        let again = rescan(&pool, "grace", SafetyCategory::Nsfw).await?;
+        assert!(!again.newly_created);
+        let again = rescan(&pool, "grace", SafetyCategory::Spam).await?;
+        assert!(!again.newly_created);
+        assert_eq!(again.stored.signal.confidence, Some(10));
+        assert_eq!(count_signals(&pool, "grace").await?, 2);
+
+        // INVAR-2: 棄却は訂正の印を付けず、#1050 の集約更新を維持する。
+        let stored =
+            persist_risk_signal(&pool, ISSUER, &signal("heidi", AppealStatus::None)).await?;
+        let expected = open_review(&pool, &stored.id, "heidi").await?;
+        apply_appeal_review_action(
+            &pool,
+            "ops@kukuri.app",
+            &stored.id,
+            &AppealReviewOperation::Reject { expected },
+            true,
+        )
+        .await?;
+        let again = rescan(&pool, "heidi", SafetyCategory::Nsfw).await?;
+        assert!(!again.newly_created);
+        assert!(again.stored.operator_adjusted_at.is_none());
+        assert_eq!(again.stored.signal.confidence, Some(84));
         Ok::<(), anyhow::Error>(())
     }
     .await;

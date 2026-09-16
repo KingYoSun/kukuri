@@ -10,7 +10,7 @@ use kukuri_cn_safety::{
 };
 use sqlx::PgPool;
 
-use crate::safety_events::risk_signal_from_row;
+use crate::safety_events::{RISK_SIGNAL_COLUMNS, risk_signal_from_row};
 
 /// `issuer_node_id` が発行した、指定 subject の有効な content advisory を返す。
 ///
@@ -29,10 +29,8 @@ pub async fn list_content_advisories_for_subjects(
     if post_ids.is_empty() && blob_hashes.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = sqlx::query(
-        "SELECT DISTINCT ON (target, target_id, category)
-                id, issuer_node_id, target, target_id, category, severity, basis, visibility,
-                confidence, expires_at, appeal_status, persisted_at
+    let rows = sqlx::query(&format!(
+        "SELECT DISTINCT ON (target, target_id, category) {RISK_SIGNAL_COLUMNS}
          FROM cn_safety.risk_signals
          WHERE issuer_node_id = $1
            AND category IN ('nsfw', 'objectionable')
@@ -42,8 +40,8 @@ pub async fn list_content_advisories_for_subjects(
            AND (appeal_status IS NULL OR appeal_status <> 'cleared')
            AND (expires_at IS NULL OR expires_at::timestamptz > $4::timestamptz)
            AND retention_expires_at > NOW()
-         ORDER BY target, target_id, category, persisted_at DESC, id",
-    )
+         ORDER BY target, target_id, category, persisted_at DESC, id"
+    ))
     .bind(issuer_node_id)
     .bind(post_ids)
     .bind(blob_hashes)

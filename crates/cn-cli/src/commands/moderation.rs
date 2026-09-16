@@ -57,7 +57,7 @@ pub(super) async fn run(pool: &PgPool, action: ModerationCliAction) -> Result<()
                 for stored in signals {
                     println!(
                         "{}  {}  {:?}/{}  category={:?}  severity={:?}  basis={:?}  \
-                         visibility={:?}  appeal={:?}  expires_at={}",
+                         visibility={:?}  appeal={:?}  expires_at={}  operator_adjusted={}",
                         stored.persisted_at.to_rfc3339(),
                         stored.id,
                         stored.signal.target,
@@ -68,6 +68,7 @@ pub(super) async fn run(pool: &PgPool, action: ModerationCliAction) -> Result<()
                         stored.signal.visibility,
                         stored.signal.appeal_status.unwrap_or_default(),
                         stored.signal.expires_at.as_deref().unwrap_or("-"),
+                        format_operator_adjustment(&stored),
                     );
                 }
             }
@@ -134,33 +135,57 @@ pub(super) async fn run(pool: &PgPool, action: ModerationCliAction) -> Result<()
 }
 
 fn print_signal(stored: &StoredRiskSignal) {
-    println!("id:            {}", stored.id);
-    println!("issuer:        {}", stored.issuer_node_id);
-    println!("persisted_at:  {}", stored.persisted_at.to_rfc3339());
-    println!(
-        "target:        {:?}/{}",
-        stored.signal.target, stored.signal.target_id
+    print!("{}", format_signal(stored));
+}
+
+/// `show` などの詳細表示。operator が値を確定した行は印と訂正前の category を示す（#1058）。
+fn format_signal(stored: &StoredRiskSignal) -> String {
+    let mut out = String::new();
+    let mut line = |label: &str, value: String| {
+        out.push_str(&format!("{:<15}{value}\n", format!("{label}:")));
+    };
+    line("id", stored.id.clone());
+    line("issuer", stored.issuer_node_id.clone());
+    line("persisted_at", stored.persisted_at.to_rfc3339());
+    line(
+        "target",
+        format!("{:?}/{}", stored.signal.target, stored.signal.target_id),
     );
-    println!("category:      {:?}", stored.signal.category);
-    println!("severity:      {:?}", stored.signal.severity);
-    println!("basis:         {:?}", stored.signal.basis);
-    println!("visibility:    {:?}", stored.signal.visibility);
-    println!(
-        "confidence:    {}",
+    line("category", format!("{:?}", stored.signal.category));
+    line("severity", format!("{:?}", stored.signal.severity));
+    line("basis", format!("{:?}", stored.signal.basis));
+    line("visibility", format!("{:?}", stored.signal.visibility));
+    line(
+        "confidence",
         stored
             .signal
             .confidence
             .map(|v| v.to_string())
-            .unwrap_or_else(|| "-".to_string())
+            .unwrap_or_else(|| "-".to_string()),
     );
-    println!(
-        "appeal_status: {:?}",
-        stored.signal.appeal_status.unwrap_or_default()
+    line(
+        "appeal_status",
+        format!("{:?}", stored.signal.appeal_status.unwrap_or_default()),
     );
-    println!(
-        "expires_at:    {}",
-        stored.signal.expires_at.as_deref().unwrap_or("-")
+    line(
+        "expires_at",
+        stored
+            .signal
+            .expires_at
+            .clone()
+            .unwrap_or_else(|| "-".to_string()),
     );
+    line("operator_adj", format_operator_adjustment(stored));
+    out
+}
+
+/// operator 確定の印（#1058）。未訂正は `-`、確定済みは時刻と訂正前の category。
+fn format_operator_adjustment(stored: &StoredRiskSignal) -> String {
+    match (stored.operator_adjusted_at, stored.operator_origin_category) {
+        (Some(at), Some(origin)) => format!("{} (origin_category={origin:?})", at.to_rfc3339()),
+        (Some(at), None) => at.to_rfc3339(),
+        (None, _) => "-".to_string(),
+    }
 }
 
 fn category_from_arg(arg: SafetyCategoryArg) -> SafetyCategory {
@@ -190,5 +215,49 @@ fn visibility_from_arg(arg: VisibilityArg) -> Visibility {
         VisibilityArg::Local => Visibility::Local,
         VisibilityArg::SubscribedNodes => Visibility::SubscribedNodes,
         VisibilityArg::Public => Visibility::Public,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{DateTime, Utc};
+    use kukuri_cn_safety::{Basis, RiskSignalTarget, SafetyRiskSignal};
+
+    use super::*;
+
+    fn stored(operator_adjusted_at: Option<DateTime<Utc>>) -> StoredRiskSignal {
+        StoredRiskSignal {
+            id: "sig-1".to_string(),
+            issuer_node_id: "issuer".to_string(),
+            signal: SafetyRiskSignal {
+                target: RiskSignalTarget::PostId,
+                target_id: "post-1".to_string(),
+                category: SafetyCategory::Spam,
+                severity: Severity::Low,
+                basis: Basis::ClassifierScore,
+                confidence: Some(20),
+                visibility: Visibility::Local,
+                expires_at: None,
+                appeal_status: Some(AppealStatus::None),
+            },
+            persisted_at: "2026-09-15T00:00:00Z".parse().unwrap(),
+            operator_origin_category: operator_adjusted_at.map(|_| SafetyCategory::Nsfw),
+            operator_adjusted_at,
+        }
+    }
+
+    /// #1058 AC-3: `moderation show` で operator が確定した行と訂正前の category が判別できる。
+    #[test]
+    fn show_marks_operator_adjusted_signal() {
+        let adjusted = stored(Some("2026-09-16T01:02:03Z".parse().unwrap()));
+        let text = format_signal(&adjusted);
+        assert!(
+            text.contains("operator_adj:  2026-09-16T01:02:03+00:00 (origin_category=Nsfw)"),
+            "{text}"
+        );
+        assert!(text.contains("category:      Spam"), "{text}");
+
+        let plain = format_signal(&stored(None));
+        assert!(plain.contains("operator_adj:  -"), "{plain}");
     }
 }

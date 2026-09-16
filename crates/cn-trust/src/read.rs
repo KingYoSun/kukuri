@@ -6,7 +6,7 @@
 //! 実効寄与（decay / relation 重み込み）を説明できる形にする
 //! （`trust_read_is_explainable_with_basis`）。
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 pub use kukuri_cn_protocol::{TrustBasisEntry, TrustReadView};
 
 use crate::inputs::{TrustComponentKind, TrustRiskInput, TrustRiskInputs};
@@ -35,6 +35,9 @@ fn basis_entry(
         visibility: input.visibility,
         appeal_status: input.appeal_status,
         expires_at: input.expires_at.clone(),
+        operator_adjusted_at: input
+            .operator_adjusted_at
+            .map(|at| at.to_rfc3339_opts(SecondsFormat::Secs, true)),
         raw_contribution: raw,
         decay_factor: decay,
         relation_weight,

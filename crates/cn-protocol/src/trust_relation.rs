@@ -31,6 +31,10 @@ pub struct TrustBasisEntry {
     pub visibility: Visibility,
     pub appeal_status: AppealStatus,
     pub expires_at: Option<String>,
+    /// operator が審査・運用是正で値を確定した時刻（RFC3339、#1058）。`None` は scanner 由来の
+    /// 未訂正判定。旧 node の応答では欠落する。
+    #[serde(default)]
+    pub operator_adjusted_at: Option<String>,
     pub raw_contribution: f64,
     pub decay_factor: f64,
     pub relation_weight: f64,

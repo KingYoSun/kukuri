@@ -19,9 +19,12 @@ use anyhow::{Context, Result, bail};
 use chrono::DateTime;
 use sqlx::postgres::PgPool;
 
-use kukuri_cn_safety::{AppealStatus, SafetyCategory, SafetyRiskSignal, Severity, Visibility};
+use kukuri_cn_safety::{AppealStatus, SafetyCategory, Severity, Visibility};
 
-use crate::safety_events::{StoredRiskSignal, get_risk_signal, persist_risk_signal, to_db_enum};
+use crate::safety_events::{
+    OperatorCorrectedRiskSignal, StoredRiskSignal, get_risk_signal,
+    insert_operator_corrected_risk_signal, to_db_enum,
+};
 
 /// appeal 状態を遷移させる（遷移ガード付き）。
 ///
@@ -161,9 +164,13 @@ pub async fn edit_risk_signal_detection_metadata(
         .expires_at
         .clone()
         .or_else(|| stored.signal.expires_at.clone());
+    // #1058: operator 確定の印を付け、訂正前の category を初回だけ記録する
+    // （SET 右辺の category は更新前の値）。
     sqlx::query(
         "UPDATE cn_safety.risk_signals
-         SET category = $2, severity = $3, confidence = $4, expires_at = $5
+         SET category = $2, severity = $3, confidence = $4, expires_at = $5,
+             operator_adjusted_at = NOW(),
+             operator_origin_category = COALESCE(operator_origin_category, category)
          WHERE id = $1",
     )
     .bind(id)
@@ -191,7 +198,8 @@ pub struct RiskSignalCorrection {
 ///
 /// 旧 signal に `expires_at = now_rfc3339` を刻んで失効させ（配布クエリから除外され、
 /// trust 供給層でも失効除外される）、訂正内容を適用した新 signal を同じ issuer で
-/// persist して返す。
+/// 同一取引に挿入して返す。新 signal は operator 確定の印を持ち、再 scan で上書きされない
+/// （#1058）。
 pub async fn reissue_corrected_risk_signal(
     pool: &PgPool,
     id: &str,
@@ -210,25 +218,34 @@ pub async fn reissue_corrected_risk_signal(
         .await?
         .with_context(|| format!("risk signal `{id}` not found"))?;
 
+    let signal = &stored.signal;
+    let origin_category = stored.operator_origin_category.unwrap_or(signal.category);
+    let mut tx = pool.begin().await?;
     // 旧 signal を失効させる（訂正の対にならない単独失効は edit_… の expires_at 編集で行う）。
     sqlx::query("UPDATE cn_safety.risk_signals SET expires_at = $2 WHERE id = $1")
         .bind(id)
         .bind(now_rfc3339)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
-
-    let corrected = SafetyRiskSignal {
-        target: stored.signal.target,
-        target_id: stored.signal.target_id.clone(),
-        category: correction.category.unwrap_or(stored.signal.category),
-        severity: correction.severity.unwrap_or(stored.signal.severity),
-        basis: stored.signal.basis,
-        confidence: correction.confidence.or(stored.signal.confidence),
-        visibility: correction.visibility.unwrap_or(stored.signal.visibility),
-        expires_at: None,
-        appeal_status: Some(AppealStatus::None),
-    };
-    persist_risk_signal(pool, &stored.issuer_node_id, &corrected).await
+    // #1058: 訂正版は scanner の集約経路を通さず、operator 確定の印を付けて挿入する。
+    // 集約経路を通すと、訂正済み行の再発行が印による抑止に掛かって新しい行を作れない。
+    let reissued = insert_operator_corrected_risk_signal(
+        &mut tx,
+        &OperatorCorrectedRiskSignal {
+            issuer_node_id: &stored.issuer_node_id,
+            target: &to_db_enum(&signal.target)?,
+            target_id: &signal.target_id,
+            category: &to_db_enum(&correction.category.unwrap_or(signal.category))?,
+            severity: &to_db_enum(&correction.severity.unwrap_or(signal.severity))?,
+            basis: &to_db_enum(&signal.basis)?,
+            visibility: &to_db_enum(&correction.visibility.unwrap_or(signal.visibility))?,
+            confidence: correction.confidence.or(signal.confidence),
+            origin_category: &to_db_enum(&origin_category)?,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(reissued)
 }
 
 #[cfg(test)]
