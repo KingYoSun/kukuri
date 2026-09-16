@@ -30,3 +30,8 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - 追加 contract: `advisory_labeled_media_respects_adult_display_gate`（`blob_media_payload` が「advisory 付き hash かつ設定 OFF」で blob 取得を行わない）、`content_advisories_are_separate_from_signed_content_labels`、`advisory_lookup_returns_only_configured_node_signals`（一括照会は設定済み node 自身の advisory のみ返す）。
 - 追加 scenario: 表示ゲート（見つけるの `content_advisories`、タイムライン向け一括照会の応答）で self-label と同じプレースホルダーになり、発行 node / category / confidence と異議申し立て導線を説明できる。設定 OFF 中に advisory 付き media の bytes 取得が 0 であることを frontend vitest と `crates/app-api` の test で担保する。
 - 利用規約 第3条 4 項の文言改訂と `LEGAL_BUNDLE_VERSION` 更新（再同意）は C4 で行う。それまで advisory の合成は有効化しない。
+- 実装の決定（#1056 = C4、2026-09-16）: タイムライン・スレッド・ブックマーク・プロフィール・object-backed 通知の可視 subject（投稿 id、添付 hash、引用元・返信先の id と添付 hash）を、採用 node へ一括照会する。照会結果は subject 単位の一時状態（`timelineContentAdvisories`）と Rust 側の in-memory 集合（`advisory_media_hashes`）にだけ置き、永続化しない。
+- 実装の決定（#1056）: 採用は node 単位の設定（community node 設定ファイルの `content_advisory_enabled`、既定 true）とする。これは利用者の設定値であり durable だが、推定そのものは保存しない。採用しない node へは照会しない。
+- 実装の決定（#1056）: 照会は表示設定の ON / OFF にかかわらず行う。ON 中も advisory 付き hash は ephemeral 取得にする必要があるため。照会が確定するまでは、その投稿のメディアを取得せず、代替表示とは別のスケルトンを出す。照会先の有無が未確定の間も同様に扱う。
+- C3 の既知の限界（見つける以外の経路では推定を知らず代替表示が出ない）は、上記のタイムライン系照会で解消した。
+- 追加 contract（#1056）: `advisory_lookup_reads_do_not_mutate_state`、`lookup_sends_only_visible_ids_to_enabled_nodes`、`lookup_skips_nodes_with_content_advisory_disabled`、`lookup_stops_before_http_when_consent_is_pending`。
