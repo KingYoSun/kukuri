@@ -51,6 +51,15 @@ TR-13（token 無し）は、runtime の門が token 読み出し失敗で `AUTH
 - 照会中判定を「照会済み集合に無い」で行う形にした。当初の「照会中集合に有る」形では、投稿が描画された同じ commit でプリフェッチが走り、取得が 1 回起きた（page test で検出）。
 - Tauri の lib test は、この Windows 環境では変更前の main でも `STATUS_ENTRYPOINT_NOT_FOUND` で起動できない。CI でも lib test は実行していない。追加した必須文言の条件は同じ文字列で Python から再現して確認し、`cargo check --tests` でコンパイルを確認した。
 
+## 独立監査と是正
+
+- 1 回目（対象 `a964ffab`、別コンテキストの subagent）: **FAIL**。blocker 1 件、inventory 8 件中 適合 6 / 不適合 2 / 未分類 0。記録は PR #1072 の comment。
+  - B-1（Regression）: 設定 JSON の新欄が常に出力されるが、kukuri-cli の出力 schema が追加欄を拒否し、CLI の `get/set_community_node_config` が失敗していた。
+  - 必須 CI 失敗: 新 Tauri command が CLI の command 対応表で未分類（`command_parity`）。
+  - non-blocker 1（config 取得失敗で照会先が未確定のまま残る）と 2（採用 node の組だけが変わると再照会しない）は Regression として同じ PR で修正した。
+- 是正（`b2897171`）: CLI の出力・入力 schema に `content_advisory_enabled`、CLI に `lookup_community_node_content_advisories`（Read）を追加して対応表へ登録（154 件）。index entry の出力 schema に `content_advisories` を追加した（#1054 以降、結果を含む CLI 検索が schema で拒否される Existing-gap を同時に解消）。
+- 据え置き（Close 条件外）: 10 秒 timeout 後の fail-open 取得、取得ゲート集合が追加のみ、設定保存と照会開始の race、Deferred / token 無しの専用 test、en 参考訳の語の曖昧さ。
+
 ## 検証結果
 
 実行結果は PR の検証欄に記録する（`cargo xtask check` / `cargo xtask test` / `cargo xtask cn-check` / `cargo xtask cn-test` / desktop Vitest / Playwright / `cargo xtask oversized-files`）。必須検証を省略して成功とみなさない。
