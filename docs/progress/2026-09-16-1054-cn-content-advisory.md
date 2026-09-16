@@ -109,7 +109,8 @@ test に対応付けた。未分類 0。
 ### cn-test
 
 - `cargo xtask cn-test`（cn-postgres / cn-valkey を compose で起動、`KUKURI_CN_RUN_INTEGRATION_TESTS=1`）:
-  615 passed / 0 failed / 0 ignored（2026-09-16）。
+  最終 head `5301c60d` で 618 passed / 0 failed / 0 ignored（2026-09-16。監査後に追加した 3 test を含む）。
+  途中 2 回 MSVC linker の一時障害（`LNK1104`、#1050 でも記録）で中断し、`CARGO_BUILD_JOBS=4` で再実行して成功。
 - 途中で赤になり修正した 2 件（いずれも既定 policy が nsfw = label になったことに伴う既存 test の前提ずれ）:
   - `postgres_store_reuses_verdict_and_does_not_duplicate_artifacts`（cn-core）: ラベル付き allow の再利用で
     2 人目の著者が関連付かなかった（Existing-gap。AC-3 / TR-10 の範囲）。`scan_and_record_inner` の再利用分岐を
@@ -127,7 +128,8 @@ test に対応付けた。未分類 0。
 ### cn-e2e
 
 - `cargo xtask cn-e2e`（cn-postgres / cn-valkey / cn-arcadedb を compose で起動）: 全 suite 成功
-  （allowed_path 1、denied_paths 1、failure_paths 6、recovery 1、trust_relation_graph 1。2026-09-16）。
+  （allowed_path 1、denied_paths 1、failure_paths 6、recovery 1、trust_relation_graph 1。2026-09-16。
+  最終 head `5301c60d` でも再実行して成功）。
   `trust_relation_graph.rs` の相対成分 signal は spam へ切り替えた（advisory-only の nsfw では相対成分が動かない）。
 
 ### 監査後の是正
