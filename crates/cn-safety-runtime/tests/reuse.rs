@@ -88,6 +88,8 @@ impl SafetyProvider for CountingProvider {
 
 fn nsfw_result(provider: &str, score: u8) -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: provider.to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,

@@ -23,6 +23,7 @@
 //! すべて `snake_case`。client（TS）向けの wire 変換が必要になった段階で別途変換層を入れる。
 
 pub mod advisory;
+pub mod assessment;
 pub mod capability;
 pub mod event;
 pub mod policy;
@@ -39,6 +40,7 @@ pub mod verdict;
 pub mod mock;
 
 pub use advisory::{AdvisorySubjectKind, ContentAdvisory};
+pub use assessment::{ProviderDecisionBasis, ScanCoverage, ScanInputKind};
 pub use capability::SafetyProviderCapability;
 pub use event::{
     ModerationEventBody, ModerationEventSigner, SignedModerationEvent, issue_signed_event,

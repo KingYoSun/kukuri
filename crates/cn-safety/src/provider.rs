@@ -107,6 +107,13 @@ impl ScanOutcome {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ProviderScanResult {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::ProviderDecisionBasis::is_score_threshold"
+    )]
+    pub decision_basis: crate::ProviderDecisionBasis,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<crate::ScanCoverage>,
     /// provider 名（verdict の `provider` フィールドに反映され得る）。
     pub provider: String,
     /// この結果を生んだ capability。
@@ -135,6 +142,8 @@ impl ProviderScanResult {
     /// completed かつ何も検知していない素の結果。
     pub fn completed(provider: impl Into<String>, capability: SafetyProviderCapability) -> Self {
         Self {
+            decision_basis: crate::ProviderDecisionBasis::default(),
+            coverage: None,
             provider: provider.into(),
             capability,
             outcome: ScanOutcome::Completed,
@@ -196,6 +205,19 @@ pub trait MediaFetcher: Send + Sync {
         media_hint: &str,
         content_type_hint: Option<&str>,
     ) -> Result<FetchedMedia, ScanError>;
+}
+
+/// Transient, bounded JPEG frames; never publish these as canonical blobs.
+#[derive(Debug)]
+pub struct VideoScanFrames {
+    pub frames: Vec<FetchedMedia>,
+    pub duration_ms: u64,
+}
+
+#[async_trait]
+pub trait VideoFrameExtractor: Send + Sync {
+    fn config_fingerprint(&self) -> String;
+    async fn extract(&self, bytes: &[u8]) -> Result<VideoScanFrames, ScanError>;
 }
 
 /// safety / moderation provider の抽象。

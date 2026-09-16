@@ -167,6 +167,8 @@ async fn perceptual_match_confirmed_uses_provider_verdict_basis() {
     // 排除・critical・subscribed_nodes 配布は完全一致と同じだが、根拠ラベルは
     // 「完全一致」ではなく「provider による断定」(ProviderVerdict)になる(§2.2 / §2.7)。
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "known".to_string(),
         capability: SafetyProviderCapability::PerceptualHashMatch,
         outcome: ScanOutcome::Completed,
@@ -207,6 +209,8 @@ async fn general_moderation_uses_classifier_basis_and_local_visibility() {
     // nsfw / objectionable は ADR 0028 §8 で advisory 付き allow になるため
     // （`labeled_allow_emits_risk_label_event_and_signal`）、非 index の一般判定は spam で固定する。
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "general".to_string(),
         capability: SafetyProviderCapability::SpamAbuseModeration,
         outcome: ScanOutcome::Completed,
@@ -293,6 +297,8 @@ async fn suspected_unknown_csam_is_local_visibility() {
 #[tokio::test]
 async fn cse_suspected_artifacts_do_not_use_first_noncritical_label() {
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "cse-classifier".to_string(),
         capability: SafetyProviderCapability::CseTextClassifier,
         outcome: ScanOutcome::Completed,
@@ -637,6 +643,8 @@ async fn labeled_allow_emits_risk_label_event_and_signal() {
     // それでも RiskLabel event と severity Low / basis ClassifierScore の risk signal を生成する
     // （appeal 経路の入口）。visibility は suspected_signal_visibility に従う。
     let result = ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: "general".to_string(),
         capability: SafetyProviderCapability::GeneralMediaModeration,
         outcome: ScanOutcome::Completed,
@@ -742,6 +750,8 @@ fn content_advisories_carry_signal_id_and_display_label() {
     // signal_id / basis（常に classifier_score）を持つ。post / blob 以外の subject には付けない。
     let mut verdict = kukuri_cn_safety::route(
         &[ProviderScanResult {
+            decision_basis: Default::default(),
+            coverage: None,
             provider: "general".to_string(),
             capability: SafetyProviderCapability::GeneralMediaModeration,
             outcome: ScanOutcome::Completed,

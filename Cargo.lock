@@ -3401,6 +3401,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kukuri-cn-safety-openai"
+version = "0.2.4"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "hex",
+ "image",
+ "kukuri-cn-safety",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "kukuri-cn-safety-runtime"
 version = "0.2.4"
 dependencies = [
@@ -3417,6 +3435,22 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "kukuri-cn-safety-video"
+version = "0.2.4"
+dependencies = [
+ "async-trait",
+ "hex",
+ "image",
+ "kukuri-cn-safety",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -3602,6 +3636,7 @@ name = "kukuri-iroh-node"
 version = "0.2.4"
 dependencies = [
  "anyhow",
+ "bao-tree",
  "futures-util",
  "hex",
  "iroh",

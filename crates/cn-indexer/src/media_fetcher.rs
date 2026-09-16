@@ -77,7 +77,8 @@ impl MediaFetcher for BlobMediaFetcher {
         let hash = BlobHash::new(hint.to_string());
         let fetched = tokio::time::timeout(
             self.config.timeout,
-            self.blob_service.fetch_blob_ephemeral(&hash),
+            self.blob_service
+                .fetch_blob_ephemeral_bounded(&hash, self.config.max_bytes),
         )
         .await
         .map_err(|_| {
@@ -90,6 +91,12 @@ impl MediaFetcher for BlobMediaFetcher {
             ))
         })?
         .map_err(|error| {
+            if error.is::<kukuri_iroh_node::remote_fetch::BlobTooLarge>() {
+                if let Some(metrics) = self.metrics() {
+                    metrics.record_media_fetch_oversize();
+                }
+                return ScanError::Protocol("referenced media exceeds scan size limit".into());
+            }
             if let Some(metrics) = self.metrics() {
                 metrics.record_media_fetch_unavailable();
             }
@@ -293,6 +300,13 @@ mod tests {
 
         #[async_trait]
         impl BlobService for StallingBlobService {
+            async fn fetch_blob_ephemeral_bounded(
+                &self,
+                _hash: &BlobHash,
+                _max_bytes: u64,
+            ) -> anyhow::Result<Option<Vec<u8>>> {
+                std::future::pending().await
+            }
             async fn put_blob(
                 &self,
                 _data: Vec<u8>,

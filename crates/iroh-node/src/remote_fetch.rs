@@ -27,6 +27,74 @@ enum FetchMode {
     Store,
     /// ストアを経由せず memory に直接取得する(safety scan 用の一時 fetch。#609)。
     Ephemeral,
+    EphemeralBounded(u64),
+}
+
+#[derive(Debug)]
+pub struct BlobTooLarge {
+    pub limit: u64,
+}
+
+impl std::fmt::Display for BlobTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "blob exceeds ephemeral byte limit {}", self.limit)
+    }
+}
+impl std::error::Error for BlobTooLarge {}
+
+/// CN scan ingress: stop consuming verified leaves before exceeding the bound.
+pub async fn fetch_bytes_ephemeral_bounded_with_cooldown(
+    node: &IrohDocsNode,
+    peers: &PeerAddrBook,
+    retries: &Mutex<RemoteFetchRetryState>,
+    hash: iroh_blobs::Hash,
+    max_bytes: u64,
+) -> Result<Option<Vec<u8>>> {
+    fetch_bytes_with_cooldown_mode(
+        node,
+        peers,
+        retries,
+        "bounded scan blob",
+        &hash.to_string(),
+        hash,
+        "local blob unavailable",
+        FetchMode::EphemeralBounded(max_bytes),
+    )
+    .await
+}
+
+async fn fetch_ephemeral(
+    connection: iroh::endpoint::Connection,
+    hash: iroh_blobs::Hash,
+    mode: FetchMode,
+) -> Result<Vec<u8>> {
+    use bao_tree::io::BaoContentItem;
+    use futures_util::StreamExt;
+    use iroh_blobs::get::request::{GetBlobItem, get_blob};
+    let max_bytes = match mode {
+        FetchMode::EphemeralBounded(limit) => limit,
+        _ => u64::MAX,
+    };
+    let mut stream = get_blob(connection, hash);
+    let mut bytes = Vec::new();
+    while let Some(item) = stream.next().await {
+        match item {
+            GetBlobItem::Item(BaoContentItem::Leaf(leaf)) => {
+                if (bytes.len() as u64).saturating_add(leaf.data.len() as u64) > max_bytes {
+                    return Err(BlobTooLarge { limit: max_bytes }.into());
+                }
+                anyhow::ensure!(
+                    leaf.offset == bytes.len() as u64,
+                    "non-contiguous ephemeral blob stream"
+                );
+                bytes.extend_from_slice(&leaf.data);
+            }
+            GetBlobItem::Item(_) => {}
+            GetBlobItem::Done(_) => return Ok(bytes),
+            GetBlobItem::Error(error) => return Err(error.into()),
+        }
+    }
+    anyhow::bail!("incomplete ephemeral blob stream")
 }
 
 /// local miss 後のリモートフェッチ一式(cooldown ゲート込み)。
@@ -93,7 +161,12 @@ async fn fetch_bytes_with_cooldown_mode(
     local_error: impl Display,
     mode: FetchMode,
 ) -> Result<Option<Vec<u8>>> {
-    match retries.lock().await.try_begin(hash_text, Instant::now()) {
+    // A scan's size rejection must not throttle a reader with a different limit.
+    let retry_key = match mode {
+        FetchMode::EphemeralBounded(limit) => format!("bounded:{limit}:{hash_text}"),
+        _ => hash_text.to_owned(),
+    };
+    match retries.lock().await.try_begin(&retry_key, Instant::now()) {
         RemoteFetchStart::Ready => {}
         RemoteFetchStart::CoolingDown => {
             info!(
@@ -110,7 +183,7 @@ async fn fetch_bytes_with_cooldown_mode(
     retries
         .lock()
         .await
-        .finish(hash_text, matches!(&result, Ok(Some(_))), Instant::now());
+        .finish(&retry_key, matches!(&result, Ok(Some(_))), Instant::now());
     result
 }
 
@@ -208,11 +281,11 @@ async fn fetch_bytes_from_remote(
                                 }
                             }
                         }
-                        FetchMode::Ephemeral => {
+                        FetchMode::Ephemeral | FetchMode::EphemeralBounded(_) => {
                             // ストアへ書き込まず、検証付きで memory へ直接取得する。
                             match timeout(
                                 REMOTE_FETCH_TRANSFER_TIMEOUT,
-                                iroh_blobs::get::request::get_blob(conn, hash).bytes(),
+                                fetch_ephemeral(conn, hash, mode),
                             )
                             .await
                             {
@@ -223,9 +296,12 @@ async fn fetch_bytes_from_remote(
                                         peer_id = %peer.id,
                                         "ephemeral fetch remote transfer completed"
                                     );
-                                    return Ok(Some(bytes.to_vec()));
+                                    return Ok(Some(bytes));
                                 }
                                 Ok(Err(error)) => {
+                                    if error.is::<BlobTooLarge>() {
+                                        return Err(error);
+                                    }
                                     warn!(
                                         subject,
                                         hash = %hash_text,

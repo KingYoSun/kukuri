@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+bao-tree.workspace = true
 futures-util.workspace = true
 hex.workspace = true
 iroh.workspace = true

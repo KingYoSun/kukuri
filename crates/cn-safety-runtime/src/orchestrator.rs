@@ -171,6 +171,8 @@ fn synthesize_failure(provider: &dyn SafetyProvider, error: &ScanError) -> Provi
         .copied()
         .expect("provider capabilities are validated as non-empty at build time");
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: provider.name().to_string(),
         capability,
         outcome: map_scan_error(error),

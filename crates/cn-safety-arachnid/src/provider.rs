@@ -131,6 +131,8 @@ impl SafetyProvider for ProjectArachnidShieldProvider {
 /// 検知なしの素の結果。
 fn base_result(outcome: ScanOutcome) -> ProviderScanResult {
     ProviderScanResult {
+        decision_basis: Default::default(),
+        coverage: None,
         provider: PROVIDER_NAME.to_string(),
         capability: SafetyProviderCapability::KnownCsamHashMatch,
         outcome,
@@ -151,6 +153,8 @@ fn scan_result_from(scan: ShieldScanResult) -> ProviderScanResult {
                 _ => SafetyProviderCapability::KnownCsamHashMatch,
             };
             ProviderScanResult {
+                decision_basis: Default::default(),
+                coverage: None,
                 provider: PROVIDER_NAME.to_string(),
                 capability,
                 outcome: ScanOutcome::Completed,
@@ -164,6 +168,8 @@ fn scan_result_from(scan: ShieldScanResult) -> ProviderScanResult {
         }
         // provider self-test データへの一致。csam_confirmed と区別する専用 route（#391）。
         ShieldClassification::Test => ProviderScanResult {
+            decision_basis: Default::default(),
+            coverage: None,
             provider: PROVIDER_NAME.to_string(),
             capability: SafetyProviderCapability::KnownCsamHashMatch,
             outcome: ScanOutcome::Completed,
