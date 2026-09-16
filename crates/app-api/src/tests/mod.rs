@@ -68,6 +68,7 @@ mod media_adult_gating;
 mod notifications;
 mod private_channels;
 mod reactions;
+mod shared_replica_keys;
 mod social;
 mod sync;
 mod timeline;

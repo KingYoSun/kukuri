@@ -22,9 +22,9 @@ use kukuri_cn_safety_runtime::{
     Secp256k1ModerationEventSigner,
 };
 use kukuri_core::{
-    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, MediaManifestItem, ObjectVisibility,
-    PayloadRef, ReplicaId, TopicId, blob_hash, build_media_manifest_envelope, build_post_envelope,
-    build_post_envelope_with_payload,
+    KukuriEnvelope, KukuriKeys, KukuriMediaManifestV1, KukuriPostObjectV1, MediaManifestItem,
+    ObjectVisibility, PayloadRef, ReplicaId, TopicId, blob_hash, build_media_manifest_envelope,
+    build_post_envelope, build_post_envelope_with_payload, timeline_sort_key,
 };
 use kukuri_docs_sync::{DocOp, DocsSync, MemoryDocsSync, stable_key};
 
@@ -121,6 +121,24 @@ pub async fn persist_post(
     persist_post_with_source(docs, replica, topic, body).await.0
 }
 
+/// 実クライアント（app-api `persist_post_object`）が 1 投稿で共有 replica に書く key（#1065）。
+///
+/// state / envelope に加えて timeline / thread の索引 key も書くため、変更通知には 4 key が届く。
+pub fn client_post_keys(object: &KukuriPostObjectV1) -> Vec<String> {
+    let object_id = object.object_id.as_str();
+    let sort_key = timeline_sort_key(object.created_at, &object.object_id);
+    let root_id = object.root.as_ref().map_or(object_id, |root| root.as_str());
+    vec![
+        stable_key("objects", &format!("{object_id}/state")),
+        stable_key("objects", &format!("{object_id}/envelope")),
+        stable_key("indexes/timeline", &format!("{sort_key}/{object_id}")),
+        stable_key(
+            "indexes/thread",
+            &format!("{root_id}/{sort_key}/{object_id}"),
+        ),
+    ]
+}
+
 /// `persist_post` に加えて署名鍵 / envelope / state JSON も返す（撤回・state 変更の再現用）。
 pub async fn persist_post_with_source(
     docs: &MemoryDocsSync,
@@ -128,6 +146,24 @@ pub async fn persist_post_with_source(
     topic: &TopicId,
     body: &str,
 ) -> (String, KukuriKeys, KukuriEnvelope, serde_json::Value) {
+    let (object_id, keys, envelope, state, _) =
+        persist_client_post(docs, replica, topic, body).await;
+    (object_id, keys, envelope, state)
+}
+
+/// 実クライアントと同じ key 集合で post を書き、書いた key も返す（#1065）。
+pub async fn persist_client_post(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+) -> (
+    String,
+    KukuriKeys,
+    KukuriEnvelope,
+    serde_json::Value,
+    Vec<String>,
+) {
     let keys = KukuriKeys::generate();
     let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
     let object = envelope
@@ -136,26 +172,27 @@ pub async fn persist_post_with_source(
         .expect("post object present");
     let object_id = object.object_id.as_str().to_string();
     let state = serde_json::to_value(&object).expect("state json");
+    let written = client_post_keys(&object);
     docs.open_replica(replica).await.expect("open");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/state")),
-            value: state.clone(),
-        },
-    )
-    .await
-    .expect("state op");
-    docs.apply_doc_op(
-        replica,
-        DocOp::SetJson {
-            key: stable_key("objects", &format!("{object_id}/envelope")),
-            value: serde_json::to_value(&envelope).expect("envelope json"),
-        },
-    )
-    .await
-    .expect("envelope op");
-    (object_id, keys, envelope, state)
+    for key in &written {
+        let value = if key.ends_with("/state") {
+            state.clone()
+        } else if key.ends_with("/envelope") {
+            serde_json::to_value(&envelope).expect("envelope json")
+        } else {
+            serde_json::json!({ "object_id": object_id })
+        };
+        docs.apply_doc_op(
+            replica,
+            DocOp::SetJson {
+                key: key.clone(),
+                value,
+            },
+        )
+        .await
+        .expect("client post op");
+    }
+    (object_id, keys, envelope, state, written)
 }
 
 /// 受け取った scan request を記録する known-CSAM provider（provider 呼び出し回数の検証用）。

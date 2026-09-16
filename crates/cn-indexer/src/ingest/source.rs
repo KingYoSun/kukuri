@@ -7,7 +7,7 @@ use kukuri_blob_service::BlobService;
 use kukuri_core::{
     AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId, blob_hash,
 };
-use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
+use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, SharedReplicaKeyFamily};
 
 /// app-api の投稿上限（10,000 Unicode scalar values）を UTF-8 bytes でも有界にする。
 const MAX_INDEXABLE_POST_BODY_CHARS: usize = 10_000;
@@ -78,7 +78,10 @@ impl<'a> SourceResolver<'a> {
         object: &PostObjectView,
         manifest_id: &str,
     ) -> Result<KukuriMediaManifestV1> {
-        let key = stable_key("manifests/media", &format!("{manifest_id}/envelope"));
+        let key = format!(
+            "{}{manifest_id}/envelope",
+            SharedReplicaKeyFamily::MediaManifest.prefix()
+        );
         let records = self
             .docs_sync
             .query_replica_with_policy(

@@ -37,7 +37,7 @@ use kukuri_cn_safety::ReasonCode;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService, ScanDisposition};
 use kukuri_core::{KukuriEnvelope, ObjectStatus, ReplicaId, verify_post_withdrawal};
-use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, stable_key};
+use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, SharedReplicaKeyFamily};
 
 use crate::projection::{IndexProjection, IndexedEntry};
 
@@ -61,16 +61,59 @@ pub struct IngestSummary {
     pub scans_reused: usize,
 }
 
-/// 変更通知から取り込み対象を決める鍵の分類（#1050）。
+/// 変更通知の key 種別ごとの取り込み方（#1050 / #1065）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyDisposition {
+    /// key から対象 object を特定して、その object だけを取り込む。
+    Object,
+    /// 対象 object を特定できないため scope 全体を見直す。
+    WholeScope,
+    /// 索引に影響しないため取り込みの契機にしない。
+    Ignore,
+}
+
+/// 種別ごとの取り込み方。種別が増えたらここで判断を強制する（ワイルドカードを置かない）。
 ///
-/// `objects/<id>/state|envelope` と `withdrawals/<id>/state` は対象 object を特定できる。
-/// それ以外（media manifest 等）は対象を特定できないため scope 全体の見直しへ倒す。
+/// `Ignore` にできるのは indexer が読まない種別だけ（[`INDEXER_READ_FAMILIES`] と交わらない）。
+/// media manifest は参照元 object を特定できないため scope 全体へ倒す（投稿 state の通知も
+/// 同時に届くが、同期の到着順が前後した場合の取り込みを定期見直しまで遅らせないため）。
+pub const fn key_disposition(family: SharedReplicaKeyFamily) -> KeyDisposition {
+    match family {
+        SharedReplicaKeyFamily::PostObject | SharedReplicaKeyFamily::PostWithdrawal => {
+            KeyDisposition::Object
+        }
+        SharedReplicaKeyFamily::MediaManifest => KeyDisposition::WholeScope,
+        SharedReplicaKeyFamily::TimelineIndex
+        | SharedReplicaKeyFamily::ThreadIndex
+        | SharedReplicaKeyFamily::Reaction
+        | SharedReplicaKeyFamily::Envelope
+        | SharedReplicaKeyFamily::Session
+        | SharedReplicaKeyFamily::Channel
+        | SharedReplicaKeyFamily::Metaverse => KeyDisposition::Ignore,
+    }
+}
+
+/// indexer が共有 replica から読む key 種別（#1065 INVAR-3）。読み取りの prefix もここの種別から作る。
+pub const INDEXER_READ_FAMILIES: [SharedReplicaKeyFamily; 3] = [
+    SharedReplicaKeyFamily::PostObject,
+    SharedReplicaKeyFamily::PostWithdrawal,
+    SharedReplicaKeyFamily::MediaManifest,
+];
+
+/// 変更通知から取り込み対象を決める鍵の分類（#1050 / #1065）。
+///
+/// `objects/<id>/…` と `withdrawals/<id>/state` は対象 object を特定できる。索引に影響しない
+/// 種別（`indexes/`・`reactions/` 等）は無視する。media manifest と未登録の key は対象を特定
+/// できないため scope 全体の見直しへ倒す。
 #[derive(Debug, PartialEq, Eq)]
 pub enum ChangedKeys {
     /// 特定できた object id の集合（重複なし・安定順）。
     Objects(Vec<String>),
-    /// 対象を特定できない鍵を含むため scope 全体を見直す。
-    WholeScope,
+    /// 索引に影響する key を含まない。
+    Ignored,
+    /// 対象を特定できない鍵を含むため scope 全体を見直す。`reason` は key の種別 prefix
+    /// （未登録なら先頭 segment）で、object id などの識別子は含めない。
+    WholeScope { reason: String },
 }
 
 /// 変更通知の鍵を取り込み対象へ分類する純関数。
@@ -79,22 +122,41 @@ pub fn classify_changed_keys<'a>(keys: impl IntoIterator<Item = &'a str>) -> Cha
     let mut any = false;
     for key in keys {
         any = true;
-        let object_id = key
-            .strip_prefix("objects/")
-            .or_else(|| key.strip_prefix("withdrawals/"))
-            .and_then(|rest| rest.split('/').next())
-            .filter(|id| !id.is_empty());
-        match object_id {
-            Some(id) => {
-                if !ids.iter().any(|known| known == id) {
-                    ids.push(id.to_string());
-                }
+        let Some((family, rest)) = SharedReplicaKeyFamily::parse(key) else {
+            let segment = key.split('/').next().unwrap_or_default();
+            return ChangedKeys::WholeScope {
+                reason: format!("unregistered:{segment}"),
+            };
+        };
+        let prefix = family.prefix().trim_end_matches('/');
+        match key_disposition(family) {
+            KeyDisposition::Ignore => {}
+            KeyDisposition::WholeScope => {
+                return ChangedKeys::WholeScope {
+                    reason: prefix.to_string(),
+                };
             }
-            None => return ChangedKeys::WholeScope,
+            KeyDisposition::Object => match rest.split('/').next().filter(|id| !id.is_empty()) {
+                Some(id) => {
+                    if !ids.iter().any(|known| known == id) {
+                        ids.push(id.to_string());
+                    }
+                }
+                None => {
+                    return ChangedKeys::WholeScope {
+                        reason: format!("malformed:{prefix}"),
+                    };
+                }
+            },
         }
     }
     if !any {
-        return ChangedKeys::WholeScope;
+        return ChangedKeys::WholeScope {
+            reason: "empty".to_string(),
+        };
+    }
+    if ids.is_empty() {
+        return ChangedKeys::Ignored;
     }
     ChangedKeys::Objects(ids)
 }
@@ -230,7 +292,7 @@ impl IngestPipeline {
             .docs_sync
             .query_replica_with_policy(
                 replica_id,
-                DocQuery::Prefix(stable_key("objects", "")),
+                DocQuery::Prefix(SharedReplicaKeyFamily::PostObject.prefix().to_string()),
                 DocFetchPolicy::LocalThenRemote,
             )
             .await
@@ -244,7 +306,8 @@ impl IngestPipeline {
     ///
     /// `objects/<id>/…` と `withdrawals/<id>/state` は対象 object を特定できるため、その object の
     /// `objects/<id>/` prefix（state + envelope）と撤回だけを読み、scope 全体の prefix 走査を
-    /// 行わない。対象を特定できない鍵（media manifest 等）が混ざる場合は `ingest_scope` へ倒す。
+    /// 行わない。対象を特定できない鍵（media manifest / 未登録 key）が混ざる場合は `ingest_scope`
+    /// へ倒し、その回数と理由を観測状態へ記録する。索引に影響しない鍵だけなら何もしない（#1065）。
     /// 全件見直し（`ingest_scope`）は引き続き定期的に走り、取りこぼしを回収する。
     pub async fn ingest_changed_keys(
         &self,
@@ -255,12 +318,24 @@ impl IngestPipeline {
     ) -> Result<IngestSummary> {
         let object_ids = match classify_changed_keys(keys.iter().map(String::as_str)) {
             ChangedKeys::Objects(ids) => ids,
-            ChangedKeys::WholeScope => {
+            ChangedKeys::Ignored => {
                 debug!(
                     replica_id = %replica_id.as_str(),
                     keys = keys.len(),
+                    "changed keys do not affect the index; skipping"
+                );
+                return Ok(IngestSummary::default());
+            }
+            ChangedKeys::WholeScope { reason } => {
+                debug!(
+                    replica_id = %replica_id.as_str(),
+                    keys = keys.len(),
+                    reason = %reason,
                     "changed keys are not object-scoped; falling back to the whole scope"
                 );
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_whole_scope_fallback(&reason);
+                }
                 return self.ingest_scope(scope_kind, scope_id, replica_id).await;
             }
         };
@@ -272,7 +347,10 @@ impl IngestPipeline {
                 .docs_sync
                 .query_replica_with_policy(
                     replica_id,
-                    DocQuery::Prefix(stable_key("objects", &format!("{object_id}/"))),
+                    DocQuery::Prefix(format!(
+                        "{}{object_id}/",
+                        SharedReplicaKeyFamily::PostObject.prefix()
+                    )),
                     DocFetchPolicy::LocalThenRemote,
                 )
                 .await
@@ -316,7 +394,7 @@ impl IngestPipeline {
             .docs_sync
             .query_replica_with_policy(
                 replica_id,
-                DocQuery::Prefix(stable_key("withdrawals", "")),
+                DocQuery::Prefix(SharedReplicaKeyFamily::PostWithdrawal.prefix().to_string()),
                 DocFetchPolicy::LocalThenRemote,
             )
             .await

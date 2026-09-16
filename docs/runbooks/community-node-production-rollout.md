@@ -487,6 +487,10 @@ sudo docker exec "$PG_CONTAINER" sh -lc \
    pass を跨いで増えていないことを確認する。
 5. benignな新規投稿を1件行い、replica到着から `cn_index.index_entries.indexed_at` までが
    数十秒以内（当該投稿のscan 1回分 + debounce）であることを確認する。他投稿の再scanを待たない。
+6. #1065以降のrevisionでは、5の投稿の前後で `/v1/status` の `event_whole_scope_fallbacks` が
+   増えず、indexerのDEBUG logに `changed keys are not object-scoped` が出ないことを確認する。
+   増えた場合は `last_whole_scope_fallback_reason` の種別prefixを記録する（添付付き投稿の
+   `manifests/media` は仕様どおりscope全体へ倒れる）。
 
 `hold`（scan failure / provider unavailable / media取得不能）は再利用されず毎pass再試行される。
 `scans_fresh` が既存投稿数ぶん増え続ける場合は、対象verdictがholdのままか、policy / provider
