@@ -160,12 +160,22 @@ test に対応付けた。未分類 0。
   Postgres 統合 137 件を独立に再現。blocker 0 件。記録は PR #1067 の comment。本記録の追記（docs のみ）は
   監査後の delta だが対象 surface に変更は無い。
 
-## 本番反映
+## 本番反映（#1068 = C5 へ移管）
 
-（merge 後に runbook §1〜§5、§5.7 に従って実施し追記）
+本 Issue の Close 条件にあった「本番 VM での手動確認」は、2026-09-16 のユーザー承認により C5（#1068）へ移した。
+
+- 理由: 本番でレコードが積み上がり続けるような緊急性が無い（#1050 は重複 risk signal が増え続けていたための例外で、
+  即時反映はその例外措置だった）。C2 だけ先に反映すると、C4（#1056）の利用規約改訂に伴う再同意と
+  moderation-policy version 2 の反映が 2 回に分かれるため、C3 / C4 が揃ってから 1 回の反映・1 回の再同意でまとめる。
+- 移管先: #1068「本番 VM へ CN を反映し、content advisory の index / trust / client 表示を統合確認する」。
+  手順は `docs/runbooks/community-node-production-rollout.md` §1〜§5（§5.7 が本件の確認）。
+- 本 Issue（#1054）の Close は「全 AC / INVAR の evidence + 独立監査 PASS + 必須 CI 成功」で判定する。
+  main へ merge した時点の本番 VM は旧 revision（`policy_version` `2026-07-public-node-v2`、nsfw = `Exclude`）のままで、
+  #1051 本文の挙動が継続している。
 
 ## 意図的にやらなかったこと
 
-- 本番 operator-config の `moderation_policy` `version: 2` 反映（C4 と同時に 1 回の再同意へまとめる）。
+- 本番反映そのもの（#1068 で C3 / C4 と同時に実施）。本番 operator-config の `moderation_policy` `version: 2` 反映も
+  同時に行い、再同意を 1 回にまとめる。
 - client 側の表示・取得ゲート・一括照会 API・利用規約改訂（C3 / C4）。
 - `on_high_confidence` の canonical snapshot からの除去（既存 config の snapshot を変えないため受理・警告のみ）。
