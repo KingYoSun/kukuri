@@ -251,6 +251,13 @@ pub async fn filter_surfaceable_objects(
 /// `filter_surfaceable` で突合してから返す。
 #[async_trait]
 pub trait IndexEntryStore: Send + Sync {
+    async fn is_scope_supported(
+        &self,
+        _scope_kind: IndexScopeKind,
+        _scope_id: &str,
+    ) -> Result<bool> {
+        Ok(false)
+    }
     /// allow entry を真実源へ upsert する（非 allow / critical / verdict 無しは Err）。
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()>;
 
@@ -298,6 +305,20 @@ impl PgIndexEntryStore {
 
 #[async_trait]
 impl IndexEntryStore for PgIndexEntryStore {
+    async fn is_scope_supported(&self, scope_kind: IndexScopeKind, scope_id: &str) -> Result<bool> {
+        if !crate::is_topic_supported(&self.pool, scope_kind, scope_id).await? {
+            return Ok(false);
+        }
+        if scope_kind == IndexScopeKind::PrivateChannel {
+            return Ok(sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM cn_index.channel_secrets WHERE channel_id=$1)",
+            )
+            .bind(scope_id)
+            .fetch_one(&self.pool)
+            .await?);
+        }
+        Ok(true)
+    }
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
         upsert_index_entry(&self.pool, entry).await.map(|_| ())
     }
@@ -367,14 +388,30 @@ pub struct MemoryIndexEntryStore {
     verdicts: Arc<MemorySafetyArtifactStore>,
     entries: Arc<Mutex<MemoryEntryMap>>,
     prevented: Arc<Mutex<HashSet<String>>>,
+    unsupported: Arc<Mutex<HashSet<(IndexScopeKind, String)>>>,
 }
 
 impl MemoryIndexEntryStore {
+    pub fn set_scope_supported(&self, kind: IndexScopeKind, id: &str, supported: bool) {
+        let key = (kind, id.to_owned());
+        let mut scopes = self.unsupported.lock().expect("scope mutex");
+        if supported {
+            scopes.remove(&key);
+        } else {
+            scopes.insert(key);
+            self.entries
+                .lock()
+                .expect("entries mutex")
+                .retain(|(entry_kind, entry_id, _), _| *entry_kind != kind || entry_id != id);
+        }
+    }
+
     pub fn new(verdicts: Arc<MemorySafetyArtifactStore>) -> Self {
         Self {
             verdicts,
             entries: Arc::new(Mutex::new(HashMap::new())),
             prevented: Arc::new(Mutex::new(HashSet::new())),
+            unsupported: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -418,6 +455,14 @@ impl MemoryIndexEntryStore {
 
 #[async_trait]
 impl IndexEntryStore for MemoryIndexEntryStore {
+    async fn is_scope_supported(&self, kind: IndexScopeKind, id: &str) -> Result<bool> {
+        Ok(!self
+            .unsupported
+            .lock()
+            .expect("scope mutex")
+            .contains(&(kind, id.to_owned())))
+    }
+
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
         if self
             .prevented

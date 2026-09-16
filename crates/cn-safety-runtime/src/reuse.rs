@@ -80,7 +80,7 @@ pub enum ReuseDecision {
 pub enum ScanDisposition {
     /// provider を呼んで新しく判定した。
     Fresh,
-    /// 保存済み verdict を再利用した（provider 呼び出し・artifact 生成なし）。
+    /// Providerを呼ばず再利用。別subjectの内容cache hitではartifactを新たに関連付ける。
     Reused,
 }
 

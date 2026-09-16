@@ -41,7 +41,7 @@ kukuri-transport = { path = "../transport" }
 # credentials は env から読む。mock は dev-dependencies 側でのみ有効化し（feature unification で
 # テストビルドに限って解決可能になる）、release binary では unknown provider として fail-closed
 # で拒否される。
-kukuri-cn-core = { path = "../cn-core", features = ["safety-arachnid-provider", "safety-vlm-provider"] }
+kukuri-cn-core = { path = "../cn-core", features = ["safety-arachnid-provider", "safety-vlm-provider", "safety-openai-provider"] }
 kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-trust = { path = "../cn-trust" }

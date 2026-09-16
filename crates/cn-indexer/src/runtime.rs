@@ -76,7 +76,24 @@ fn validate_config(config: &IndexerConfig) -> Result<()> {
     ChannelSecretCipher::from_key_material(config.channel_secret_key.as_str())
         .context("invalid COMMUNITY_NODE_CHANNEL_SECRET_KEY")?;
 
-    let providers = kukuri_cn_core::resolve_safety_providers(&config.safety.providers, None)?;
+    let openai = config
+        .safety
+        .providers
+        .general
+        .as_ref()
+        .is_some_and(|entry| entry.provider.trim().replace('_', "-") == "openai-moderation");
+    let providers = if openai {
+        // No DB connection/provider request is opened by lazy validation.
+        let budget_pool =
+            sqlx::postgres::PgPoolOptions::new().connect_lazy(&config.database_url)?;
+        kukuri_cn_core::resolve_safety_providers_with_pool(
+            &config.safety.providers,
+            None,
+            &budget_pool,
+        )?
+    } else {
+        kukuri_cn_core::resolve_safety_providers(&config.safety.providers, None)?
+    };
     let service = kukuri_cn_safety_runtime::build_safety_scan_service(
         &config.safety,
         providers,
@@ -165,8 +182,11 @@ async fn run(config: IndexerConfig) -> Result<()> {
     // safety scan runtime の構築境界（#406）。provider が構成されていれば service を構築・検証する
     // （構成不正 = 未知 provider 名 / emit 有効なのに署名鍵なし、は起動失敗）。未構成なら scan
     // service を構成せず、ingest は起動されない（fail-closed）。
-    let safety_providers =
-        kukuri_cn_core::resolve_safety_providers(&config.safety.providers, media_fetcher)?;
+    let safety_providers = kukuri_cn_core::resolve_safety_providers_with_pool(
+        &config.safety.providers,
+        media_fetcher,
+        &pool,
+    )?;
     let safety = kukuri_cn_safety_runtime::build_safety_scan_service(
         &config.safety,
         safety_providers,

@@ -18,8 +18,8 @@ use kukuri_cn_safety_runtime::{
     Secp256k1ModerationEventSigner,
 };
 use kukuri_core::{
-    AssetRef, BlobHash, KukuriEnvelope, KukuriKeys, ObjectVisibility, PayloadRef, ReplicaId,
-    TopicId, blob_hash, build_post_envelope_with_payload,
+    AssetRef, BlobHash, ChannelId, KukuriEnvelope, KukuriKeys, ObjectVisibility, PayloadRef,
+    ReplicaId, TopicId, blob_hash, build_post_envelope_with_payload_in_channel,
 };
 use kukuri_docs_sync::{
     DocOp, DocsSync, MemoryDocsSync, private_channel_replica_id, topic_replica_id,
@@ -164,6 +164,9 @@ pub(super) struct ObservedEntries {
 }
 #[async_trait]
 impl IndexEntryStore for ObservedEntries {
+    async fn is_scope_supported(&self, kind: IndexScopeKind, scope: &str) -> Result<bool> {
+        self.inner.is_scope_supported(kind, scope).await
+    }
     async fn upsert_entry(&self, entry: &NewIndexEntry) -> Result<()> {
         self.trace
             .lock()
@@ -349,7 +352,8 @@ impl Fixture {
         } else {
             ObjectVisibility::Public
         };
-        let envelope = build_post_envelope_with_payload(
+        let channel = ChannelId::new(SCOPE);
+        let envelope = build_post_envelope_with_payload_in_channel(
             &keys,
             &TopicId::new(SCOPE),
             payload,
@@ -357,6 +361,8 @@ impl Fixture {
             refs,
             None,
             visibility,
+            (self.kind == IndexScopeKind::PrivateChannel).then_some(&channel),
+            Vec::new(),
         )?;
         let state = serde_json::to_value(envelope.to_post_object()?.expect("post"))?;
         Ok(Post {

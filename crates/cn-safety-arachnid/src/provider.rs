@@ -86,6 +86,9 @@ impl ProjectArachnidShieldProvider {
 
 #[async_trait]
 impl SafetyProvider for ProjectArachnidShieldProvider {
+    fn supports_content_reuse(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         PROVIDER_NAME
     }

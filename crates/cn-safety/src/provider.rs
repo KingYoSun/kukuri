@@ -220,11 +220,30 @@ pub trait VideoFrameExtractor: Send + Sync {
     async fn extract(&self, bytes: &[u8]) -> Result<VideoScanFrames, ScanError>;
 }
 
+/// Caller-owned scope/version authorization, rechecked before external attempts and association.
+#[async_trait]
+pub trait ScanReferenceGuard: Send + Sync {
+    async fn check(&self) -> Result<(), ScanError>;
+}
+
 /// safety / moderation provider の抽象。
 ///
 /// 実装例: mock provider（本 crate）、#391 Project Arachnid Shield、一般 moderation provider。
 #[async_trait]
 pub trait SafetyProvider: Send + Sync {
+    async fn scan_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        guard: &dyn ScanReferenceGuard,
+    ) -> Result<ProviderScanResult, ScanError> {
+        guard.check().await?;
+        self.scan(request).await
+    }
+    /// Opt in only when results depend exclusively on content and config_fingerprint,
+    /// not the requesting post, author, scope or mutable operator review state.
+    fn supports_content_reuse(&self) -> bool {
+        false
+    }
     /// provider 名（安定識別子）。
     fn name(&self) -> &str;
 

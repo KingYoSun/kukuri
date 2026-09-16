@@ -19,6 +19,7 @@ mod bootstrap;
 mod co_participation;
 mod config;
 mod consents;
+mod content_scan;
 mod database;
 mod dome_hosting;
 mod env;
@@ -27,6 +28,8 @@ mod index_entries;
 mod index_scope;
 mod legal_data;
 mod legal_holds;
+#[cfg(feature = "safety-openai-provider")]
+mod moderation_budget;
 mod operator_actions;
 mod readiness_activation;
 mod readiness_probe;
@@ -83,6 +86,7 @@ pub use consents::{
     list_policies, list_policies_for_language, list_policy_revisions, require_consents,
     sync_policies,
 };
+pub use content_scan::PgContentScanStore;
 pub use database::{
     TestDatabase, connect_postgres, ensure_database_ready, initialize_database,
     initialize_database_for_runtime, migrate_postgres, migrate_postgres_up_to,
@@ -118,6 +122,8 @@ pub use legal_data::{
 pub use legal_holds::{
     LegalHold, LegalHoldExport, export_legal_hold, release_legal_hold, start_legal_hold,
 };
+#[cfg(feature = "safety-openai-provider")]
+pub use moderation_budget::PgModerationBudget;
 pub use operator_actions::{
     AdminOperation, OperatorAction, OperatorReportStatus, apply_operator_action,
     list_operator_actions, validate_admin_operation,
@@ -168,7 +174,9 @@ pub use safety_events::{
     persist_risk_signal, persist_risk_signal_deduplicated, persist_risk_signal_with_author,
     persist_signed_moderation_event,
 };
-pub use safety_runtime::{PgSafetyArtifactStore, resolve_safety_providers};
+pub use safety_runtime::{
+    PgSafetyArtifactStore, resolve_safety_providers, resolve_safety_providers_with_pool,
+};
 pub use scan_verdicts::{
     StoredScanVerdict, get_scan_verdict, update_scan_verdict_advisories, upsert_scan_verdict,
 };
