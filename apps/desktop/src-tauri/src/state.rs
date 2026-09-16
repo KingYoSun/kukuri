@@ -128,6 +128,17 @@ impl From<kukuri_desktop_runtime::CommunityNodeTrustRelationError> for CommandEr
     }
 }
 
+impl From<kukuri_desktop_runtime::CommunityNodeContentAdvisoryLookupError> for CommandError {
+    fn from(error: kukuri_desktop_runtime::CommunityNodeContentAdvisoryLookupError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            status: error.status,
+            retry_after_seconds: None,
+        }
+    }
+}
+
 impl From<kukuri_desktop_runtime::CommunityNodeReportError> for CommandError {
     fn from(error: kukuri_desktop_runtime::CommunityNodeReportError) -> Self {
         Self {
@@ -350,7 +361,7 @@ mod tests {
 
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 5);
+        assert_eq!(LEGAL_BUNDLE_VERSION, 6);
         assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
@@ -499,6 +510,9 @@ mod tests {
             "利用資格と成人向け表現",
             "18歳以上",
             "公的な年齢確認",
+            // #1056: 成人向け表現の第 2 のラベル源(設定した Community Node の推定)。
+            "Community Node が推定したラベル",
+            "推定を採用する Community Node",
             "投稿コンテンツの権利帰属",
             "必要な権利または許諾",
             "投稿者の責任",
@@ -533,10 +547,20 @@ mod tests {
             "行動分析",
             "日本語版を正文",
             "変更履歴",
+            // #1056: 推定の照会で送る識別子と、送らない情報。
+            "成人向け表現の推定の照会",
+            "添付ファイルの識別子",
         ] {
             assert!(
                 PRIVACY.contains(required_clause),
                 "privacy policy must contain `{required_clause}`"
+            );
+        }
+        // #1056: 外部送信表示にも推定の照会の送信先・項目を載せる(AC-5)。
+        for required_clause in ["成人向け表現の推定の照会", "添付ファイルの識別子"] {
+            assert!(
+                EXTERNAL_TRANSMISSION.contains(required_clause),
+                "external transmission notice must contain `{required_clause}`"
             );
         }
         let legal = distribution_legal_metadata().expect("distribution legal metadata");

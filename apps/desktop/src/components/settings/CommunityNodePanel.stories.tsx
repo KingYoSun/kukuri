@@ -63,6 +63,13 @@ function CommunityNodePanelStory({
           onRemoveNode={(id) =>
             setNodes((current) => current.filter((node) => node.id !== id))
           }
+          onNodeContentAdvisoryChange={(id, enabled) =>
+            setNodes((current) =>
+              current.map((node) =>
+                node.id === id ? { ...node, contentAdvisoryEnabled: enabled } : node
+              )
+            )
+          }
           onSaveNodes={() => {}}
           onReset={() => setNodes(args.view.nodes)}
           onClearNodes={() => setNodes([])}

@@ -90,7 +90,7 @@ for (const locale of ['en', 'ja', 'zh-CN'] as const) {
     await expect(page.getByTestId('control-center-trigger')).toBeVisible();
     expect(await appConsentCalls(page)).toHaveLength(2);
     expect((await appConsentCalls(page))[1].args).toEqual({
-      documents: [{ slug: 'terms', version: 5 }, { slug: 'privacy', version: 5 }],
+      documents: [{ slug: 'terms', version: 6 }, { slug: 'privacy', version: 6 }],
       language: locale, ageAttested: true,
     });
   });

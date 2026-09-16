@@ -32,7 +32,7 @@
   "documents": {
     "terms": {
       "title": "Terms of Service",
-      "changeSummary": "Version 5 comprehensively revises the parties and their responsibilities, key management, reporting and restrictions, liability, Japanese law, and agreed jurisdiction.",
+      "changeSummary": "Version 6 adds that adult material may also be identified using estimates from Community Nodes you configured.",
       "sections": [
         {
           "heading": "What kukuri is",
@@ -52,7 +52,7 @@
           "heading": "Eligibility and adult material",
           "paragraphs": [
             "kukuri may only be used by people who are 18 years of age or older. By starting to use kukuri, you represent that you are 18 or older.",
-            "Display of adult material is disabled by default. To display it, you must explicitly enable it yourself in the settings screen. Adult material is identified by labels self-declared by the person who posted it, and the absence of a label does not guarantee that a post is free of adult material."
+            "Display of adult material is disabled by default. To display it, you must explicitly enable it yourself in the settings screen. Adult material is identified by labels self-declared by the person who posted it and may also be informed by labels estimated by Community Nodes you configured. Such an estimate is that node's judgment, not a decision by the operator or by kukuri as a whole, and you can choose in the settings which nodes' estimates to use. The absence of a label does not guarantee that a post is free of adult material."
           ]
         },
         {
@@ -167,7 +167,7 @@
     },
     "privacy": {
       "title": "Privacy Policy",
-      "changeSummary": "Version 5 synchronizes the bundle version, effective date, and terminology for responsible parties with the revised terms. It does not materially change data flows.",
+      "changeSummary": "Version 6 adds that the IDs of posts you view and the identifiers of their attachments may be sent to Community Nodes whose estimates of adult material you use.",
       "sections": [
         {
           "heading": "Controller and basic approach",
@@ -187,7 +187,7 @@
           "heading": "Connectivity and Community Nodes",
           "paragraphs": [
             "Public keys, endpoint identifiers, IP addresses, and connection metadata can be observed by the Mainline DHT, peers, configured Community Nodes, iroh relays, and network providers. Routes are selected in the order Direct P2P, Relay Supported P2P, and Relay Fallback.",
-            "Depending on the capabilities you accept, a Community Node may receive authentication proofs, endpoint data, topic rendezvous keys, search queries, indexing requests, indexing status checks (the state of your own requests and whether a target is indexed), and report or feedback fields. A Node operator is not necessarily the kukuri operator; use the Node manifest to review its retention and external-transmission documents."
+            "Depending on the capabilities you accept, a Community Node may receive authentication proofs, endpoint data, topic rendezvous keys, search queries, indexing requests, indexing status checks (the state of your own requests and whether a target is indexed), lookups of adult material estimates (the IDs of posts you view and the identifiers of their attachments, sent only to nodes whose estimates you use; post text, browsing history, and connection data are not sent, and responses are not stored), and report or feedback fields. A Node operator is not necessarily the kukuri operator; use the Node manifest to review its retention and external-transmission documents."
           ]
         },
         {
@@ -207,7 +207,7 @@
         {
           "heading": "Consent and change history",
           "paragraphs": [
-            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 5 synchronizes the bundle metadata and responsibility terminology with the comprehensively revised terms."
+            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 6 describes what is sent when looking up adult material estimates."
           ]
         }
       ]

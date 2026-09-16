@@ -38,6 +38,8 @@ pub use community_node::{
     AcceptCommunityNodeConsentsRequest, CommunityNodeAdmissionRejection,
     CommunityNodeAdmissionRejectionCode, CommunityNodeAuthState, CommunityNodeAuthorityScope,
     CommunityNodeCapabilityScope, CommunityNodeConfig, CommunityNodeConsentDocumentRef,
+    CommunityNodeContentAdvisoryLookupError, CommunityNodeContentAdvisoryLookupRequest,
+    CommunityNodeContentAdvisoryLookupResult, CommunityNodeContentAdvisoryNodeResult,
     CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
     CommunityNodeIndexingRequestError, CommunityNodeIndexingStatusRequest,
     CommunityNodeLegalDocument, CommunityNodeLocalConsentRecord, CommunityNodeLocalConsentState,

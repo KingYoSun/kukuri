@@ -31,14 +31,29 @@ export function PostMedia({
   if (media.state === 'gated') {
     return (
       <div
-        className='media-frame media-frame-loading'
+        className='media-frame media-frame-gated'
         data-testid={`media-adult-gated-${media.objectId}`}
       >
-        <div className='media-skeleton' aria-hidden='true' />
+        <div className='media-gated-placeholder' aria-hidden='true' />
         <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
           {/* #1055: 判定元が Community Node の推定か、投稿者の自己申告かで文言を分ける。 */}
           {media.gatedBy === 'advisory' ? t('media.advisoryGated') : t('media.adultGated')}
         </p>
+      </div>
+    );
+  }
+  // #1056: Community Node への推定の照会中。取得せず、確定後の代替表示とは別のスケルトンだけを出す。
+  if (media.state === 'pending') {
+    return (
+      <div
+        className='media-frame media-frame-loading'
+        data-testid={`media-advisory-pending-${media.objectId}`}
+        aria-busy='true'
+      >
+        <div className='media-skeleton' aria-hidden='true' />
+        <span className='sr-only' role='status'>
+          {t('media.advisoryPending')}
+        </span>
       </div>
     );
   }

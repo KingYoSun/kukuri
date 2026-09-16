@@ -21,6 +21,11 @@ import {
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import type { DesktopShellState } from '@/shell/store';
+import {
+  resolvePostAdvisory,
+  type TimelineAdvisoryLookupState,
+  type TimelineContentAdvisoryIndex,
+} from '@/shell/contentAdvisories';
 
 type UsePreviewableMediaAttachmentsArgs = {
   activeTimeline: PostView[];
@@ -32,6 +37,11 @@ type UsePreviewableMediaAttachmentsArgs = {
   /// どの表示経路から現れてもプリフェッチしない(ADR 0046 §6.2)。advisory は `PostView` に
   /// 現れないため、投稿単位ではなく hash 単位で止める。
   advisoryGatedMediaHashes: string[];
+  /// #1056: タイムライン系の一括照会結果と照会中の subject。照会中の投稿の添付は表示設定に
+  /// かかわらず取得しない(確定前に取得すると、ゲートや ephemeral 取得の判定より先に bytes が届く)。
+  /// advisory が確定した投稿の添付は、表示設定 OFF の間は取得しない。
+  timelineContentAdvisories?: TimelineContentAdvisoryIndex;
+  timelineAdvisoryLookup?: TimelineAdvisoryLookupState;
   profileTimeline: PostView[];
   selectedAuthorTimeline: PostView[];
   thread: PostView[];
@@ -45,11 +55,16 @@ type UsePreviewableMediaAttachmentsArgs = {
   adultContentEnabled: boolean;
 };
 
+const EMPTY_ADVISORIES: TimelineContentAdvisoryIndex = {};
+const INACTIVE_LOOKUP: TimelineAdvisoryLookupState = { active: false, settled: {} };
+
 export function usePreviewableMediaAttachments({
   activeTimeline,
   activePublicTimeline,
   communityIndexResolvedPosts,
   advisoryGatedMediaHashes,
+  timelineContentAdvisories = EMPTY_ADVISORIES,
+  timelineAdvisoryLookup = INACTIVE_LOOKUP,
   profileTimeline,
   selectedAuthorTimeline,
   thread,
@@ -92,6 +107,9 @@ export function usePreviewableMediaAttachments({
       });
     };
 
+    // #1056: 「見つける」の解決済み投稿は index 応答の advisory(#1055)で扱い、タイムライン向け
+    // 照会の対象にしない。照会中判定をかけると照会済みにならず取得が止まり続けるため分ける。
+    const communityIndexPosts = new Set(communityIndexResolvedPosts);
     for (const post of [
       ...activeTimeline,
       ...activePublicTimeline,
@@ -111,7 +129,12 @@ export function usePreviewableMediaAttachments({
       }
       // #858: 表示許可前は成人向けラベル付き投稿の添付をプリフェッチ対象に入れない
       // (author avatar とリアクションはラベル対象外)。
-      if (adultContentEnabled || !isAdultLabeledPost(post)) {
+      const advisoryState = communityIndexPosts.has(post)
+        ? { advisory: null, pending: false }
+        : resolvePostAdvisory(post, timelineContentAdvisories, timelineAdvisoryLookup);
+      const advisoryBlocked =
+        advisoryState.pending || (advisoryState.advisory !== null && !adultContentEnabled);
+      if (!advisoryBlocked && (adultContentEnabled || !isAdultLabeledPost(post))) {
         for (const attachment of [
           selectPrimaryImage(post),
           selectVideoPoster(post),
@@ -192,6 +215,8 @@ export function usePreviewableMediaAttachments({
     adultContentEnabled,
     advisoryGatedMediaHashes,
     bookmarkedReactionAssets,
+    timelineAdvisoryLookup,
+    timelineContentAdvisories,
     communityIndexResolvedPosts,
     knownAuthorsByPubkey,
     localProfile?.picture_asset,

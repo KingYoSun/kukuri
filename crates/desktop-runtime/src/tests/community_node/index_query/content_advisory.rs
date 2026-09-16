@@ -88,12 +88,13 @@ async fn community_node_index_drops_advisories_when_manifest_is_unavailable() {
     server.abort();
 }
 
-// #1055 / ADR 0046 §6.4 / TR-6: 利用規約改訂(C4 = #1056)が入るまで advisory は合成しない。
-// 既定では応答から落とし、manifest も引かず、取得ゲートにも登録しない。
+// #1055 / ADR 0046 §6.4 / TR-6: 合成が無効なら advisory を応答から落とし、manifest も引かず、
+// 取得ゲートにも登録しない(#1056 で既定は有効になった。無効化経路の回帰を固定する)。
 #[tokio::test]
-async fn community_node_index_strips_advisories_until_synthesis_enabled() {
+async fn community_node_index_strips_advisories_when_synthesis_disabled() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    runtime.set_content_advisory_synthesis_enabled(false);
     *state.response_advisories.lock().await =
         vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
 
@@ -110,6 +111,56 @@ async fn community_node_index_strips_advisories_until_synthesis_enabled() {
             .await
     );
     assert_eq!(state.manifest_hits.load(Ordering::SeqCst), 0);
+
+    server.abort();
+}
+
+// #1056 / TR-7 / INV-2c: 利用者が採用を OFF にした node の advisory は「見つける」でも採用しない。
+#[tokio::test]
+async fn community_node_index_drops_advisories_from_node_with_adoption_disabled() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    runtime.community_node_config.lock().await.nodes[0].content_advisory_enabled = false;
+    *state.response_advisories.lock().await =
+        vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert!(search.entries[0].content_advisories.is_empty());
+    assert!(
+        !runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
+    assert_eq!(state.manifest_hits.load(Ordering::SeqCst), 0);
+
+    server.abort();
+}
+
+// #1056: 合成は既定で有効(利用規約改訂・再同意と同時に有効化した)。
+#[tokio::test]
+async fn community_node_index_synthesizes_advisories_by_default() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    *state.response_advisories.lock().await =
+        vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert_eq!(search.entries[0].content_advisories.len(), 1);
+    assert!(
+        runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
 
     server.abort();
 }

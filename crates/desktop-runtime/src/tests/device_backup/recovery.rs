@@ -5,6 +5,7 @@ fn save_single_node_config(db_path: &Path, base_url: &str) {
         db_path,
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: base_url.to_string(),
                 resolved_urls: None,
             }],

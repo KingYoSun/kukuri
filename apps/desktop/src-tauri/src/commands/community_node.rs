@@ -1,5 +1,7 @@
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig, CommunityNodeIndexQueryRequest,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig,
+    CommunityNodeContentAdvisoryLookupRequest, CommunityNodeContentAdvisoryLookupResult,
+    CommunityNodeIndexQueryRequest,
     CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeManifestFetch,
     CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
@@ -514,6 +516,19 @@ pub async fn recommend_community_node_index(
     state
         .runtime()
         .recommend_community_node_index(request)
+        .await
+        .map_err(CommandError::from)
+}
+
+/// #1056: 可視 post id / blob hash の content advisory を採用 ON の設定済み node へ一括照会する。
+#[tauri::command]
+pub async fn lookup_community_node_content_advisories(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeContentAdvisoryLookupRequest,
+) -> Result<CommunityNodeContentAdvisoryLookupResult, CommandError> {
+    state
+        .runtime()
+        .lookup_community_node_content_advisories(request)
         .await
         .map_err(CommandError::from)
 }

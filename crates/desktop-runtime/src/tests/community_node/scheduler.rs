@@ -76,6 +76,7 @@ async fn session_scheduler_keeps_bootstrap_registration_alive_without_getter_pol
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -198,6 +199,7 @@ async fn get_sync_status_is_read_only_for_community_node_session() {
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -278,6 +280,7 @@ async fn session_scheduler_reauthenticates_near_expiry_token_without_getter_poll
     .expect("persist near-expiry token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -386,6 +389,7 @@ async fn topic_rendezvous_refresh_fires_between_bootstrap_heartbeats() {
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -531,6 +535,7 @@ async fn private_channel_rendezvous_refresh_uses_only_the_current_epoch_secret()
     .expect("コミュニティノードの認証情報を保存できる");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())

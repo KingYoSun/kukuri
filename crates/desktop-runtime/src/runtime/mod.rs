@@ -133,9 +133,10 @@ pub struct DesktopRuntime {
     pub(crate) runtime_connectivity_apply_version: Arc<AtomicU64>,
     pub(crate) effective_seed_peer_apply_version: Arc<AtomicU64>,
     /// #1055: Community Node の content advisory を成人向けゲートへ合成するかどうか。
-    /// ADR 0046 §6.4 により、利用規約 第3条 4 項の改訂と再同意(C4 = #1056)が入るまで
-    /// 合成しない。既定 OFF で、index 応答から advisory を落とし取得ゲートにも登録しない。
+    /// ADR 0046 §6.4 の利用規約改訂と再同意(C4 = #1056)で既定 ON にした。
     pub(crate) content_advisory_synthesis_enabled: Arc<AtomicBool>,
+    /// #1056: 一括照会で使う発行元(manifest `node_id`)の cache。node 設定の保存で破棄する。
+    pub(crate) content_advisory_issuer_cache: Arc<Mutex<HashMap<String, String>>>,
     event_sender: tokio::sync::broadcast::Sender<RuntimeEvent>,
 }
 
@@ -458,6 +459,7 @@ impl DesktopRuntime {
             content_advisory_synthesis_enabled: Arc::new(AtomicBool::new(
                 CONTENT_ADVISORY_SYNTHESIS_DEFAULT,
             )),
+            content_advisory_issuer_cache: Arc::new(Mutex::new(HashMap::new())),
             event_sender,
         })
     }

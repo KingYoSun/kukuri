@@ -145,6 +145,7 @@
     {"tauri":"commands::community_node::search_community_node_index","cli":"search_community_node_index","inventory":"INV-7"},
     {"tauri":"commands::community_node::discover_community_node_index","cli":"discover_community_node_index","inventory":"INV-7"},
     {"tauri":"commands::community_node::recommend_community_node_index","cli":"recommend_community_node_index","inventory":"INV-7"},
+    {"tauri":"commands::community_node::lookup_community_node_content_advisories","cli":"lookup_community_node_content_advisories","inventory":"INV-7"},
     {"tauri":"commands::community_node::read_community_node_trust_user","cli":"read_community_node_trust_user","inventory":"INV-7"},
     {"tauri":"commands::community_node::read_community_node_relation_user","cli":"read_community_node_relation_user","inventory":"INV-7"},
     {"tauri":"commands::community_node::list_community_node_relation_neighbors","cli":"list_community_node_relation_neighbors","inventory":"INV-7"},

@@ -6,8 +6,8 @@ import { normalizeSupportedLocale } from '@/i18n';
 import { changeDesktopLocale } from '@/i18n/changeLocale';
 
 const documents = ['terms', 'privacy'].map((slug) => ({
-  slug, currentVersion: 5, acceptedVersion: null, acceptedAt: null,
-  acceptedLanguage: null, acceptedAppVersion: null, effectiveDate: '2026-09-03',
+  slug, currentVersion: 6, acceptedVersion: null, acceptedAt: null,
+  acceptedLanguage: null, acceptedAppVersion: null, effectiveDate: '2026-09-16',
   authoritativeLanguage: 'ja', materialChange: true,
   controllerName: 'Preview Distributor', contact: 'privacy@example.test',
 }));

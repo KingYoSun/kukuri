@@ -16,6 +16,15 @@ pub(super) fn view(properties: Value, optional: &[&str]) -> Value {
     json!({"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 }
 
+/// #1056 / ADR 0028 §8.6: content advisory(confidence は無ければ省略される)。
+pub(super) fn content_advisory() -> Value {
+    view(
+        json!({"issuer_node_id": string(), "subject_kind": {"enum": ["post_id", "blob_cid"]}, "subject_id": string(),
+        "category": string(), "label": string(), "confidence": integer(), "signal_id": string(), "basis": string()}),
+        &["confidence"],
+    )
+}
+
 pub(super) fn resolved_urls() -> Value {
     view(
         json!({"public_base_url": string(), "connectivity_urls": strings(),

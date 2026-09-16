@@ -56,7 +56,8 @@ export type PostMediaView = {
   kind: 'image' | 'video' | null;
   statusLabel?: string | null;
   extraAttachmentCount: number;
-  state: 'loading' | 'ready' | 'unavailable' | 'gated';
+  // #1056: `pending` は Community Node への advisory 照会が未決(取得しない。スケルトン表示)。
+  state: 'loading' | 'ready' | 'unavailable' | 'gated' | 'pending';
   // #1055: `gated` の判定元。`advisory` は Community Node の推定(ADR 0046 §6)であり、
   // 投稿者の自己申告(`self_label`)とは文言を分ける。
   gatedBy?: 'self_label' | 'advisory';

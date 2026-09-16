@@ -13,6 +13,9 @@ export type BuildPostMediaViewOptions = {
   adultContentGated: boolean;
   /// #1055: ゲートの判定元。Community Node の advisory 由来なら代替表示の文言を変える。
   gatedBy?: 'self_label' | 'advisory';
+  /// #1056: Community Node への advisory 照会が未決。取得済み object URL があっても参照せず、
+  /// スケルトン(`pending`)にする。確定後の代替表示(`gated`)とは表示を分ける。
+  advisoryPending?: boolean;
   unsupportedVideoManifests: Record<string, true>;
   locale?: string | null;
 };
@@ -23,6 +26,7 @@ export function buildPostMediaView(
     mediaObjectUrls,
     adultContentGated,
     gatedBy,
+    advisoryPending = false,
     unsupportedVideoManifests,
     locale,
   }: BuildPostMediaViewOptions
@@ -45,6 +49,8 @@ export function buildPostMediaView(
       provenance: contentProvenanceFromView(attachment.provenance),
     }));
   const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
+  // 照会中は取得済みでも表示しない(ゲートと同じく参照を止める)。
+  const hidden = adultContentGated || advisoryPending;
   const mediaMetaAttachment =
     mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
   const reservedHashes = new Set<string>();
@@ -55,15 +61,15 @@ export function buildPostMediaView(
     (attachment) => !reservedHashes.has(attachment.hash)
   ).length;
   const imagePreviewSrc =
-    !adultContentGated && primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
+    !hidden && primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
       ? mediaObjectUrls[primaryImage.hash]
       : null;
   const videoPosterPreviewSrc =
-    !adultContentGated && videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
+    !hidden && videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
       ? mediaObjectUrls[videoPoster.hash]
       : null;
   const videoPlaybackSrc =
-    !adultContentGated &&
+    !hidden &&
     videoManifest &&
     typeof mediaObjectUrls[videoManifest.hash] === 'string'
       ? mediaObjectUrls[videoManifest.hash]
@@ -91,7 +97,9 @@ export function buildPostMediaView(
     state:
       adultContentGated && mediaKind !== null
         ? 'gated'
-        : mediaKind === 'video'
+        : advisoryPending && mediaKind !== null
+          ? 'pending'
+          : mediaKind === 'video'
           ? videoPlaybackSrc || videoPosterPreviewSrc
             ? 'ready'
             : mediaUnavailable
@@ -109,7 +117,7 @@ export function buildPostMediaView(
       ? formatBytes(mediaMetaAttachment.bytes, locale)
       : null,
     imagePreviewSrc,
-    imageGalleryItems: adultContentGated ? [] : imageGalleryItems,
+    imageGalleryItems: hidden ? [] : imageGalleryItems,
     currentImageIndex: primaryImage
       ? Math.max(
           0,

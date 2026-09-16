@@ -119,6 +119,8 @@ export type CommunityNodeEntryView = {
   consent: CommunityNodeConsentView;
   // 距離利用停止の読込・設定・解除ができる利用可否(認証・必須同意・通信・提供中能力。#705)。
   distanceOptoutEligible: boolean;
+  // #1056: この node の content advisory(成人向け表現の推定)を採用するか。
+  contentAdvisoryEnabled?: boolean;
   inviteCodeSaved: boolean;
   admissionRejectionCode?: CommunityNodeAdmissionRejectionCode | null;
   lastError?: string | null;

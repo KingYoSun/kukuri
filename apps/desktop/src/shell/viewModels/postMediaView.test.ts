@@ -28,12 +28,14 @@ function build(
   overrides: {
     mediaObjectUrls?: Record<string, string | null>;
     adultContentGated?: boolean;
+    advisoryPending?: boolean;
     unsupportedVideoManifests?: Record<string, true>;
   } = {}
 ) {
   return buildPostMediaView(post(attachments), {
     mediaObjectUrls: overrides.mediaObjectUrls ?? {},
     adultContentGated: overrides.adultContentGated ?? false,
+    advisoryPending: overrides.advisoryPending ?? false,
     unsupportedVideoManifests: overrides.unsupportedVideoManifests ?? {},
     locale: 'en',
   });
@@ -127,5 +129,19 @@ describe('buildPostMediaView', () => {
 
     expect(media.imageGalleryItems).toEqual([]);
     expect(media).toMatchObject({ kind: 'video', state: 'ready', videoPosterPreviewSrc: 'blob:poster' });
+  });
+  // #1056: 照会中は取得済み object URL があっても参照せず、代替表示とは別の pending にする。
+  test('hides fetched media while a content advisory lookup is pending', () => {
+    const media = build([attachment({ hash: IMAGE_HASH })], {
+      mediaObjectUrls: { [IMAGE_HASH]: 'blob:first' },
+      advisoryPending: true,
+    });
+    expect(media).toMatchObject({ kind: 'image', state: 'pending', imagePreviewSrc: null });
+    expect(media.imageGalleryItems).toEqual([]);
+    expect(
+      build([attachment({ hash: IMAGE_HASH })], { advisoryPending: true, adultContentGated: true })
+        .state
+    ).toBe('gated');
+    expect(build([], { advisoryPending: true }).state).toBe('ready');
   });
 });

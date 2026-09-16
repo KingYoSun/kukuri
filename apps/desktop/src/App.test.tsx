@@ -88,7 +88,7 @@ test('settings drawer can open the release section', async () => {
 function consentDocuments(acceptedVersion: number | null) {
   return ['terms', 'privacy'].map((slug) => ({
     slug,
-    currentVersion: 5,
+    currentVersion: 6,
     effectiveDate: '2026-09-03',
     authoritativeLanguage: 'ja',
     materialChange: true,
@@ -152,7 +152,7 @@ test('pending consent fixes the display language and retry sends the newly displ
   await user.selectOptions(language, 'en');
   expect(language).toHaveValue('ja');
   expect(invokeMock).toHaveBeenLastCalledWith('accept_app_consents', {
-    documents: [{slug:'terms',version:5},{slug:'privacy',version:5}], language:'ja', ageAttested:true,
+    documents: [{slug:'terms',version:6},{slug:'privacy',version:6}], language:'ja', ageAttested:true,
   });
   rejectSave(new Error('storage unavailable'));
   await screen.findByText('同意の保存に失敗しました。もう一度お試しください。');
@@ -161,7 +161,7 @@ test('pending consent fixes the display language and retry sends the newly displ
   expect(screen.getByRole('checkbox')).toBeChecked();
   await user.click(screen.getByRole('button', { name: 'Accept and continue' }));
   expect(invokeMock).toHaveBeenLastCalledWith('accept_app_consents', {
-    documents: [{slug:'terms',version:5},{slug:'privacy',version:5}], language:'en', ageAttested:true,
+    documents: [{slug:'terms',version:6},{slug:'privacy',version:6}], language:'en', ageAttested:true,
   });
   rejectSave(new Error('retry result'));
   await screen.findByText('Failed to save your consent. Please try again.');
@@ -255,7 +255,7 @@ test('consent keeps the choice after a save error and suppresses repeated pendin
 test('an outdated age attestation needs a new explicit choice, and remount discards an unsaved choice', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValue({
-    status: 'consent_required', documents: consentDocuments(4), age_attestation: ageAttestation(0),
+    status: 'consent_required', documents: consentDocuments(5), age_attestation: ageAttestation(0),
   });
   const first = render(<App />);
   await user.click(await screen.findByRole('checkbox'));
@@ -344,8 +344,8 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 5 },
-        { slug: 'privacy', version: 5 },
+        { slug: 'terms', version: 6 },
+        { slug: 'privacy', version: 6 },
       ],
       language: 'en',
       ageAttested: true,
@@ -355,11 +355,11 @@ test('desktop app blocks startup until app-level legal consent is accepted', asy
   expect(screen.getByDisplayValue(/runtime starts after consent/)).toBeInTheDocument();
 });
 
-test('desktop app requires renewed consent for legal bundle version 4', async () => {
+test('desktop app requires renewed consent for legal bundle version 6 (#1056)', async () => {
   const user = userEvent.setup();
   invokeMock.mockResolvedValueOnce({
     status: 'consent_required',
-    documents: consentDocuments(4),
+    documents: consentDocuments(5),
     age_attestation: ageAttestation(1),
   });
   invokeMock.mockResolvedValueOnce({
@@ -387,7 +387,7 @@ test('desktop app requires renewed consent for legal bundle version 4', async ()
       'This is a draft and is not legal advice. Final decisions should be made in consultation with appropriate experts or regulators.'
     )
   ).not.toBeInTheDocument();
-  expect(screen.getAllByText('v5')).toHaveLength(2);
+  expect(screen.getAllByText('v6')).toHaveLength(2);
   expect(screen.queryByTestId('control-center-trigger')).not.toBeInTheDocument();
 
   // #858: 現行版で申告済みならチェックボックスは再表示されず、ボタンは有効のまま。
@@ -398,8 +398,8 @@ test('desktop app requires renewed consent for legal bundle version 4', async ()
   await waitFor(() => {
     expect(invokeMock).toHaveBeenCalledWith('accept_app_consents', {
       documents: [
-        { slug: 'terms', version: 5 },
-        { slug: 'privacy', version: 5 },
+        { slug: 'terms', version: 6 },
+        { slug: 'privacy', version: 6 },
       ],
       language: 'en',
       ageAttested: false,

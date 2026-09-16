@@ -31,7 +31,13 @@ test('community node panel keeps the configured node active on the current sessi
   const drawer = await openSettingsSection(user, 'community-node');
   const nodeHeading = await within(drawer).findByText('https://api.kukuri.app', { selector: 'h4' });
   const blockElement = closestSection(nodeHeading);
-  expect(within(blockElement).queryByRole('checkbox')).not.toBeInTheDocument();
+  // #867 で削除した自動同意のチェックボックスは出さない。ノードごとのチェックボックスは
+  // #1056 の推定の採用だけ。
+  expect(
+    within(blockElement)
+      .queryAllByRole('checkbox')
+      .map((checkbox) => checkbox.getAttribute('data-testid') ?? '')
+  ).toEqual([expect.stringMatching(/^community-node-advisory-toggle-/)]);
 
   await waitFor(() => {
     expect(within(blockElement).getAllByText('https://api.kukuri.app').length).toBeGreaterThan(0);

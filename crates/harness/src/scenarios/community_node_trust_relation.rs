@@ -346,6 +346,7 @@ pub(crate) async fn run_community_node_trust_relation_client(
     runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
             nodes: vec![SetCommunityNodeConfigNode {
+                content_advisory_enabled: None,
                 base_url: base_url.clone(),
             }],
         })

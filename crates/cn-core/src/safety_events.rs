@@ -552,7 +552,7 @@ fn moderation_event_from_row(row: &PgRow) -> Result<StoredModerationEvent> {
     })
 }
 
-fn risk_signal_from_row(row: &PgRow) -> Result<StoredRiskSignal> {
+pub(crate) fn risk_signal_from_row(row: &PgRow) -> Result<StoredRiskSignal> {
     let confidence: Option<i16> = row.try_get("confidence")?;
     let appeal_status: Option<String> = row.try_get("appeal_status")?;
     let appeal_status: Option<AppealStatus> = appeal_status

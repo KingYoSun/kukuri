@@ -91,3 +91,14 @@ content advisory（ADR 0028 §8.6）を第 2 の源**として合成する。adv
 - 18 歳以上の自己申告の必須化、表示設定の既定 OFF、`<db_path>.content-display.json` を canonical とする構造。
 - self-label も advisory も無いコンテンツは通常表示（fail-open）。advisory の有無は node 依存であり安全を保証しない。
 - 必須 contract / scenario の正本は `docs/legal/adult-content-display-data-classification.md`（本追補で更新）。
+
+### 6.6 C4 実装時の補足（#1056、2026-09-16）
+- 採用は node 単位の設定 `content_advisory_enabled`（既定 true）で行う。node を設定すること自体を §6.1 の opt-in
+  とし、利用者は設定画面で node ごとに採用を外せる。採用しない node へは一括照会を送らず、見つけるの index 応答に
+  含まれる advisory も採用しない（`lookup_skips_nodes_with_content_advisory_disabled`）。
+- 一括照会は `POST /v1/advisories/lookup` として実装した。読み口は verdict 行ではなく risk signal であり、
+  `Cleared` と `expires_at` 失効を除外する。門は索引参照と同じ構成・有効化条件・安定コードを使う。
+- client は照会が確定するまで、その投稿のメディアを取得せずスケルトンにする。確定後に advisory があれば代替表示、
+  無ければ通常表示へ切り替える。照会先の有無が未確定（起動直後）の間も同様に取得しない。照会に失敗した場合は
+  §6.5 の fail-open に従い通常表示へ戻す。
+- 合成は利用規約 version 6 と同じ変更で既定有効にした（§6.4）。

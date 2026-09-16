@@ -15,6 +15,7 @@ async fn persisted_community_node_connectivity_is_not_applied_without_local_cons
     .expect("seed peer");
     let persisted = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: "https://community.example.com".to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -74,6 +75,7 @@ async fn startup_does_not_apply_persisted_community_node_connectivity_before_pre
         &db_path,
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -154,6 +156,7 @@ async fn connectivity_apply_ignores_local_consent_without_verified_ready_session
     seed_local_community_node_consents(&runtime, base_url, 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -206,6 +209,7 @@ async fn connectivity_apply_keeps_only_the_node_with_verified_ready_session() {
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: verified_base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -217,6 +221,7 @@ async fn connectivity_apply_keeps_only_the_node_with_verified_ready_session() {
                 ),
             },
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: unverified_base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -277,6 +282,7 @@ async fn withdrawing_community_node_consent_removes_transport_assist() {
     seed_local_community_node_consents(&runtime, base_url, 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -361,6 +367,7 @@ async fn community_node_connectivity_filter_is_scoped_per_node() {
     let config = CommunityNodeConfig {
         nodes: vec![
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: consented_base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -372,6 +379,7 @@ async fn community_node_connectivity_filter_is_scoped_per_node() {
                 ),
             },
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: pending_base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -406,6 +414,7 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
     let config = normalize_community_node_config(CommunityNodeConfig {
         nodes: vec![
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://community.example.com/".into(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -421,6 +430,7 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
                 ),
             },
             CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://community.example.com".into(),
                 resolved_urls: None,
             },
@@ -455,6 +465,7 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
 fn community_node_config_preserves_public_kukuri_urls() {
     let config = normalize_community_node_config(CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: "https://api.kukuri.app/".into(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -524,6 +535,7 @@ async fn local_community_node_seed_peer_keeps_addr_hint_when_relay_urls_exist() 
     .expect("runtime");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: "https://api.example.com".to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -554,6 +566,7 @@ fn stored_community_node_config_restores_cached_connectivity_union() {
         &db_path,
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://community.example.com".into(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -631,6 +644,7 @@ async fn runtime_preloads_distribution_community_node_only_when_config_file_is_m
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
                 resolved_urls: None,
             }],
@@ -669,6 +683,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_clears_config() {
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
                 resolved_urls: None,
             }],
@@ -697,6 +712,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         &db_path,
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://user-selected.example.com".to_string(),
                 resolved_urls: None,
             }],
@@ -712,6 +728,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
                 resolved_urls: None,
             }],
@@ -726,5 +743,123 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         config.nodes[0].base_url,
         "https://user-selected.example.com"
     );
+    runtime.shutdown().await;
+}
+
+// #1056: 採用設定の欄が無い既存の設定ファイルは「採用」として読み、保存で欄を持つ。
+#[test]
+fn legacy_config_without_content_advisory_field_defaults_to_enabled() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-legacy-advisory.db");
+    let config_path = community_node_config_path(&db_path);
+    std::fs::write(
+        &config_path,
+        r#"{"nodes":[{"base_url":"https://community.example.com","resolved_urls":null}]}"#,
+    )
+    .expect("write legacy config");
+
+    let config = load_community_node_config_from_file(&db_path)
+        .expect("load legacy config")
+        .expect("stored config");
+    assert!(config.nodes[0].content_advisory_enabled);
+
+    let mut disabled = config.clone();
+    disabled.nodes[0].content_advisory_enabled = false;
+    save_community_node_config(&db_path, &disabled).expect("save");
+    let reloaded = load_community_node_config_from_file(&db_path)
+        .expect("reload")
+        .expect("stored config");
+    assert!(!reloaded.nodes[0].content_advisory_enabled);
+}
+
+// #1056: 重複指定では OFF を維持する(外部送信を増やさない側)。
+#[test]
+fn duplicate_nodes_keep_content_advisory_disabled() {
+    let config = normalize_community_node_config(CommunityNodeConfig {
+        nodes: vec![
+            CommunityNodeNodeConfig {
+                content_advisory_enabled: false,
+                base_url: "https://community.example.com/".into(),
+                resolved_urls: None,
+            },
+            CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
+                base_url: "https://community.example.com".into(),
+                resolved_urls: None,
+            },
+        ],
+    })
+    .expect("normalize");
+    assert_eq!(config.nodes.len(), 1);
+    assert!(!config.nodes[0].content_advisory_enabled);
+}
+
+// #1056 / TR-10: 保存時に未指定なら既存の採用設定を維持し、新規 node は採用、明示値は反映する。
+#[tokio::test]
+async fn set_community_node_config_keeps_or_updates_content_advisory_adoption() {
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("community-advisory-adoption.db");
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime");
+    // 到達不能な node(設定保存だけを検証する。session 確立は失敗してよい)。
+    let first = "http://127.0.0.1:9";
+    let second = "http://127.0.0.1:10";
+
+    let saved = runtime
+        .set_community_node_config(SetCommunityNodeConfigRequest {
+            nodes: vec![SetCommunityNodeConfigNode {
+                content_advisory_enabled: Some(false),
+                base_url: first.to_string(),
+            }],
+        })
+        .await
+        .expect("save disabled");
+    assert!(!saved.nodes[0].content_advisory_enabled);
+
+    let saved = runtime
+        .set_community_node_config(SetCommunityNodeConfigRequest {
+            nodes: vec![
+                SetCommunityNodeConfigNode {
+                    content_advisory_enabled: None,
+                    base_url: first.to_string(),
+                },
+                SetCommunityNodeConfigNode {
+                    content_advisory_enabled: None,
+                    base_url: second.to_string(),
+                },
+            ],
+        })
+        .await
+        .expect("save with unspecified adoption");
+    let by_url = |url: &str| {
+        saved
+            .nodes
+            .iter()
+            .find(|node| node.base_url == url)
+            .expect("node")
+            .content_advisory_enabled
+    };
+    assert!(!by_url(first), "unspecified keeps the stored value");
+    assert!(by_url(second), "new node defaults to enabled");
+
+    let saved = runtime
+        .set_community_node_config(SetCommunityNodeConfigRequest {
+            nodes: vec![SetCommunityNodeConfigNode {
+                content_advisory_enabled: Some(true),
+                base_url: first.to_string(),
+            }],
+        })
+        .await
+        .expect("save enabled");
+    assert!(saved.nodes[0].content_advisory_enabled);
+    let reloaded = load_community_node_config_from_file(&db_path)
+        .expect("reload")
+        .expect("stored config");
+    assert!(reloaded.nodes[0].content_advisory_enabled);
     runtime.shutdown().await;
 }

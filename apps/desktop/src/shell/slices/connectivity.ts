@@ -13,6 +13,8 @@ import type { CommunityIndexNodePreference } from '@/lib/api/communityIndex';
 export type CommunityNodeDraftNode = {
   id: string;
   base_url: string;
+  /// #1056: この node の content advisory を採用するか。未指定は保存済みの値(新規は採用)。
+  content_advisory_enabled?: boolean;
 };
 
 // public manifest endpoint (#356) からの取得状態。base_url ごとに保持する。

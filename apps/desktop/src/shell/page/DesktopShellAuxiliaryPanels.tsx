@@ -40,11 +40,13 @@ import {
 } from '@/shell/presentation';
 import {
   hasAdultContentLabel,
+  isGatingContentAdvisory,
   selectPrimaryImageAttachment,
   selectVideoManifestAttachment,
   selectVideoPosterAttachment,
 } from '@/shell/media';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
+import { advisorySubjectKey } from '@/shell/contentAdvisories';
 import { useShallow } from 'zustand/react/shallow';
 import type {
   OpenAuthorDetail,
@@ -439,6 +441,7 @@ export function DesktopShellNotificationsSurface({
     notificationAutoReadError,
     notificationPanelState,
     adultContentEnabled,
+    timelineContentAdvisories,
   } = useDesktopShellStore(
     useShallow((s) => ({
       knownAuthorsByPubkey: s.knownAuthorsByPubkey,
@@ -447,6 +450,7 @@ export function DesktopShellNotificationsSurface({
       notificationAutoReadError: s.notificationAutoReadError,
       notificationPanelState: s.notificationPanelState,
       adultContentEnabled: s.adultContentEnabled,
+      timelineContentAdvisories: s.timelineContentAdvisories,
     }))
   );
   const notificationItems = useMemo<NotificationItemView[]>(
@@ -476,15 +480,23 @@ export function DesktopShellNotificationsSurface({
                     topic: notification.topic_id,
                   })
                 : t('shell:notifications.context.authorActivity');
+        // #1056: 採用 node の content advisory が対象投稿に付いていれば、自己申告と同じく伏せる。
+        const advisoryGated =
+          Boolean(notification.object_id) &&
+          (timelineContentAdvisories[advisorySubjectKey('post_id', notification.object_id ?? '')] ?? [])
+            .some((entry) => isGatingContentAdvisory(entry.advisory));
         const adultPreviewGated =
           Boolean(notification.object_id) &&
           !adultContentEnabled &&
           (notification.content_labels == null ||
-            hasAdultContentLabel(notification.content_labels));
+            hasAdultContentLabel(notification.content_labels) ||
+            advisoryGated);
         const previewText = adultPreviewGated
           ? notification.content_labels == null
             ? t('shell:notifications.preview.noContent')
-            : t('common:feed.adultContentHidden')
+            : hasAdultContentLabel(notification.content_labels)
+              ? t('common:feed.adultContentHidden')
+              : t('common:feed.advisoryContentHidden')
           : notification.preview_text ??
             (notification.kind === 'followed'
               ? t('shell:notifications.preview.followed')
@@ -503,7 +515,15 @@ export function DesktopShellNotificationsSurface({
           unread: !notification.read_at,
         };
       }),
-    [adultContentEnabled, knownAuthorsByPubkey, locale, mediaObjectUrls, notifications, t]
+    [
+      adultContentEnabled,
+      knownAuthorsByPubkey,
+      locale,
+      mediaObjectUrls,
+      notifications,
+      t,
+      timelineContentAdvisories,
+    ]
   );
 
   return (

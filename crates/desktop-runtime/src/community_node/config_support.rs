@@ -44,7 +44,11 @@ pub(crate) fn normalize_community_node_config(
             )?),
             None => None,
         };
-        let resolved_urls = if let Some(existing) = deduped.get(&base_url) {
+        let existing = deduped.get(&base_url);
+        // 同じ node の重複指定では、どれか 1 つでも採用 OFF なら OFF を維持する(外部送信を増やさない側)。
+        let content_advisory_enabled = node.content_advisory_enabled
+            && existing.is_none_or(|existing| existing.content_advisory_enabled);
+        let resolved_urls = if let Some(existing) = existing {
             merge_community_node_resolved_urls(
                 existing.resolved_urls.clone(),
                 incoming_resolved_urls,
@@ -55,6 +59,7 @@ pub(crate) fn normalize_community_node_config(
         deduped.insert(
             base_url.clone(),
             CommunityNodeNodeConfig {
+                content_advisory_enabled,
                 base_url,
                 resolved_urls,
             },
@@ -221,6 +226,7 @@ mod tests {
     fn community_node_seed_peers_keep_addr_hints_when_relay_urls_exist() {
         let config = CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://community.example.com".to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(
@@ -254,6 +260,7 @@ mod tests {
     fn community_node_seed_peers_keep_addr_hints_without_relay_urls() {
         let config = CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: "https://community.example.com".to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(

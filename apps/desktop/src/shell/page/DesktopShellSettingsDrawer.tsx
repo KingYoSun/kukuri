@@ -303,6 +303,7 @@ export function DesktopShellSettingsDrawer({
               {
                 id: createCommunityNodeDraftId(),
                 base_url: '',
+                content_advisory_enabled: true,
               },
             ]);
             setCommunityNodeEditorDirty(true);
@@ -310,6 +311,14 @@ export function DesktopShellSettingsDrawer({
           onNodeBaseUrlChange={(id, value) => {
             setCommunityNodeInput((current) =>
               current.map((node) => (node.id === id ? { ...node, base_url: value } : node))
+            );
+            setCommunityNodeEditorDirty(true);
+          }}
+          onNodeContentAdvisoryChange={(id, enabled) => {
+            setCommunityNodeInput((current) =>
+              current.map((node) =>
+                node.id === id ? { ...node, content_advisory_enabled: enabled } : node
+              )
             );
             setCommunityNodeEditorDirty(true);
           }}

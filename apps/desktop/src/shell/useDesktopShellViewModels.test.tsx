@@ -278,6 +278,8 @@ describe('useDesktopShellViewModels', () => {
     const view = renderViewModels(() => ({
       // 既定の activeTopic='kukuri:topic:general' + public scope の storage key
       timelinesByKey: { 'kukuri:topic:general::public': [post] },
+      // #1056: 照会フックを起動しない構成なので、照会先なし(確定)として扱う。
+      timelineAdvisoryLookup: { active: false, settled: {} },
     }));
 
     const card = view.result.current.activeTimelinePostViews[0];

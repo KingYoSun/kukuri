@@ -8,6 +8,7 @@ use kukuri_cn_protocol::{
     SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
+mod advisory_lookup;
 mod content_advisory;
 
 pub(super) type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
@@ -30,6 +31,9 @@ pub(super) struct MockIndexQueryState {
     /// #1055: `/v1/node/manifest` が返す node_id。`None` は manifest 未公開(404)。
     pub(super) manifest_node_id: Arc<Mutex<Option<String>>>,
     pub(super) manifest_hits: Arc<AtomicUsize>,
+    /// #1056: 一括照会の受信記録(Authorization ヘッダ, 本文)と返す advisory。
+    pub(super) advisory_lookups: Arc<Mutex<Vec<advisory_lookup::RecordedLookup>>>,
+    pub(super) advisory_lookup_response: Arc<Mutex<Vec<ContentAdvisory>>>,
 }
 
 /// #1055: index を返した node の manifest。advisory の issuer 照合に使う。
@@ -290,6 +294,8 @@ pub(super) async fn index_runtime(
         response_advisories: Arc::new(Mutex::new(Vec::new())),
         manifest_node_id: Arc::new(Mutex::new(Some(INDEX_NODE_ID.to_string()))),
         manifest_hits: Arc::new(AtomicUsize::new(0)),
+        advisory_lookups: Arc::new(Mutex::new(Vec::new())),
+        advisory_lookup_response: Arc::new(Mutex::new(Vec::new())),
     };
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
@@ -310,6 +316,10 @@ pub(super) async fn index_runtime(
         .route("/v1/indexing/requests", post(mock_indexing_request))
         .route("/v1/indexing/status", get(mock_indexing_status))
         .route("/v1/node/manifest", get(mock_index_manifest))
+        .route(
+            "/v1/advisories/lookup",
+            post(advisory_lookup::mock_advisory_lookup),
+        )
         .route(
             "/v1/rendezvous/topics/heartbeat",
             post(mock_index_rendezvous),
@@ -332,6 +342,7 @@ pub(super) async fn index_runtime(
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -346,7 +357,8 @@ pub(super) async fn index_runtime(
 /// #1055: mock node の署名鍵 x-only 公開鍵 hex 相当(manifest `node_id`)。
 pub(super) const INDEX_NODE_ID: &str =
     "1111111111111111111111111111111111111111111111111111111111111111";
-const ADVISORY_BLOB_HASH: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+pub(super) const ADVISORY_BLOB_HASH: &str =
+    "2222222222222222222222222222222222222222222222222222222222222222";
 
 fn scoped_request(base_url: &str) -> CommunityNodeIndexQueryRequest {
     CommunityNodeIndexQueryRequest {

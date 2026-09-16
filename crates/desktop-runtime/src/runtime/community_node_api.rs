@@ -3,7 +3,11 @@ use super::*;
 use chrono::Utc;
 use kukuri_cn_protocol::{CommunityNodePoliciesResponse, IndexingStatusResponse};
 
-use crate::community_node::CommunityNodeIndexingStatusRequest;
+use crate::community_node::{
+    CommunityNodeContentAdvisoryLookupError, CommunityNodeContentAdvisoryLookupRequest,
+    CommunityNodeContentAdvisoryLookupResult, CommunityNodeIndexingStatusRequest,
+    default_content_advisory_enabled,
+};
 
 impl DesktopRuntime {
     pub async fn read_community_node_trust_user(
@@ -103,6 +107,18 @@ impl DesktopRuntime {
             .await
     }
 
+    /// #1056: タイムライン等で可視の post id / blob hash を、採用 ON の設定済み node へ一括照会する。
+    /// 応答は永続化せず、blob 対象の advisory だけを取得ゲートへ登録する。
+    pub async fn lookup_community_node_content_advisories(
+        &self,
+        request: CommunityNodeContentAdvisoryLookupRequest,
+    ) -> std::result::Result<
+        CommunityNodeContentAdvisoryLookupResult,
+        CommunityNodeContentAdvisoryLookupError,
+    > {
+        self.lookup_content_advisories(request).await
+    }
+
     pub async fn get_community_node_config(&self) -> Result<CommunityNodeConfig> {
         Ok(self.community_node_config.lock().await.clone())
     }
@@ -130,12 +146,20 @@ impl DesktopRuntime {
             .into_iter()
             .map(|base_url| -> Result<CommunityNodeNodeConfig> {
                 let normalized_base_url = normalize_http_url(base_url.base_url.as_str())?;
-                let resolved_urls = current_config
+                let current = current_config
                     .nodes
                     .iter()
-                    .find(|node| node.base_url == normalized_base_url)
-                    .and_then(|node| node.resolved_urls.clone());
+                    .find(|node| node.base_url == normalized_base_url);
+                let resolved_urls = current.and_then(|node| node.resolved_urls.clone());
+                // #1056: 未指定は保存済みの採用設定を維持し、新規 node は既定(採用)にする。
+                let content_advisory_enabled =
+                    base_url.content_advisory_enabled.unwrap_or_else(|| {
+                        current.map_or_else(default_content_advisory_enabled, |node| {
+                            node.content_advisory_enabled
+                        })
+                    });
                 Ok(CommunityNodeNodeConfig {
+                    content_advisory_enabled,
                     base_url: normalized_base_url,
                     resolved_urls,
                 })
@@ -160,6 +184,7 @@ impl DesktopRuntime {
         }
         save_community_node_config(&self.db_path, &next_config)?;
         *self.community_node_config.lock().await = next_config.clone();
+        self.content_advisory_issuer_cache.lock().await.clear();
         self.community_node_sessions.lock().await.clear();
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
@@ -186,6 +211,7 @@ impl DesktopRuntime {
         }
         save_community_node_config(&self.db_path, &CommunityNodeConfig::default())?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
+        self.content_advisory_issuer_cache.lock().await.clear();
         self.community_node_rendezvous_seed_peers
             .lock()
             .await

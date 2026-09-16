@@ -12,6 +12,7 @@
 //! 該当する場合だけ本 crate へ足す(「何でも入る受け皿」に戻さない。WP-B10)。
 
 mod admission;
+mod advisory_lookup;
 mod appeal_reviews;
 mod auth;
 mod bootstrap;
@@ -53,6 +54,7 @@ pub use admission::{
     list_allowlist, list_banned, list_invite_codes, load_admission_config, remove_allowlist,
     revoke_invite_code, set_admission_mode, unban_subscriber,
 };
+pub use advisory_lookup::list_content_advisories_for_subjects;
 pub use appeal_reviews::{
     AppealReview, AppealReviewOperation, AppealReviewReport, AppealReviewVersion,
     apply_appeal_review_action, get_appeal_review, list_appeal_reviews,

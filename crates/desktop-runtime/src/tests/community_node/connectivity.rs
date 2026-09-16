@@ -179,9 +179,9 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     let base_url = "https://community.example.com";
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: base_url.to_string(),
-            resolved_urls: Some(
+        nodes: vec![CommunityNodeNodeConfig::new(
+            base_url.to_string(),
+            Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
                     vec![relay_url.to_string()],
@@ -191,14 +191,14 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
                 )
                 .expect("resolved urls a"),
             ),
-        }],
+        )],
     };
     seed_local_community_node_consents(&runtime_a, base_url, 1);
     mark_community_node_session_ready_for_test(&runtime_a, base_url).await;
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: base_url.to_string(),
-            resolved_urls: Some(
+        nodes: vec![CommunityNodeNodeConfig::new(
+            base_url.to_string(),
+            Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
                     vec![relay_url.to_string()],
@@ -208,7 +208,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
                 )
                 .expect("resolved urls b"),
             ),
-        }],
+        )],
     };
     seed_local_community_node_consents(&runtime_b, base_url, 1);
     mark_community_node_session_ready_for_test(&runtime_b, base_url).await;
@@ -340,9 +340,9 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     let base_url = "https://community.example.com";
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: base_url.to_string(),
-            resolved_urls: Some(
+        nodes: vec![CommunityNodeNodeConfig::new(
+            base_url.to_string(),
+            Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
                     vec![relay_url.clone()],
@@ -352,13 +352,13 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
                 )
                 .expect("resolved urls a"),
             ),
-        }],
+        )],
     };
     seed_local_community_node_consents(&runtime_a, base_url, 1);
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
-        nodes: vec![CommunityNodeNodeConfig {
-            base_url: base_url.to_string(),
-            resolved_urls: Some(
+        nodes: vec![CommunityNodeNodeConfig::new(
+            base_url.to_string(),
+            Some(
                 CommunityNodeResolvedUrls::new(
                     base_url,
                     vec![relay_url],
@@ -368,7 +368,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
                 )
                 .expect("resolved urls b"),
             ),
-        }],
+        )],
     };
     seed_local_community_node_consents(&runtime_b, base_url, 1);
 
@@ -686,9 +686,9 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
     save_community_node_config(
         &db_a,
         &CommunityNodeConfig {
-            nodes: vec![CommunityNodeNodeConfig {
-                base_url: community_base_url.to_string(),
-                resolved_urls: Some(
+            nodes: vec![CommunityNodeNodeConfig::new(
+                community_base_url.to_string(),
+                Some(
                     CommunityNodeResolvedUrls::new(
                         community_base_url,
                         vec![relay_url.to_string()],
@@ -696,7 +696,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
                     )
                     .expect("resolved urls"),
                 ),
-            }],
+            )],
         },
     )
     .expect("save community-node config");

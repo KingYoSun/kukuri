@@ -1,10 +1,10 @@
 # kukuri プライバシーポリシー
 
-最終更新日: 2026-09-03
+最終更新日: 2026-09-16
 
-施行日: 2026-09-03
+施行日: 2026-09-16
 
-Legal bundle version: 5
+Legal bundle version: 6
 正文言語: 日本語
 
 本ポリシーは kukuri デスクトップアプリ自体に適用されます。各 Community Node が個別に提示するプライバシーポリシーとは別のものです。日本語版を正文とし、アプリ内の英語版・簡体字中国語版は参考訳です。参考訳と日本語版に差異がある場合は日本語版を優先します。
@@ -48,7 +48,9 @@ kukuri は P2P を基盤とするアプリです。アカウントを識別す�
 
 ## 6. Community Node で扱われる情報
 
-利用者が Node を保存して当該 Node の規約へ同意すると、認証、consent、bootstrap heartbeat、topic rendezvous、検索・発見、indexing request、通報、tester feedback 等の有効な機能に応じて、公開鍵、proof、endpoint 情報、topic key、検索 query、対象識別子、任意入力内容が送信されます。
+利用者が Node を保存して当該 Node の規約へ同意すると、認証、consent、bootstrap heartbeat、topic rendezvous、検索・発見、indexing request、成人向け表現の推定の照会、通報、tester feedback 等の有効な機能に応じて、公開鍵、proof、endpoint 情報、topic key、検索 query、対象識別子、任意入力内容が送信されます。
+
+成人向け表現の推定の照会では、推定の採用を選んだ Node へ、タイムライン・スレッド・通知等に表示した投稿の ID と添付ファイルの識別子（blob hash）を送ります。本文、閲覧履歴の集約、social graph は送りません。応答の推定は表示とメディア取得の判定のために端末のメモリ上で使い、保存しません。採用は Node ごとに設定画面で切り替えられ、採用しない Node へは照会しません。
 
 Community Node 運営者と kukuri 運営者が同一とは限りません。Node ごとの処理、外部送信、保持期間、問い合わせ先は、その Node の manifest から開けるプライバシーポリシー、外部送信表示、保持文書を確認してください。現行配布物の `https://api.kukuri.app` は初期候補であり、固定接続先ではありません。
 
@@ -82,6 +84,7 @@ local data の削除や投稿撤回は、対応する client／Node が認識す
 
 ## 13. 変更履歴
 
+- version 6（2026-09-16）: 設定した Community Node へ、表示した投稿の ID と添付ファイルの識別子を成人向け表現の推定の照会として送る場合があること、送らない情報、保存しないこと、Node ごとに採用を選べることを追記しました。利用規約 version 6 と版・施行日を同期しました。
 - version 5（2026-09-03）: 利用規約の全面改訂に合わせ、legal bundle の版・施行日と、アプリ本体／Community Node／P2P 上の第三者の責任分界に関する用語を同期しました。データフローと外部送信の実質的な変更はありません。
 - version 4（2026-09-02）: 管理主体、実データフロー、P2P 複製、DHT／relay、Community Node、GitHub Releases の自動更新確認、診断情報、削除限界、行動分析を行わない方針、日本語正文と参考訳を明記しました。
 - version 3（2026-09-01）: 18歳以上の自己申告と成人向け表現の既定非表示を追加しました。

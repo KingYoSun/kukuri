@@ -77,11 +77,11 @@ const EXPECTED_TERMS_HEADINGS: Array<{
 ];
 
 describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, headings }) => {
-  test('shows bundle version 5, effective date, and every required terms clause', async () => {
+  test('shows bundle version 6, effective date, and every required terms clause', async () => {
     await i18n.changeLanguage(locale);
     render(
       <LegalDocumentView
-        documentVersions={{ terms: 5, privacy: 5 }}
+        documentVersions={{ terms: 6, privacy: 6 }}
         documentMetadata={{
           terms: {
             effectiveDate: '2026-09-03',
@@ -101,7 +101,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
       />
     );
 
-    expect(screen.getAllByText('v5')).toHaveLength(2);
+    expect(screen.getAllByText('v6')).toHaveLength(2);
     expect(screen.getAllByText(/2026-09-03/u)).toHaveLength(2);
     expect(screen.getAllByText(/Preview Distributor/u)).toHaveLength(2);
     expect(screen.getAllByText(/privacy@example\.test/u)).toHaveLength(2);
@@ -126,7 +126,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
   test('uses concrete account terms and preserves the third-party disclosure boundary', async () => {
     const expected = EXPECTED_TERMS_HEADINGS.find((item) => item.locale === locale)!;
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView documentVersions={{ terms: 5, privacy: 5 }} />);
+    render(<LegalDocumentView documentVersions={{ terms: 6, privacy: 6 }} />);
 
     expect(screen.getByText(expected.accountBoundary)).toBeInTheDocument();
     expect(screen.getByText(expected.accountKey)).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe.each(EXPECTED_TERMS_HEADINGS)('legal document in $locale', ({ locale, h
 
   test('does not render a draft notice', async () => {
     await i18n.changeLanguage(locale);
-    render(<LegalDocumentView documentVersions={{ terms: 5, privacy: 5 }} />);
+    render(<LegalDocumentView documentVersions={{ terms: 6, privacy: 6 }} />);
 
     expect(screen.queryByText(/draft|ドラフト|草案/i)).not.toBeInTheDocument();
   });

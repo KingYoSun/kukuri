@@ -29,7 +29,8 @@ pub(super) fn input(name: &str) -> Value {
         | "get_community_node_statuses"
         | "clear_community_node_config" => object(json!({}), &[]),
         "set_community_node_config" => object(
-            json!({"nodes": array(object(json!({"base_url": string()}), &["base_url"]))}),
+            // #1056: content_advisory_enabled は任意。未指定は保存済みの採用設定を維持する。
+            json!({"nodes": array(object(json!({"base_url": string(), "content_advisory_enabled": nullable(boolean())}), &["base_url"]))}),
             &["nodes"],
         ),
         "fetch_community_node_policies" => object(
@@ -78,6 +79,10 @@ pub(super) fn input(name: &str) -> Value {
             "scope_kind": {"enum": ["public_topic", "private_channel", null]}, "scope_id": nullable(string()), "topic_id": nullable(string()), "limit": nullable(integer())}),
             &["base_url"],
         ),
+        "lookup_community_node_content_advisories" => object(
+            json!({"post_ids": strings(), "blob_hashes": strings()}),
+            &["post_ids", "blob_hashes"],
+        ),
         "read_community_node_trust_user" | "read_community_node_relation_user" => object(
             json!({"base_url": string(), "target_pubkey": string()}),
             &["base_url", "target_pubkey"],
@@ -110,7 +115,7 @@ pub(super) fn output(name: &str) -> Value {
     use community_views::view;
     match name {
         "get_community_node_config" | "set_community_node_config" => view(
-            json!({"nodes": array(view(json!({"base_url": string(), "resolved_urls": nullable(community_views::resolved_urls())}), &[]))}),
+            json!({"nodes": array(view(json!({"base_url": string(), "resolved_urls": nullable(community_views::resolved_urls()), "content_advisory_enabled": boolean()}), &[]))}),
             &[],
         ),
         "get_community_node_statuses" => array(community_views::status()),
@@ -145,7 +150,14 @@ pub(super) fn output(name: &str) -> Value {
         "search_community_node_index"
         | "discover_community_node_index"
         | "recommend_community_node_index" => view(
-            json!({"entries": array(view(json!({"scope_kind": scope(), "scope_id": string(), "object_id": string(), "author_pubkey": string(), "text": string(), "created_at": integer()}), &[]))}),
+            json!({"entries": array(view(json!({"scope_kind": scope(), "scope_id": string(), "object_id": string(), "author_pubkey": string(), "text": string(), "created_at": integer(),
+                "content_advisories": array(community_views::content_advisory())}), &[]))}),
+            &[],
+        ),
+        "lookup_community_node_content_advisories" => view(
+            json!({"nodes": array(view(json!({"base_url": string(), "node_id": nullable(string()),
+                "advisories": array(community_views::content_advisory()),
+                "error": nullable(view(json!({"code": string(), "message": string(), "status": nullable(integer())}), &[]))}), &[]))}),
             &[],
         ),
         "read_community_node_trust_user" => community_views::trust(),

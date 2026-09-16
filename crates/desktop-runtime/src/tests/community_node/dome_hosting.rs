@@ -59,6 +59,7 @@ async fn dome_runtime_with_routes(
     });
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: None,
         }],
