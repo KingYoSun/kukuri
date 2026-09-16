@@ -834,3 +834,139 @@ test('an unavailable explicit node reports the stopped state instead of offering
   ).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Show results' })).not.toBeInTheDocument();
 });
+
+// #1052: 解決済み投稿の添付をタイムラインと同じ表示経路へ通す。
+const INDEX_IMAGE_HASH = 'b'.repeat(64);
+
+function resolvedImageIndexEntry(objectId: string, contentLabels: string[] = []) {
+  const resolved = resolvedIndexEntry(objectId, 'canonical content with media');
+  if (!resolved.post) throw new Error('resolved post fixture missing');
+  return {
+    ...resolved,
+    post: {
+      ...resolved.post,
+      content_labels: contentLabels,
+      attachments: [
+        {
+          hash: INDEX_IMAGE_HASH,
+          mime: 'image/png',
+          bytes: 2048,
+          role: 'image_original',
+          status: 'Available' as const,
+        },
+      ],
+    },
+  };
+}
+
+test('resolved results render their attachments through the shared media path', async () => {
+  const searchCommunityNodeIndex = vi
+    .fn()
+    .mockResolvedValue({ entries: [indexEntry('media-post', 'indexed text')] });
+  const resolveCommunityIndexPosts = vi
+    .fn()
+    .mockResolvedValue({ entries: [resolvedImageIndexEntry('media-post')] });
+  const api = { searchCommunityNodeIndex, resolveCommunityIndexPosts } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        mediaObjectUrls: { [INDEX_IMAGE_HASH]: 'blob:index-image' },
+      })}
+    />
+  );
+  runSearch();
+
+  const preview = await screen.findByTestId('media-preview-media-post');
+  expect(preview).toHaveAttribute('src', 'blob:index-image');
+  expect(screen.queryByTestId('media-adult-gated-media-post')).not.toBeInTheDocument();
+});
+
+test('an adult-labeled resolved result keeps the shared gated placeholder', async () => {
+  const searchCommunityNodeIndex = vi
+    .fn()
+    .mockResolvedValue({ entries: [indexEntry('adult-media-post', 'indexed text')] });
+  const resolveCommunityIndexPosts = vi
+    .fn()
+    .mockResolvedValue({ entries: [resolvedImageIndexEntry('adult-media-post', ['adult'])] });
+  const api = { searchCommunityNodeIndex, resolveCommunityIndexPosts } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        mediaObjectUrls: { [INDEX_IMAGE_HASH]: 'blob:index-image' },
+        adultContentEnabled: false,
+      })}
+    />
+  );
+  runSearch();
+
+  expect(await screen.findByTestId('media-adult-gated-adult-media-post')).toBeInTheDocument();
+  expect(screen.queryByTestId('media-preview-adult-media-post')).not.toBeInTheDocument();
+});
+
+test('unresolved and failed results keep rendering no media', async () => {
+  const entry = indexEntry('unresolved-media', 'indexed text');
+  const api = {
+    searchCommunityNodeIndex: vi.fn().mockResolvedValue({ entries: [entry] }),
+    resolveCommunityIndexPosts: vi.fn().mockResolvedValue({
+      entries: [
+        {
+          key: `public_topic:rust:${entry.object_id}`,
+          post: null,
+          capabilities: {
+            open_thread: false,
+            reply: false,
+            repost: false,
+            quote_repost: false,
+            react: false,
+            copy_link: false,
+            bookmark: false,
+            withdraw: false,
+          },
+        },
+      ],
+    }),
+  } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        mediaObjectUrls: { [INDEX_IMAGE_HASH]: 'blob:index-image' },
+      })}
+    />
+  );
+  runSearch();
+
+  await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
+  expect(screen.queryByTestId('media-preview-unresolved-media')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('media-skeleton-unresolved-media')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('media-adult-gated-unresolved-media')).not.toBeInTheDocument();
+});
+
+test('resolved posts are published for media prefetch and cleared when results expire', async () => {
+  const onResolvedPostsChange = vi.fn();
+  const searchCommunityNodeIndex = vi
+    .fn()
+    .mockResolvedValue({ entries: [indexEntry('prefetch-post', 'indexed text')] });
+  const resolveCommunityIndexPosts = vi
+    .fn()
+    .mockResolvedValue({ entries: [resolvedImageIndexEntry('prefetch-post')] });
+  const api = { searchCommunityNodeIndex, resolveCommunityIndexPosts } as unknown as DesktopApi;
+
+  const { unmount } = render(
+    <CommunityIndexWorkspace {...workspaceProps(api, { onResolvedPostsChange })} />
+  );
+  runSearch();
+
+  await waitFor(() => {
+    const published = onResolvedPostsChange.mock.calls.at(-1)?.[0] as PostView[] | undefined;
+    expect(published?.map((post) => post.object_id)).toEqual(['prefetch-post']);
+    expect(published?.[0]?.attachments.map((attachment) => attachment.hash)).toEqual([
+      INDEX_IMAGE_HASH,
+    ]);
+  });
+
+  unmount();
+  expect(onResolvedPostsChange.mock.calls.at(-1)?.[0]).toEqual([]);
+});

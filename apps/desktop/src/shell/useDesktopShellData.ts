@@ -89,6 +89,7 @@ export function useDesktopShellData({
     trackedTopics,
     activeTopic,
     adultContentEnabled,
+    communityIndexResolvedPosts,
     selectedThread,
     gameRoomsByScopeKey,
     joinedChannelsByTopic,
@@ -222,6 +223,7 @@ export function useDesktopShellData({
   const previewableMediaAttachments = usePreviewableMediaAttachments({
     activeTimeline,
     activePublicTimeline,
+    communityIndexResolvedPosts,
     profileTimeline,
     selectedAuthorTimeline,
     thread,
@@ -248,6 +250,7 @@ export function useDesktopShellData({
       ...profileTimeline,
       ...selectedAuthorTimeline,
       ...thread,
+      ...communityIndexResolvedPosts,
     ]) {
       if (!isAdultLabeledPost(post)) {
         continue;
@@ -264,6 +267,7 @@ export function useDesktopShellData({
     activePublicTimeline,
     activeTimeline,
     adultContentEnabled,
+    communityIndexResolvedPosts,
     profileTimeline,
     selectedAuthorTimeline,
     thread,

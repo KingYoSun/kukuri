@@ -42,6 +42,7 @@ import { PostCard } from './PostCard';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
 const EMPTY_KNOWN_AUTHORS: Record<string, AuthorSocialView> = {};
+const EMPTY_UNSUPPORTED_VIDEO_MANIFESTS: Record<string, true> = {};
 
 type CommunityIndexWorkspaceProps = {
   api: DesktopApi;
@@ -69,6 +70,12 @@ type CommunityIndexWorkspaceProps = {
   knownAuthorsByPubkey?: Record<string, AuthorSocialView>;
   mediaObjectUrls?: Record<string, string | null>;
   adultContentEnabled?: boolean;
+  /// #1052: 解決済み投稿の添付をタイムラインと同じ規則で描画するための表示条件。
+  unsupportedVideoManifests?: Record<string, true>;
+  locale?: string | null;
+  /// #1052: 表示中の解決済み投稿。呼出元がメディアのプリフェッチと成人向け取得ゲートの
+  /// 対象へ加えるために使う。結果の失効と Column の終了では空配列を通知する。
+  onResolvedPostsChange?: (posts: PostView[]) => void;
   onOpenAuthor: (pubkey: string) => void;
   onOpenThread?: (threadId: string) => void;
   onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
@@ -257,6 +264,9 @@ export function CommunityIndexWorkspace({
   knownAuthorsByPubkey = EMPTY_KNOWN_AUTHORS,
   mediaObjectUrls = {},
   adultContentEnabled = false,
+  unsupportedVideoManifests = EMPTY_UNSUPPORTED_VIDEO_MANIFESTS,
+  locale = null,
+  onResolvedPostsChange,
   onOpenAuthor,
   onOpenThread,
   onOpenThreadInTopic,
@@ -380,6 +390,8 @@ export function CommunityIndexWorkspace({
             resolvedEntry,
             mediaObjectUrls,
             adultContentEnabled,
+            unsupportedVideoManifests,
+            locale,
           }),
         };
       }) ?? [],
@@ -388,12 +400,46 @@ export function CommunityIndexWorkspace({
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,
+      locale,
       mediaObjectUrls,
       resolvedAuthorsByPubkey,
       resolvedPostStatusByKey,
       resolvedPostsByKey,
+      unsupportedVideoManifests,
       visibleResult,
     ]
+  );
+
+  // #1052: 表示中の解決済み投稿を呼出元へ公開し、タイムラインと同じプリフェッチ・
+  // 成人向け取得ゲートの対象に含める。同じ添付集合を繰り返し通知しない。
+  const resolvedPosts = useMemo(
+    () =>
+      visiblePostCards.flatMap(({ resolvedEntry }) =>
+        resolvedEntry?.post ? [resolvedEntry.post] : []
+      ),
+    [visiblePostCards]
+  );
+  const resolvedPostsChangeRef = useRef(onResolvedPostsChange);
+  useEffect(() => {
+    resolvedPostsChangeRef.current = onResolvedPostsChange;
+  }, [onResolvedPostsChange]);
+  const publishedResolvedSignature = useRef<string | null>(null);
+  useEffect(() => {
+    const signature = resolvedPosts
+      .map(
+        (post) =>
+          `${post.object_id}:${post.attachments.map((attachment) => attachment.hash).join(',')}`
+      )
+      .join('|');
+    if (publishedResolvedSignature.current === signature) return;
+    publishedResolvedSignature.current = signature;
+    onResolvedPostsChange?.(resolvedPosts);
+  }, [onResolvedPostsChange, resolvedPosts]);
+  useEffect(
+    () => () => {
+      resolvedPostsChangeRef.current?.([]);
+    },
+    []
   );
 
   const invalidateResults = useCallback(() => {

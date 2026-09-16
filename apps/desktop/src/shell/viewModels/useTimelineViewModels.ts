@@ -5,7 +5,7 @@ import type {
   PostCardView,
   ReferencedAuthorMeta,
 } from '@/components/core/types';
-import type { AttachmentView, PostView, ProfileAssetView } from '@/lib/api';
+import type { PostView, ProfileAssetView } from '@/lib/api';
 import { contentProvenanceFromView } from '@/lib/api/provenance';
 import type { SupportedLocale } from '@/i18n';
 import { extractMentions } from '@/lib/internalLinks';
@@ -13,14 +13,12 @@ import {
   isAdultLabeledPost,
   logMediaDebug,
   mediaElementDebugFields,
-  selectPrimaryImage,
   selectVideoManifest,
   selectVideoPoster,
 } from '@/shell/media';
 import {
   authorDisplayLabel,
   canCreateRepostFromPost,
-  formatBytes,
   isQuoteRepost,
   localizeAudienceLabel,
   publishedTopicIdForPost,
@@ -31,6 +29,7 @@ import {
   useDesktopShellFieldSetter,
   type DesktopShellState,
 } from '@/shell/store';
+import { buildPostMediaView } from '@/shell/viewModels/postMediaView';
 
 type UseTimelineViewModelsArgs = {
   activeJoinedChannels: DesktopShellState['joinedChannelsByTopic'][string];
@@ -76,61 +75,15 @@ export function useTimelineViewModels({
     ): PostCardView => {
       // #858: 表示許可前は成人向けラベル付き投稿の本文・メディアを代替表示にする。
       const adultContentGated = !adultContentEnabled && isAdultLabeledPost(post);
-      const primaryImage = selectPrimaryImage(post);
       const videoPoster = selectVideoPoster(post);
       const videoManifest = selectVideoManifest(post);
-      const imageGalleryItems = post.attachments
-        .filter(
-          (attachment) =>
-            attachment.mime.startsWith('image/') && attachment.role !== 'video_poster'
-        )
-        .map((attachment) => ({
-          hash: attachment.hash,
-          src:
-            typeof mediaObjectUrls[attachment.hash] === 'string'
-              ? mediaObjectUrls[attachment.hash]
-              : null,
-          mime: attachment.mime,
-          provenance: contentProvenanceFromView(attachment.provenance),
-        }));
-      const mediaKind = primaryImage ? 'image' : videoManifest || videoPoster ? 'video' : null;
-      const mediaMetaAttachment =
-        mediaKind === 'video' ? videoManifest ?? videoPoster : primaryImage;
-      const reservedHashes = new Set<string>();
-      if (primaryImage) reservedHashes.add(primaryImage.hash);
-      if (videoPoster) reservedHashes.add(videoPoster.hash);
-      if (videoManifest) reservedHashes.add(videoManifest.hash);
-      const extraAttachmentCount = post.attachments.filter(
-        (attachment) => !reservedHashes.has(attachment.hash)
-      ).length;
-      const imagePreviewSrc =
-        !adultContentGated && primaryImage && typeof mediaObjectUrls[primaryImage.hash] === 'string'
-          ? mediaObjectUrls[primaryImage.hash]
-          : null;
-      const videoPosterPreviewSrc =
-        !adultContentGated && videoPoster && typeof mediaObjectUrls[videoPoster.hash] === 'string'
-          ? mediaObjectUrls[videoPoster.hash]
-          : null;
-      const videoPlaybackSrc =
-        !adultContentGated &&
-        videoManifest &&
-        typeof mediaObjectUrls[videoManifest.hash] === 'string'
-          ? mediaObjectUrls[videoManifest.hash]
-          : null;
-      const hasSettledUnavailable = (hash: string) =>
-        Object.prototype.hasOwnProperty.call(mediaObjectUrls, hash) &&
-        mediaObjectUrls[hash] === null;
-      const mediaUnavailable =
-        mediaKind === 'image'
-          ? Boolean(primaryImage && hasSettledUnavailable(primaryImage.hash))
-          : mediaKind === 'video'
-            ? [videoManifest, videoPoster]
-                .filter((attachment): attachment is AttachmentView => attachment !== null)
-                .every((attachment) => hasSettledUnavailable(attachment.hash))
-            : false;
-      const videoUnsupportedOnClient = Boolean(
-        videoManifest && unsupportedVideoManifests[videoManifest.hash]
-      );
+      // #1052: メディア表示データは「見つける」の解決済み投稿と同じ builder を使う。
+      const media = buildPostMediaView(post, {
+        adultContentGated,
+        locale,
+        mediaObjectUrls,
+        unsupportedVideoManifests,
+      });
       const logPlaybackEvent =
         (eventName: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
           const video = event.currentTarget;
@@ -139,7 +92,7 @@ export function useTimelineViewModels({
             mime: videoManifest?.mime ?? null,
             post_id: post.object_id,
             poster_hash: videoPoster?.hash ?? null,
-            playback_src: videoPlaybackSrc,
+            playback_src: media.videoPlaybackSrc ?? null,
             ...mediaElementDebugFields(video),
             video_height: video.videoHeight || null,
             video_width: video.videoWidth || null,
@@ -261,44 +214,10 @@ export function useTimelineViewModels({
         showUnavailableDiagnostics: developerModeEnabled,
         adultContentGated,
         media: {
-          objectId: post.object_id,
-          kind: mediaKind,
-          extraAttachmentCount,
-          state: adultContentGated && mediaKind !== null
-            ? 'gated'
-            : mediaKind === 'video'
-              ? videoPlaybackSrc || videoPosterPreviewSrc
-                ? 'ready'
-                : mediaUnavailable
-                  ? 'unavailable'
-                  : 'loading'
-              : mediaKind === 'image'
-                ? imagePreviewSrc
-                  ? 'ready'
-                  : mediaUnavailable
-                    ? 'unavailable'
-                    : 'loading'
-                : 'ready',
-          metaMime: mediaMetaAttachment?.mime ?? null,
-          metaBytesLabel: mediaMetaAttachment
-            ? formatBytes(mediaMetaAttachment.bytes, locale)
-            : null,
-          imagePreviewSrc,
-          imageGalleryItems: adultContentGated ? [] : imageGalleryItems,
-          currentImageIndex: primaryImage
-            ? Math.max(
-                0,
-                imageGalleryItems.findIndex((item) => item.hash === primaryImage.hash)
-              )
-            : 0,
-          videoPosterPreviewSrc,
-          videoPlaybackSrc,
-          videoReportHash:
-            mediaKind === 'video' ? (videoManifest?.hash ?? videoPoster?.hash ?? null) : null,
-          videoUnsupportedOnClient,
-          provenance: contentProvenanceFromView(mediaMetaAttachment?.provenance),
+          ...media,
+          // 再生診断ログはイベントを購読するタイムライン側の責務として builder の外に置く。
           videoProps:
-            mediaKind === 'video' && videoPlaybackSrc && !videoUnsupportedOnClient
+            media.kind === 'video' && media.videoPlaybackSrc && !media.videoUnsupportedOnClient
               ? {
                   onCanPlay: logPlaybackEvent('canplay'),
                   onDurationChange: logPlaybackEvent('durationchange'),

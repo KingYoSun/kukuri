@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 
 import i18n from '@/i18n';
 import type {
+  AttachmentView,
   AuthorSocialView,
   CommunityIndexResolvedPostView,
   IndexEntryView,
@@ -90,6 +91,56 @@ function resolvedEntry(content: string): CommunityIndexResolvedPostView {
       withdraw: false,
     },
   };
+}
+
+const PRIMARY_IMAGE_HASH = 'b'.repeat(64);
+const SECOND_IMAGE_HASH = 'c'.repeat(64);
+
+function imageAttachments(): AttachmentView[] {
+  return [
+    {
+      hash: PRIMARY_IMAGE_HASH,
+      mime: 'image/png',
+      bytes: 2048,
+      role: 'image_original',
+      status: 'Available',
+    },
+    {
+      hash: SECOND_IMAGE_HASH,
+      mime: 'image/png',
+      bytes: 4096,
+      role: 'image_original',
+      status: 'Available',
+    },
+  ];
+}
+
+function resolvedImageEntry(labels: string[] = []): CommunityIndexResolvedPostView {
+  const resolved = resolvedEntry('canonical signed content');
+  if (!resolved.post) throw new Error('resolved post fixture missing');
+  resolved.post.attachments = imageAttachments();
+  resolved.post.content_labels = labels;
+  return resolved;
+}
+
+function imageCardView(
+  overrides: {
+    mediaObjectUrls?: Record<string, string | null>;
+    adultContentEnabled?: boolean;
+    labels?: string[];
+  } = {}
+) {
+  return communityIndexPostCardView(entry, {
+    nodeBaseUrl: 'https://node.example',
+    operation: 'search',
+    topicId: null,
+    knownAuthor,
+    resolutionStatus: 'resolved',
+    resolvedEntry: resolvedImageEntry(overrides.labels),
+    mediaObjectUrls: overrides.mediaObjectUrls ?? {},
+    adultContentEnabled: overrides.adultContentEnabled,
+    locale: 'en',
+  });
 }
 
 beforeEach(async () => {
@@ -189,6 +240,101 @@ describe('communityIndexPostCardView', () => {
     expect(hidden.adultContentGated).toBe(true);
     expect(visible.adultContentGated).toBe(false);
     expect(hidden.post.content).not.toContain(entry.text);
+  });
+
+  // #1052: 解決済み投稿の添付はローカルの署名済み envelope 由来であり、タイムラインと
+  // 同じ builder 規則で組み立てる(node の index text からの推測補完ではない)。
+  test('builds resolved attachments and media with the timeline rules', () => {
+    const view = imageCardView({
+      mediaObjectUrls: {
+        [PRIMARY_IMAGE_HASH]: 'blob:primary-image',
+        [SECOND_IMAGE_HASH]: 'blob:second-image',
+      },
+    });
+
+    expect(view.post.attachments).toEqual(imageAttachments());
+    expect(view.media).toMatchObject({
+      objectId: entry.object_id,
+      kind: 'image',
+      state: 'ready',
+      extraAttachmentCount: 1,
+      imagePreviewSrc: 'blob:primary-image',
+      metaMime: 'image/png',
+    });
+    expect(view.media.metaBytesLabel).toBeTruthy();
+    expect(view.media.imageGalleryItems?.map((item) => item.hash)).toEqual([
+      PRIMARY_IMAGE_HASH,
+      SECOND_IMAGE_HASH,
+    ]);
+    expect(view.media.imageGalleryItems?.map((item) => item.src)).toEqual([
+      'blob:primary-image',
+      'blob:second-image',
+    ]);
+    expect(view.media.currentImageIndex).toBe(0);
+  });
+
+  test('keeps resolved media loading until its object url settles', () => {
+    const view = imageCardView({ mediaObjectUrls: {} });
+
+    expect(view.media).toMatchObject({ kind: 'image', state: 'loading' });
+    expect(view.media.imagePreviewSrc).toBeNull();
+  });
+
+  test('marks resolved media unavailable once its object url settles empty', () => {
+    const view = imageCardView({ mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: null } });
+
+    expect(view.media).toMatchObject({ kind: 'image', state: 'unavailable' });
+    expect(view.media.imagePreviewSrc).toBeNull();
+  });
+
+  test('gates resolved adult-labeled media without exposing a preview source', () => {
+    const view = imageCardView({
+      labels: ['adult'],
+      adultContentEnabled: false,
+      mediaObjectUrls: {
+        [PRIMARY_IMAGE_HASH]: 'blob:primary-image',
+        [SECOND_IMAGE_HASH]: 'blob:second-image',
+      },
+    });
+
+    expect(view.adultContentGated).toBe(true);
+    expect(view.media).toMatchObject({ kind: 'image', state: 'gated' });
+    expect(view.media.imagePreviewSrc).toBeNull();
+    expect(view.media.imageGalleryItems).toEqual([]);
+  });
+
+  test('renders resolved adult-labeled media once adult display is enabled', () => {
+    const view = imageCardView({
+      labels: ['adult'],
+      adultContentEnabled: true,
+      mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary-image' },
+    });
+
+    expect(view.adultContentGated).toBe(false);
+    expect(view.media).toMatchObject({
+      kind: 'image',
+      state: 'ready',
+      imagePreviewSrc: 'blob:primary-image',
+    });
+  });
+
+  test.each([
+    ['loading', 'loading'],
+    ['failed', 'failed'],
+  ] as const)('renders no media for a %s entry', (_label, resolutionStatus) => {
+    const view = communityIndexPostCardView(entry, {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search',
+      topicId: null,
+      knownAuthor,
+      resolutionStatus,
+      resolvedEntry: null,
+      mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary-image' },
+      locale: 'en',
+    });
+
+    expect(view.post.attachments).toEqual([]);
+    expect(view.media).toMatchObject({ kind: null, extraAttachmentCount: 0 });
   });
 
   test.each([

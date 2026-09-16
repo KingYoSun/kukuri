@@ -78,6 +78,7 @@ export const selectShellDataSlice = (s: DesktopShellStore) => ({
   activeTopic: activeTopic(s),
   adultContentEnabled: s.adultContentEnabled,
   bookmarkedReactionAssets: s.bookmarkedReactionAssets,
+  communityIndexResolvedPosts: s.communityIndexResolvedPosts,
   directMessageTimelineByPeer: s.directMessageTimelineByPeer,
   gameRoomsByScopeKey: s.gameRoomsByScopeKey,
   joinedChannelsByTopic: s.joinedChannelsByTopic,
