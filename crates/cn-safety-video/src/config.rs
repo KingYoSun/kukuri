@@ -63,7 +63,14 @@ impl VideoExtractConfig {
             || !self.ffprobe.is_absolute()
             || !self.temporary_root.is_absolute()
             || self.decoder_build_id.trim().is_empty()
-            || self.max_input_bytes == 0
+        {
+            return Err(invalid("invalid video decoder paths or identity"));
+        }
+        self.validate_limits()
+    }
+
+    fn validate_limits(&self) -> Result<(), ScanError> {
+        if self.max_input_bytes == 0
             || self.max_input_bytes > 32 * 1024 * 1024
             || self.max_duration_us == 0
             || self.max_duration_us > 600_000_000
@@ -85,7 +92,8 @@ impl VideoExtractConfig {
     }
 
     pub fn sample_times_us(&self, duration_us: u64) -> Result<Vec<u64>, ScanError> {
-        self.validate()?;
+        // Sampling is pure and portable; executable/tmpfs paths are validated at startup.
+        self.validate_limits()?;
         if duration_us == 0 || duration_us > self.max_duration_us {
             return Err(invalid("invalid video duration"));
         }
