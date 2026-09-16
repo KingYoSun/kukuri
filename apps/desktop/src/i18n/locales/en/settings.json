@@ -146,6 +146,12 @@
         "defaultNotAuthority": "Even as a default node, it is not the operator or authority for the whole network."
       }
     },
+    "contentAdvisory": {
+      "label": "Use this node's estimates of adult material",
+      "description": "When on, posts this node estimates may contain adult material are also hidden behind a placeholder while adult material display is off. The estimate is this node’s judgment, not the poster’s label or a decision by kukuri as a whole.",
+      "enabled": "The IDs of posts shown in your timelines and the identifiers of their attachments are sent to this node to check its estimates. Post text and browsing history are not sent.",
+      "disabled": "This node is not asked for estimates, and its estimates are not used."
+    },
     "distanceOptout": {
       "title": "Distance opt-out",
       "notEligible": "Distance opt-out is unavailable for this node (authentication, required consent, connectivity, or index/trust provision is missing).",

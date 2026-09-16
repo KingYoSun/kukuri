@@ -347,6 +347,7 @@ export function useSettingsViewModels({
           nodeName: manifestEntry?.status === 'ok' ? manifestEntry.manifest.node_name : null,
           saved,
           distanceOptoutEligible: distanceOptoutEligibleBaseUrls.includes(node.base_url),
+          contentAdvisoryEnabled: node.content_advisory_enabled !== false,
           diagnostics: [
             {
               label: t('settings:communityNode.diagnostics.auth'),

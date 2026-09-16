@@ -278,6 +278,7 @@ export function communityNodesToDraftNodes(config: CommunityNodeConfig): Communi
   return config.nodes.map((node, index) => ({
     id: `community-node-${index}-${node.base_url}`,
     base_url: node.base_url,
+    content_advisory_enabled: node.content_advisory_enabled !== false,
   }));
 }
 
@@ -287,6 +288,7 @@ export function communityNodeDraftNodesToConfigInput(
   return draftNodes
     .map((node) => ({
       base_url: node.base_url.trim(),
+      content_advisory_enabled: node.content_advisory_enabled,
     }))
     .filter((node) => node.base_url.length > 0);
 }

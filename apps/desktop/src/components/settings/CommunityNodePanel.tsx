@@ -12,6 +12,7 @@ import {
   type TrustRelationUnavailableReason,
 } from '@/lib/api/trustRelationPresentation';
 
+import { CommunityNodeAdvisoryAdoptionField } from './CommunityNodeAdvisoryAdoptionField';
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
 import { useCommunityNodePolicyDialog, type FetchCommunityNodePolicyView, type AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import { SettingsActionRow } from './SettingsActionRow';
@@ -28,6 +29,8 @@ type CommunityNodePanelProps = {
   onAddNode: () => void;
   onNodeBaseUrlChange: (id: string, value: string) => void;
   onRemoveNode: (id: string) => void;
+  /// #1056: node ごとの content advisory 採用の切替(保存は「ノードを保存」で確定する)。
+  onNodeContentAdvisoryChange?: (id: string, enabled: boolean) => void;
   onSaveNodes: () => void;
   onReset: () => void;
   onClearNodes: () => void;
@@ -56,6 +59,7 @@ export function CommunityNodePanel({
   onAddNode,
   onNodeBaseUrlChange,
   onRemoveNode,
+  onNodeContentAdvisoryChange,
   onSaveNodes,
   onReset,
   onClearNodes,
@@ -387,6 +391,13 @@ export function CommunityNodePanel({
                 </Button>
               </SettingsActionRow>
             </div>
+            {onNodeContentAdvisoryChange ? (
+              <CommunityNodeAdvisoryAdoptionField
+                nodeId={node.id}
+                enabled={node.contentAdvisoryEnabled !== false}
+                onChange={(enabled) => onNodeContentAdvisoryChange(node.id, enabled)}
+              />
+            ) : null}
             {relationOptoutAvailable ? (
               <section className='mt-4 space-y-3 rounded-[16px] border border-[var(--border-subtle)] p-4'>
                 <div className='space-y-1'>
