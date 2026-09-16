@@ -478,6 +478,7 @@ pub fn run() {
             commands::community_node::search_community_node_index,
             commands::community_node::discover_community_node_index,
             commands::community_node::recommend_community_node_index,
+            commands::community_node::lookup_community_node_content_advisories,
             commands::community_node::read_community_node_trust_user,
             commands::community_node::read_community_node_relation_user,
             commands::community_node::list_community_node_relation_neighbors,

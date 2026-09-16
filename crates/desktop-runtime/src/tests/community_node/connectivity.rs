@@ -180,6 +180,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -197,6 +198,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     mark_community_node_session_ready_for_test(&runtime_a, base_url).await;
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -341,6 +343,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -357,6 +360,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     seed_local_community_node_consents(&runtime_a, base_url, 1);
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.to_string(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(
@@ -687,6 +691,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
         &db_a,
         &CommunityNodeConfig {
             nodes: vec![CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url: community_base_url.to_string(),
                 resolved_urls: Some(
                     CommunityNodeResolvedUrls::new(

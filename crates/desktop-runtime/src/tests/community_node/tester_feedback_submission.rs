@@ -120,6 +120,7 @@ async fn tester_feedback_runtime(
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())

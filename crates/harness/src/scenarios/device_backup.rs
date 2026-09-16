@@ -96,6 +96,7 @@ pub(crate) async fn run_device_backup_restore(
 
     let node_config = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: "https://backup-node.example".to_string(),
             resolved_urls: None,
         }],

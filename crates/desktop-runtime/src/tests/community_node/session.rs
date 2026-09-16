@@ -46,6 +46,7 @@ async fn consented_node_bootstraps_session_on_maintenance_tick() {
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -142,6 +143,7 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -242,6 +244,7 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
     .expect("persist near-expiry token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -340,6 +343,7 @@ async fn node_without_local_consent_is_never_contacted() {
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -477,6 +481,7 @@ async fn community_node_status_does_not_require_restart_when_verified_connectivi
     )
     .expect("resolved urls");
     let node = CommunityNodeNodeConfig {
+        content_advisory_enabled: true,
         base_url: base_url.clone(),
         resolved_urls: Some(resolved_urls.clone()),
     };
@@ -604,6 +609,7 @@ async fn policy_update_is_not_silently_reaccepted() {
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())
@@ -720,6 +726,7 @@ async fn saved_token_does_not_bypass_same_version_snapshot_preflight() {
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: Some(
                 CommunityNodeResolvedUrls::new(base_url.clone(), Vec::new(), Vec::new())

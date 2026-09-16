@@ -180,6 +180,7 @@ async fn admission_runtime(db_path: &Path, nodes: Vec<String>) -> DesktopRuntime
         nodes: nodes
             .into_iter()
             .map(|base_url| CommunityNodeNodeConfig {
+                content_advisory_enabled: true,
                 base_url,
                 resolved_urls: None,
             })
@@ -248,6 +249,7 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
         nodes: vec![CommunityNodeNodeConfig {
+            content_advisory_enabled: true,
             base_url: base_url.clone(),
             resolved_urls: None,
         }],

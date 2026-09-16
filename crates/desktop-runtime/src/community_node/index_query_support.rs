@@ -14,13 +14,13 @@ use tracing::warn;
 use super::{CommunityNodeSessionOutcome, community_node_http_client, load_community_node_token};
 use crate::runtime::DesktopRuntime;
 
-/// #1055 / ADR 0046 §6.4: content advisory の成人向けゲートへの合成は、利用規約 第3条 4 項の
-/// 改訂と再同意(C4 = #1056)が merge されるまで有効化しない。既定 OFF。
-pub(crate) const CONTENT_ADVISORY_SYNTHESIS_DEFAULT: bool = false;
+/// #1055 / ADR 0046 §6.4: content advisory の成人向けゲートへの合成。利用規約 第3条 4 項の改訂と
+/// 再同意(C4 = #1056)と同じ変更で有効化した。node 単位の採用は `content_advisory_enabled` で決める。
+pub(crate) const CONTENT_ADVISORY_SYNTHESIS_DEFAULT: bool = true;
 
 /// #1055: client が成人向けゲートの対象として扱う advisory の表示ラベル(ADR 0028 §8.6)。
 /// 未知ラベルは無視する(前方互換。node が将来増やしても勝手にゲートしない)。
-const GATING_ADVISORY_LABELS: [&str; 2] = ["adult", "sensitive"];
+pub(crate) const GATING_ADVISORY_LABELS: [&str; 2] = ["adult", "sensitive"];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -269,9 +269,8 @@ impl DesktopRuntime {
     }
 
     /// #1055 / ADR 0046 §6.4: content advisory の成人向けゲートへの合成を切り替える。
-    /// 本番の有効化は C4(#1056)が利用規約改訂・再同意と同じ変更で
-    /// `CONTENT_ADVISORY_SYNTHESIS_DEFAULT` を切り替えて行うため、実行時の setter は
-    /// 有効時の挙動を検証する test だけが使う。
+    /// 本番は `CONTENT_ADVISORY_SYNTHESIS_DEFAULT`(#1056 で有効化)に従い、実行時の setter は
+    /// 無効時の挙動を検証する test だけが使う。
     #[cfg(test)]
     pub(crate) fn set_content_advisory_synthesis_enabled(&self, enabled: bool) {
         self.content_advisory_synthesis_enabled
@@ -281,7 +280,8 @@ impl DesktopRuntime {
     /// #1055 / ADR 0046 §6: index 応答に同梱された content advisory を、client が採用できる形へ
     /// 揃える単一の choke point。
     ///
-    /// - 合成が無効(C4 前)なら、すべての advisory を落として取得ゲートにも登録しない。
+    /// - 合成が無効、または index を返した node の採用が OFF(#1056)なら、すべての advisory を
+    ///   落として取得ゲートにも登録しない。
     /// - 有効なら、index を返した設定済み node の manifest `node_id` と `issuer_node_id` が一致する
     ///   advisory だけを残す(AC-4)。manifest を取得できない場合も採用しない(fail-closed)。
     /// - 残った advisory のうち blob 対象のものを、`blob_media_payload` の取得ゲートへ登録する。
@@ -291,7 +291,15 @@ impl DesktopRuntime {
         let synthesis_enabled = self
             .content_advisory_synthesis_enabled
             .load(std::sync::atomic::Ordering::SeqCst);
-        if !synthesis_enabled {
+        // #1056: 利用者が採用を OFF にした node の advisory は採用しない。
+        let node_adopted = self
+            .community_node_config
+            .lock()
+            .await
+            .nodes
+            .iter()
+            .any(|node| node.base_url == base_url && node.content_advisory_enabled);
+        if !synthesis_enabled || !node_adopted {
             for entry in &mut response.entries {
                 entry.content_advisories.clear();
             }

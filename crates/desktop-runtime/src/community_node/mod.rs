@@ -29,6 +29,7 @@ use crate::runtime::DesktopRuntime;
 mod config_support;
 mod consent_preflight_support;
 mod consent_storage_support;
+mod content_advisory_lookup_support;
 mod dome_hosting_support;
 mod http_client_support;
 mod index_query_support;
@@ -55,6 +56,10 @@ pub(crate) use consent_storage_support::{
     community_node_local_consent_covers_status, community_node_local_consent_satisfies_policies,
     load_community_node_local_consents, persist_community_node_local_consents,
     record_community_node_local_consents,
+};
+pub use content_advisory_lookup_support::{
+    CommunityNodeContentAdvisoryLookupError, CommunityNodeContentAdvisoryLookupRequest,
+    CommunityNodeContentAdvisoryLookupResult, CommunityNodeContentAdvisoryNodeResult,
 };
 pub use dome_hosting_support::DomeHostingRequestError;
 pub(crate) use http_client_support::*;
@@ -110,13 +115,33 @@ pub(crate) const COMMUNITY_NODE_SESSION_SCHEDULER_TICK_SECONDS: u64 = 15;
 // 最悪 POST +40 秒 < TTL 45 秒)。
 pub(crate) const COMMUNITY_NODE_TOPIC_RENDEZVOUS_REFRESH_MARGIN_SECONDS: i64 = 20;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CommunityNodeNodeConfig {
     pub base_url: String,
     #[serde(default)]
     pub resolved_urls: Option<CommunityNodeResolvedUrls>,
+    /// #1056: この node が発行した content advisory(成人向け表現の推定)を採用するか。
+    /// 既定 true(node を設定すること自体が ADR 0046 §6.1 の opt-in)。false の node へは
+    /// タイムライン向け一括照会を送らず、「見つける」の index 応答の advisory も採用しない。
+    #[serde(default = "default_content_advisory_enabled")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>"))]
+    pub content_advisory_enabled: bool,
+}
+
+pub(crate) fn default_content_advisory_enabled() -> bool {
+    true
+}
+
+impl Default for CommunityNodeNodeConfig {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            resolved_urls: None,
+            content_advisory_enabled: default_content_advisory_enabled(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +162,9 @@ pub(crate) use kukuri_cn_protocol::{BootstrapNodesResponse, TopicRendezvousHeart
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeConfigNode {
     pub base_url: String,
+    /// #1056: content advisory の採用。未指定は保存済みの値を維持し、新規 node は true。
+    #[serde(default)]
+    pub content_advisory_enabled: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

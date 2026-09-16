@@ -281,7 +281,13 @@ export type CommunityNodeSeedPeer = { endpoint_id: string, addr_hint?: string | 
 
 export type CommunityNodeResolvedUrls = { public_base_url: string, connectivity_urls: Array<string>, seed_peers?: Array<CommunityNodeSeedPeer> | null, };
 
-export type CommunityNodeNodeConfig = { base_url: string, resolved_urls?: CommunityNodeResolvedUrls | null, };
+export type CommunityNodeNodeConfig = { base_url: string, resolved_urls?: CommunityNodeResolvedUrls | null, 
+/**
+ * #1056: この node が発行した content advisory(成人向け表現の推定)を採用するか。
+ * 既定 true(node を設定すること自体が ADR 0046 §6.1 の opt-in)。false の node へは
+ * タイムライン向け一括照会を送らず、「見つける」の index 応答の advisory も採用しない。
+ */
+content_advisory_enabled?: boolean | null, };
 
 export type CommunityNodeConfig = { nodes: Array<CommunityNodeNodeConfig>, };
 
@@ -407,6 +413,30 @@ basis: Basis, };
 export type IndexEntryView = { scope_kind: IndexScopeKind, scope_id: string, object_id: string, author_pubkey: string, text: string, created_at: number, content_advisories: Array<ContentAdvisory>, };
 
 export type IndexQueryResponse = { entries: Array<IndexEntryView>, };
+
+export type CommunityNodeContentAdvisoryLookupRequest = { 
+/**
+ * 可視の投稿 id(引用元・返信先を含む)。
+ */
+post_ids: Array<string>, 
+/**
+ * 可視の添付 blob hash。
+ */
+blob_hashes: Array<string>, };
+
+export type CommunityNodeContentAdvisoryLookupError = { code: string, message: string, status?: number | null, };
+
+export type CommunityNodeContentAdvisoryNodeResult = { base_url: string, 
+/**
+ * manifest で確認した発行元(= advisory の `issuer_node_id`)。
+ */
+node_id?: string | null, advisories: Array<ContentAdvisory>, error?: CommunityNodeContentAdvisoryLookupError | null, };
+
+export type CommunityNodeContentAdvisoryLookupResult = { 
+/**
+ * 照会対象になった(採用 ON の)node ごとの結果。
+ */
+nodes: Array<CommunityNodeContentAdvisoryNodeResult>, };
 
 export type CommunityIndexPostResolveInput = { key: string, topic: string, object_id: string, author_pubkey: string, channel_ref: ChannelRef, };
 
@@ -727,7 +757,11 @@ export type WithdrawDomeConnectionProposalRequest = { spatial_context: SpatialCo
 
 export type RevokeDomeConnectionRequest = { spatial_context: SpatialContextV1, connection_id: string, };
 
-export type SetCommunityNodeConfigNode = { base_url: string, };
+export type SetCommunityNodeConfigNode = { base_url: string, 
+/**
+ * #1056: content advisory の採用。未指定は保存済みの値を維持し、新規 node は true。
+ */
+content_advisory_enabled?: boolean | null, };
 
 export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
 
