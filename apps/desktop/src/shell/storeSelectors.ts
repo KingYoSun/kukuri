@@ -83,6 +83,7 @@ export const selectShellDataSlice = (s: DesktopShellStore) => ({
   advisoryGatedMediaHashes: s.advisoryGatedMediaHashes,
   bookmarkedPosts: s.bookmarkedPosts,
   communityNodeConfig: s.communityNodeConfig,
+  communityNodeConfigError: s.communityNodeConfigError,
   communityNodeConfigLoaded: s.communityNodeConfigLoaded,
   communityNodeStatuses: s.communityNodeStatuses,
   communityNodeStatusesLoaded: s.communityNodeStatusesLoaded,

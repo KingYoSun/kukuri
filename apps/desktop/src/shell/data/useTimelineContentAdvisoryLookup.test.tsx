@@ -210,4 +210,21 @@ describe('useTimelineContentAdvisoryLookup', () => {
     await advance(TIMELINE_ADVISORY_LOOKUP_DEBOUNCE_MS);
     expect(api.lookupCommunityNodeContentAdvisories).toHaveBeenCalledTimes(2);
   });
+
+  // 監査 non-blocker 2: active のまま採用 node の組だけが変わっても、同じ投稿を照会し直す。
+  test('asks again when only the set of adopting nodes changes', async () => {
+    // 投稿配列は同じ参照のまま(照会対象は変わらない)。
+    const posts = [post('post-1')];
+    const { harness, api, hook } = mount(ADOPTING, async () => ({ nodes: [] }), posts);
+    await advance(TIMELINE_ADVISORY_LOOKUP_DEBOUNCE_MS);
+    expect(api.lookupCommunityNodeContentAdvisories).toHaveBeenCalledTimes(1);
+
+    hook.rerender({
+      nodes: { baseUrls: [NODE, 'https://other.example'], undetermined: false },
+      posts,
+    });
+    await advance(TIMELINE_ADVISORY_LOOKUP_DEBOUNCE_MS);
+    expect(api.lookupCommunityNodeContentAdvisories).toHaveBeenCalledTimes(2);
+    expect(harness.store.getState().timelineAdvisoryLookup.settled['post_id:post-1']).toBe(true);
+  });
 });

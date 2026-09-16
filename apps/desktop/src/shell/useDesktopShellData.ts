@@ -277,8 +277,9 @@ export function useDesktopShellData({
     timelinesByKey,
     workspaceColumns,
   ]);
-  const communityNodeConfigLoaded = state.communityNodeConfigLoaded;
-  // 状態の取得に失敗した場合も、手元の状態で確定させる(照会中のまま止めない)。
+  // 設定・状態の取得に失敗した場合も、手元の状態で確定させる(照会中のまま止めない)。
+  const communityNodeConfigLoaded =
+    state.communityNodeConfigLoaded || Boolean(state.communityNodeConfigError);
   const communityNodeStatusesLoaded =
     state.communityNodeStatusesLoaded || Boolean(state.communityNodeStatusError);
   const adoptingNodes = useMemo(

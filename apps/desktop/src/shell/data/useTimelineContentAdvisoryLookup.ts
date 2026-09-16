@@ -199,7 +199,8 @@ export function useTimelineContentAdvisoryLookup({
         settle();
       }
     }
-  }, [active, storeApi, subjects, undetermined]);
+    // 採用 node の組だけが変わった場合も、破棄した結果を照会し直す(nodesSignature)。
+  }, [active, nodesSignature, storeApi, subjects, undetermined]);
 
   useEffect(
     () => () => {

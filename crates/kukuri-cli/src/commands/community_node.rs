@@ -5,8 +5,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeIndexQueryRequest,
-    CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeNodeStatus,
+    AcceptCommunityNodeConsentsRequest, CommunityNodeContentAdvisoryLookupRequest,
+    CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
+    CommunityNodeIndexingStatusRequest, CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackSubmission, CommunityNodeUserAdvisoryRequest,
     FetchCommunityNodePoliciesRequest, SetCommunityNodeConfigRequest,
@@ -159,6 +160,14 @@ impl CommandHandler for Handler {
                     .await
                     .map_err(|error| command_error(error.into()))?,
             ),
+            "lookup_community_node_content_advisories" => encode(
+                runtime
+                    .lookup_community_node_content_advisories(decode::<
+                        CommunityNodeContentAdvisoryLookupRequest,
+                    >(payload)?)
+                    .await
+                    .map_err(|error| command_error(error.into()))?,
+            ),
             "read_community_node_trust_user" => encode(
                 runtime
                     .read_community_node_trust_user(decode::<CommunityNodeUserAdvisoryRequest>(
@@ -267,6 +276,7 @@ pub(super) fn registrations() -> Vec<CommandRegistration> {
         ("search_community_node_index", Read, false),
         ("discover_community_node_index", Read, false),
         ("recommend_community_node_index", Read, false),
+        ("lookup_community_node_content_advisories", Read, false),
         ("read_community_node_trust_user", Read, false),
         ("read_community_node_relation_user", Read, false),
         ("list_community_node_relation_neighbors", Read, false),
