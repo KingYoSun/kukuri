@@ -2,9 +2,9 @@
 
 ## 現在の状態
 
-- リスク区分 A、Scope revision: 2026-09-16、基準 commit: `773e52c3`。
+- 判定: Complete。リスク区分 A、Scope revision: 2026-09-16、基準 commit: `773e52c3`、merge commit: `1c45b232`（PR #1074）。
 - 2026-09-16 にユーザーが推奨案（step timeout 45 分、repo 全体の cache 予算は別 Issue）を承認した。Issue 操作・commit・PR 作成・CI 成功後の merge は承認待ちなしで行う。
-- AC / INVAR の正本は [Issue #1063](https://github.com/KingYoSun/kukuri/issues/1063)。Linux job を含む cache 予算は [#1073](https://github.com/KingYoSun/kukuri/issues/1073) に分離した。
+- AC / INVAR の正本は [Issue #1063](https://github.com/kukuri-app/kukuri/issues/1063)。Linux job を含む cache 予算は [#1073](https://github.com/kukuri-app/kukuri/issues/1073) に分離した。
 
 ## 修正前の観測（2026-09-14〜16 の `Kukuri Fast` 29 run）
 
@@ -38,4 +38,18 @@ cache が効かない原因:
 
 ## CI 計測（AC-1 / AC-2）
 
-merge 後に追記する。
+基準は Windows package が 31.5 分以内（timeout 45 分の 70%）、`windows-fast` 全体が 75 分以内。全 run とも GitHub-hosted の `windows-latest`。
+
+| run | commit | Windows package | windows-fast 全体 | rust-cache | 判定 |
+| --- | --- | --- | --- | --- | --- |
+| 35108080793（PR #1074） | `d01acc0f` | 23.8 分 | 40.8 分 | miss、`save-if: false` で保存なし | 基準内 |
+| 35112821418（main） | `1c45b232` | 22.1 分 | 41.5 分 | miss、main scope に保存 | 基準内 |
+| 35115095739（main） | `0fc0b03f` | 20.5 分 | 37.9 分 | miss（開始が保存より前） | 基準内 |
+| 35119088717（main） | `b8357c35` | - | - | - | repository 移管時に run 全体が cancelled。計測対象外 |
+| 35131926193（main） | `e25a8686` | 20.8 分 | 43.5 分 | miss（key は一致。移管前の entry は復元されず、この run で再保存） | 基準内 |
+
+判定: main の連続する有効 3 run で AC-1 / AC-2 を満たした。INVAR-1 / INVAR-2 は PR #1074 の差分で確認済み。
+
+- sccache を外しても cache なしの package は 20〜24 分で、修正前（23〜25 分）より遅くなっていない。
+- main で保存した rust-cache の復元効果はこの 3 run では観測できなかった。repo 全体の cache 予算と runner 移行は [#1073](https://github.com/kukuri-app/kukuri/issues/1073) で扱う。
+- 2026-09-16 に repository を `kukuri-app/kukuri` へ移管した。本記録のリンクは移管後の名前に揃えた。
