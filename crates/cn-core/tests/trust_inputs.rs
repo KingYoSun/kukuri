@@ -249,3 +249,43 @@ fn trust_inputs_carry_basis_confidence_visibility() {
     assert_eq!(input.appeal_status, AppealStatus::None);
     assert_eq!(input.expires_at, None);
 }
+
+#[test]
+fn general_advisory_contributes_zero_to_trust() {
+    // ADR 0026 §7: nsfw / objectionable は供給層では `Relative` の入力として basis / confidence /
+    // appeal を同伴したまま残り（利用者向け read で状態を説明できる）、評価計算への寄与は
+    // scoring 層（`signal_contribution`）が常に 0 にする。供給層で落とさない。
+    let mut nsfw = classifier_signal("sig-nsfw", SafetyCategory::Nsfw);
+    nsfw.signal.severity = Severity::Low;
+    let mut objectionable = classifier_signal("sig-objectionable", SafetyCategory::Objectionable);
+    objectionable.signal.severity = Severity::Low;
+    let inputs = trust_risk_inputs_from(&[nsfw, objectionable], NOW).unwrap();
+    assert!(inputs.absolute.is_empty());
+    assert_eq!(inputs.relative.len(), 2);
+    for input in &inputs.relative {
+        assert_eq!(input.component, TrustComponentKind::Relative);
+        assert_eq!(
+            trust_component_for(input.category),
+            TrustComponentKind::Relative
+        );
+        assert!(input.category.is_advisory_only());
+        assert_eq!(input.basis, Basis::ClassifierScore);
+        assert_eq!(input.severity, Severity::Low);
+        assert_eq!(input.appeal_status, AppealStatus::None);
+        assert_eq!(kukuri_cn_trust::signal_contribution(input), 0.0);
+    }
+    // 評価値は 0 のまま。
+    let view = kukuri_cn_trust::build_trust_read(
+        "pubkey-1",
+        &inputs,
+        chrono::DateTime::parse_from_rfc3339(NOW)
+            .unwrap()
+            .with_timezone(&Utc),
+        &kukuri_cn_trust::TrustParams::default(),
+        &kukuri_cn_trust::UniformRelationWeight::default(),
+    );
+    assert_eq!(view.relative, 0.0);
+    assert_eq!(view.trust, 0.0);
+    assert_eq!(view.basis.len(), 2);
+    assert!(view.basis.iter().all(|entry| entry.contribution == 0.0));
+}

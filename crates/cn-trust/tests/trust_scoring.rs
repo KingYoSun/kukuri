@@ -505,3 +505,95 @@ fn csam_absolute_component_is_immune_to_relation_and_mass_signals() {
     assert!(view_noisy.trust <= -0.5);
     assert!(view_noisy.trust >= -1.0);
 }
+
+// --- ADR 0026 §7: advisory-only category（nsfw / objectionable）は寄与 0 ---
+
+#[test]
+fn general_advisory_contributes_zero_to_trust() {
+    // nsfw / objectionable は basis に残るが raw_contribution / contribution とも 0 で、
+    // relative / trust は動かない。spam は従来どおり相対成分に効く。
+    let params = TrustParams::default();
+    for category in [SafetyCategory::Nsfw, SafetyCategory::Objectionable] {
+        let only_advisory = TrustRiskInputs {
+            absolute: vec![],
+            relative: vec![advisory_input("sig-adv", category, now())],
+        };
+        let view = build_trust_read(
+            "pk",
+            &only_advisory,
+            now(),
+            &params,
+            &UniformRelationWeight(1.0),
+        );
+        assert_eq!(view.relative, 0.0, "{category:?}");
+        assert_eq!(view.trust, 0.0, "{category:?}");
+        assert_eq!(view.basis.len(), 1);
+        let entry = &view.basis[0];
+        assert_eq!(entry.component, TrustComponentKind::Relative);
+        assert_eq!(entry.category, category);
+        assert_eq!(entry.severity, Severity::Low);
+        assert_eq!(entry.basis, Basis::ClassifierScore);
+        assert_eq!(entry.raw_contribution, 0.0);
+        assert_eq!(entry.contribution, 0.0);
+        assert_eq!(entry.appeal_status, AppealStatus::None);
+        assert_eq!(signal_contribution(&only_advisory.relative[0]), 0.0);
+    }
+
+    // 件数・severity・relation 重みに依らず 0（#1050 の集約後も契約は同じ）。
+    let mut many = advisory_input("sig-high", SafetyCategory::Nsfw, now());
+    many.severity = Severity::High;
+    let inputs = TrustRiskInputs {
+        absolute: vec![],
+        relative: (0..20)
+            .map(|i| {
+                let mut input = many.clone();
+                input.signal_id = format!("sig-{i}");
+                input
+            })
+            .collect(),
+    };
+    let view = build_trust_read("pk", &inputs, now(), &params, &UniformRelationWeight(1.0));
+    assert_eq!(view.relative, 0.0);
+    assert_eq!(view.basis.len(), 20);
+
+    // spam と並んでも spam の寄与だけが効く。
+    let mixed = TrustRiskInputs {
+        absolute: vec![],
+        relative: vec![
+            spam_input("sig-spam", now()),
+            advisory_input("sig-nsfw", SafetyCategory::Nsfw, now()),
+        ],
+    };
+    let spam_only = TrustRiskInputs {
+        absolute: vec![],
+        relative: vec![spam_input("sig-spam", now())],
+    };
+    let with_advisory = build_trust_read("pk", &mixed, now(), &params, &UniformRelationWeight(1.0));
+    let without = build_trust_read(
+        "pk",
+        &spam_only,
+        now(),
+        &params,
+        &UniformRelationWeight(1.0),
+    );
+    assert_eq!(with_advisory.relative, without.relative);
+    assert_eq!(with_advisory.trust, without.trust);
+    assert!(with_advisory.relative < 0.0);
+
+    // Cleared になっても値は動かず、basis の状態表示だけが変わる（ADR 0026 §7.3）。
+    let mut cleared = advisory_input("sig-cleared", SafetyCategory::Objectionable, now());
+    cleared.appeal_status = AppealStatus::Cleared;
+    let view = build_trust_read(
+        "pk",
+        &TrustRiskInputs {
+            absolute: vec![],
+            relative: vec![cleared],
+        },
+        now(),
+        &params,
+        &UniformRelationWeight(1.0),
+    );
+    assert_eq!(view.relative, 0.0);
+    assert_eq!(view.basis[0].appeal_status, AppealStatus::Cleared);
+    assert_eq!(view.basis[0].contribution, 0.0);
+}
