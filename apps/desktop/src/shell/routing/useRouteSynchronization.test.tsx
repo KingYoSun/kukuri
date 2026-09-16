@@ -533,5 +533,66 @@ describe('useRouteSynchronization', () => {
       expect(storeApi.getState().selectedThread).toBeNull();
       view.unmount();
     });
+
+    test('does not reproject an older push that commits after a newer Column focus push (Issue #1053)', () => {
+      // Profile → Timeline 本文 → Explore のボタン、を router の commit より速く操作した状態:
+      // store は Explore が active、pending と実 hash は Explore の URL。先に Timeline の push が
+      // commit されても、その古い URL の再投影で Explore から active を奪わない。
+      const profileUrl = '/profile?topic=kukuri%3Atopic%3Ageneral';
+      const exploreUrl = '/explore?topic=kukuri%3Atopic%3Ageneral';
+      setWindowHash(`#${profileUrl}`);
+      const storeApi = createDesktopShellStore();
+      const scope = { topicId: 'kukuri:topic:general', channelId: null };
+      act(() => {
+        storeApi.getState().patchState({
+          workspaceState: {
+            ...storeApi.getState().workspaceState,
+            activeColumnId: columnIdentityId('profile', scope),
+          },
+        });
+      });
+      const args = createHookArgs(storeApi, {
+        resolvedRouteLocation: { pathname: '/profile', search: '?topic=kukuri%3Atopic%3Ageneral' },
+        routeSection: 'profile',
+      });
+      const view = renderHook((props: RouteSynchronizationArgs) => useRouteSynchronization(props), {
+        initialProps: args,
+      });
+      expect(activeWorkspaceColumn(storeApi.getState().workspaceState).kind).toBe('profile');
+      const idsBefore = storeApi.getState().workspaceState.columns.map((column) => column.id);
+
+      act(() => {
+        storeApi.getState().patchState({
+          workspaceState: {
+            ...storeApi.getState().workspaceState,
+            activeColumnId: columnIdentityId('explore', scope),
+          },
+        });
+      });
+      args.pendingRouteUrlRef.current = exploreUrl;
+      setWindowHash(`#${exploreUrl}`);
+      view.rerender({
+        ...args,
+        resolvedRouteLocation: { pathname: '/timeline', search: '?topic=kukuri%3Atopic%3Ageneral' },
+        routeSection: 'timeline',
+        state: selectShellRoutingSlice(storeApi.getState()),
+      });
+
+      expect(activeWorkspaceColumn(storeApi.getState().workspaceState).kind).toBe('explore');
+      expect(args.pendingRouteUrlRef.current).toBe(exploreUrl);
+
+      view.rerender({
+        ...args,
+        resolvedRouteLocation: { pathname: '/explore', search: '?topic=kukuri%3Atopic%3Ageneral' },
+        routeSection: 'explore',
+        state: selectShellRoutingSlice(storeApi.getState()),
+      });
+
+      expect(activeWorkspaceColumn(storeApi.getState().workspaceState).kind).toBe('explore');
+      expect(args.pendingRouteUrlRef.current).toBeNull();
+      expect(args.lastObservedRouteUrlRef.current).toBe(exploreUrl);
+      expect(storeApi.getState().workspaceState.columns.map((column) => column.id)).toEqual(idsBefore);
+      view.unmount();
+    });
   });
 });

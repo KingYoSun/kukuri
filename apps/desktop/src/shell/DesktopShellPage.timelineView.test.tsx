@@ -79,7 +79,8 @@ async function setUpPublicAndPrivateColumns(user: ReturnType<typeof userEvent.se
   return findTimelineColumnByScope('core · general');
 }
 
-test('非 active な Timeline Column の Bookmarks 切替は他の Column と URL に波及しない', async () => {
+// Issue #1053: header の view 切替は操作した Column を active にし、URL もその Column の view を指す。
+test('非 active な Timeline Column の Bookmarks 切替はその Column を active にし、他の Column の view に波及しない', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
@@ -108,8 +109,12 @@ test('非 active な Timeline Column の Bookmarks 切替は他の Column と UR
   expect(await within(switchedColumn).findByText('No bookmarked posts yet.')).toBeInTheDocument();
   expect(within(switchedColumn).queryByText('channel post')).not.toBeInTheDocument();
 
-  // route(focus 中 Column)には波及しない。
-  expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
+  // 操作した Column が focus 対象になり、route はその view を指す(bookmarks は topic 単位の URL)。
+  await waitFor(() => {
+    expect(switchedColumn).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe(`${DEMO_TOPIC_HASH}&timelineView=bookmarks`);
+  });
+  expect(publicColumn).not.toHaveAttribute('aria-current', 'true');
 });
 
 test('active な Timeline Column の view 切替は従来どおり URL の timelineView query を同期する', async () => {
@@ -162,7 +167,7 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
     ).toBeGreaterThan(0);
   });
 
-  // 非 active(core)Column を Bookmarks に切り替える(URL は変わらない)。
+  // 非 active(core)Column を Bookmarks に切り替える(操作した Column が active になる)。
   await user.click(within(columnViewTabs(privateColumn)).getByRole('tab', { name: 'Bookmarks' }));
   await waitFor(() => {
     expect(
@@ -170,8 +175,15 @@ test('reload 後に各 Column の view が復元され、非 active の Bookmark
         name: 'Bookmarks',
       })
     ).toHaveAttribute('aria-selected', 'true');
+    expect(window.location.hash).toBe(`${DEMO_TOPIC_HASH}&timelineView=bookmarks`);
   });
-  expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
+
+  // Public Column を選び直し、Bookmarks Column を非 active に戻してから reload する。
+  await user.click(findTimelineColumnByScope('Public · general'));
+  await waitFor(() => {
+    expect(findTimelineColumnByScope('Public · general')).toHaveAttribute('aria-current', 'true');
+    expect(window.location.hash).toBe(DEMO_TOPIC_HASH);
+  });
 
   // reload(App re-mount、localStorage は保持)。
   view.unmount();

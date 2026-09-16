@@ -18,7 +18,8 @@ type ColumnCanvasProps = {
   children: ReactNode;
   columnIds?: string[];
   label?: string;
-  onActivateColumn: (columnId: string, syncRoute: boolean) => void;
+  // loadContext: true は Column の文脈読み込みと route 同期、false は route 同期のみ(Issue #1053)。
+  onActivateColumn: (columnId: string, loadContext: boolean) => void;
   onMoveColumn?: (columnId: string, targetIndex: number) => void;
   onVisibleColumnIdsChange?: (columnIds: string[]) => void;
 };
@@ -78,6 +79,13 @@ export function ColumnCanvas({
   const swipeConsumedRef = useRef(false);
   const scrollSettleTimeoutRef = useRef<number | null>(null);
   const programmaticScrollTargetRef = useRef<string | null>(null);
+  // 操作対象(button 等)の pointer 押下で active 化した Column。押下中に scroll すると pointerup が
+  // 別要素に落ちて click が失われるため、scrollIntoView を押下の終了後へ遅らせる(Issue #1053)。
+  const pressActivatedColumnIdRef = useRef<string | null>(null);
+  const activeColumnIdRef = useRef(activeColumnId);
+  useEffect(() => {
+    activeColumnIdRef.current = activeColumnId;
+  }, [activeColumnId]);
   const [dropTarget, setDropTarget] = useState<{ index: number; left: number } | null>(null);
   const dropTargetRef = useRef<{ index: number; left: number } | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -140,6 +148,31 @@ export function ColumnCanvas({
   }, []);
 
   useEffect(() => {
+    // 押下の終了は Canvas 外で離した場合も含めて window で受ける。click は pointerup と同じ
+    // 入力 task で配送されるため、次の task で scroll する。
+    const scrollPressActivatedColumnIntoView = () => {
+      const columnId = pressActivatedColumnIdRef.current;
+      if (!columnId) return;
+      pressActivatedColumnIdRef.current = null;
+      window.setTimeout(() => {
+        if (activeColumnIdRef.current !== columnId) return;
+        const column = canvasRef.current?.querySelector<HTMLElement>(
+          `[data-column-id="${CSS.escape(columnId)}"]`
+        );
+        if (typeof column?.scrollIntoView === 'function') {
+          column.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      }, 0);
+    };
+    window.addEventListener('pointerup', scrollPressActivatedColumnIntoView, true);
+    window.addEventListener('pointercancel', scrollPressActivatedColumnIntoView, true);
+    return () => {
+      window.removeEventListener('pointerup', scrollPressActivatedColumnIntoView, true);
+      window.removeEventListener('pointercancel', scrollPressActivatedColumnIntoView, true);
+    };
+  }, []);
+
+  useEffect(() => {
     const cancelWithEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !pointerDragRef.current) return;
       event.preventDefault();
@@ -155,7 +188,9 @@ export function ColumnCanvas({
     const column = canvasRef.current?.querySelector<HTMLElement>(
       `[data-column-id="${CSS.escape(activeColumnId)}"]`
     );
-    if (typeof column?.scrollIntoView === 'function') {
+    const pressActivated = pressActivatedColumnIdRef.current === activeColumnId;
+    if (!pressActivated) pressActivatedColumnIdRef.current = null;
+    if (!pressActivated && typeof column?.scrollIntoView === 'function') {
       const mobile = isMobileViewport();
       const reducedMotion = prefersReducedMotion();
       if (mobile) {
@@ -333,16 +368,15 @@ export function ColumnCanvas({
     }, SCROLL_SETTLE_MS);
   };
 
-  const activateFromEvent = (target: EventTarget | null) => {
-    if (
-      target instanceof Element &&
-      target.closest('[data-column-gesture-owner], [data-column-preserve-activation]')
-    ) {
-      return;
-    }
+  const activateFromEvent = (target: EventTarget | null, fromPress = false) => {
+    if (target instanceof Element && target.closest('[data-column-gesture-owner]')) return;
     const columnId = findColumnId(target);
     if (columnId && columnId !== activeColumnId) {
-      onActivateColumn(columnId, !isInteractiveTarget(target));
+      // header / 本文の操作でも押した Column を active にする。操作対象(button / select 等)では
+      // 文脈の読み込みを handler に任せる(第 2 引数 false)。route の同期は呼出側が必ず行う。
+      const interactive = isInteractiveTarget(target);
+      if (fromPress && interactive) pressActivatedColumnIdRef.current = columnId;
+      onActivateColumn(columnId, !interactive);
     }
   };
 
@@ -501,7 +535,7 @@ export function ColumnCanvas({
       }}
       onFocusCapture={(event) => activateFromEvent(event.target)}
       onPointerDown={(event) => {
-        if (!isMobileViewport()) activateFromEvent(event.target);
+        if (!isMobileViewport()) activateFromEvent(event.target, true);
       }}
     >
       {children}

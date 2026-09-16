@@ -205,7 +205,8 @@ test('Timeline header replaces the active Column topic without adding a Column a
   expect(within(timeline).getByPlaceholderText('Write a post')).toHaveValue('general draft');
 });
 
-test('Timeline header can switch an inactive Column without stealing focus or the route', async () => {
+// Issue #1053: 非 active Column の header 操作はその Column を active にし、route も切替後の topic へ移す。
+test('Timeline header switches an inactive Column and focuses it with the new topic route', async () => {
   const user = userEvent.setup();
   renderAtHash('#/timeline?topic=kukuri%3Atopic%3Ageneral');
 
@@ -217,13 +218,16 @@ test('Timeline header can switch an inactive Column without stealing focus or th
   const topicSelect = within(timeline).getByRole('combobox', { name: 'Timeline topic' });
 
   await user.selectOptions(topicSelect, 'kukuri:topic:dev');
-  await waitFor(() => expect(topicSelect).toHaveValue('kukuri:topic:dev'));
-  expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
-  expect(screen.getByRole('region', { name: /^Profile Column,/ })).toHaveAttribute(
+  await waitFor(() => {
+    expect(topicSelect).toHaveValue('kukuri:topic:dev');
+    expect(window.location.hash).toBe('#/timeline?topic=kukuri%3Atopic%3Adev');
+    expect(timeline).toHaveAttribute('aria-current', 'true');
+  });
+  expect(screen.getByRole('region', { name: /^Profile Column,/ })).not.toHaveAttribute(
     'aria-current',
     'true'
   );
-  expect(timeline).not.toHaveAttribute('aria-current', 'true');
+  expect(screen.getAllByRole('region', { name: /^Timeline Column,/ })).toHaveLength(1);
 });
 
 test('tracked topics show public and channel scope separately in the sidebar', async () => {

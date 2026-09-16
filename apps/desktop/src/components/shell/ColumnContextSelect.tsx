@@ -22,7 +22,7 @@ export function ColumnContextSelect({
   onChange,
 }: ColumnContextSelectProps) {
   return (
-    <label className='shell-column-context-control' data-column-preserve-activation>
+    <label className='shell-column-context-control'>
       <span className='sr-only'>{label}</span>
       <Select
         className='shell-column-context-select'

@@ -49,7 +49,6 @@ test('manual refresh retains an empty feed and focus while preventing duplicate 
   render(<App api={api} />);
   const profile = await screen.findByRole('region', { name: /^Profile Column,/ });
   await within(profile).findByText('No public posts published yet.');
-  const active = document.querySelector('[data-column-id][aria-current="true"]');
   const pending = createDeferred<TimelineView>();
   const read = vi.spyOn(api, 'listProfileTimeline').mockReturnValue(pending.promise);
   const refresh = await within(profile).findByRole('button', { name: 'Refresh profile' }, { timeout: 2000 });
@@ -63,7 +62,8 @@ test('manual refresh retains an empty feed and focus while preventing duplicate 
   await user.click(refresh);
   await user.keyboard('{Enter}');
   expect(read).toHaveBeenCalledTimes(1);
-  expect(document.querySelector('[data-column-id][aria-current="true"]')).toBe(active);
+  // Issue #1053: header の更新操作も Profile Column を active にする。
+  expect(profile).toHaveAttribute('aria-current', 'true');
   await act(async () => pending.resolve({ items: [], next_cursor: null }));
   await waitFor(() => expect(refresh).toHaveAttribute('aria-busy', 'false'));
   expect(refresh).toHaveFocus();

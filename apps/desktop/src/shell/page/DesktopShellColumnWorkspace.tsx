@@ -87,6 +87,8 @@ type DesktopShellColumnWorkspaceProps = {
   onClearConversation: (peerPubkey: string) => void;
   onOpenConversationAuthor: (peerPubkey: string, parentColumnId: string) => void;
   onActivateColumn: (column: ColumnState, preserveAuthorPane?: boolean) => void;
+  // Column 内の操作(ボタン / プルダウン)で active 化したとき、route だけを同期する(Issue #1053)。
+  onSyncColumnRoute: (column: ColumnState) => void;
   onSelectTimelineTopic: (column: ColumnState, topicId: string) => void;
   onSelectTimelineView: (column: ColumnState, view: TimelineViewId) => void;
   // Timeline Column header のプライベートチャンネル入口(Issue #966)。公開 scope では
@@ -123,6 +125,7 @@ export function DesktopShellColumnWorkspace({
   onClearConversation,
   onOpenConversationAuthor,
   onActivateColumn,
+  onSyncColumnRoute,
   onSelectTimelineTopic,
   onSelectTimelineView,
   onOpenChannelManager,
@@ -297,7 +300,7 @@ export function DesktopShellColumnWorkspace({
     const scope = column.scope;
     if (scope.channelId === null) {
       return (
-        <div className='shell-column-scope-actions' data-column-preserve-activation>
+        <div className='shell-column-scope-actions'>
           <Button
             variant='ghost'
             size='sm'
@@ -318,7 +321,7 @@ export function DesktopShellColumnWorkspace({
         (candidate) => candidate.channel_id === channelId
       )?.label ?? channelId;
     return (
-      <div className='shell-column-scope-actions' data-column-preserve-activation>
+      <div className='shell-column-scope-actions'>
         <Button
           variant='ghost'
           size='sm'
@@ -334,11 +337,14 @@ export function DesktopShellColumnWorkspace({
     );
   };
 
-  const activate = (columnId: string, syncRoute: boolean) => {
+  const activate = (columnId: string, loadContext: boolean) => {
     const column = workspaceState.columns.find((candidate) => candidate.id === columnId);
     if (!column) return;
     setWorkspaceState((current) => activateColumn(current, columnId));
-    if (syncRoute) onActivateColumn(column);
+    // Column 内の操作では文脈の読み込みを押された handler に任せ、route だけを揃える。
+    // route を旧 Column に残すと、route 同期が scope のずれから Timeline を開き直す(Issue #1053)。
+    if (loadContext) onActivateColumn(column);
+    else onSyncColumnRoute(column);
   };
   const close = (columnId: string) => {
     const next = closeColumn(workspaceState, columnId);
@@ -448,7 +454,7 @@ export function DesktopShellColumnWorkspace({
   const renderHeaderActions = (column: ColumnState) => {
     if (column.kind === 'profile' && !column.entityId) {
       return (
-        <div className='shell-column-context-actions' data-column-preserve-activation>
+        <div className='shell-column-context-actions'>
           <ProfileRefreshButton refreshing={profileRefreshing} saving={profileSaving} onRefresh={onRefreshProfile} />
         </div>
       );
@@ -465,7 +471,7 @@ export function DesktopShellColumnWorkspace({
     }
     if (column.kind === 'notifications') {
       return (
-        <div className='shell-column-context-actions' data-column-preserve-activation>
+        <div className='shell-column-context-actions'>
           <span className='shell-column-header-summary'>
             {t('notifications.summary', {
               count: notifications.length,
@@ -489,7 +495,7 @@ export function DesktopShellColumnWorkspace({
       const status = directMessageStatusByPeer[peerPubkey] ?? conversation?.status ?? null;
       const timeline = directMessageTimelineByPeer[peerPubkey] ?? [];
       return (
-        <div className='shell-column-context-actions' data-column-preserve-activation>
+        <div className='shell-column-context-actions'>
           {status ? (
             <span className='shell-column-header-summary'>
               {status.send_enabled

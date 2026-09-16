@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -139,7 +140,8 @@ describe('ColumnCanvas', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('does not activate an inactive Column when its context selector is used', async () => {
+  // Issue #1053: header のプルダウンも本文の操作と同じく Column を active にする(route 同期のみ)。
+  it('activates an inactive Column when its context selector is used', async () => {
     const user = userEvent.setup();
     const onActivateColumn = vi.fn();
     render(
@@ -183,7 +185,71 @@ describe('ColumnCanvas', () => {
     );
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Timeline topic' }), 'dev');
-    expect(onActivateColumn).not.toHaveBeenCalled();
+    expect(onActivateColumn).toHaveBeenCalledWith('timeline-1', false);
+    expect(onActivateColumn).not.toHaveBeenCalledWith('timeline-1', true);
+  });
+
+  // Issue #1053: 押下中に scroll すると pointerup が別要素に落ちて click が失われる。
+  it('defers scrolling a press-activated Column until the press ends so the click lands', async () => {
+    function Harness({ onClick }: { onClick: () => void }) {
+      const [activeColumnId, setActiveColumnId] = useState('timeline-1');
+      return (
+        <ColumnCanvas
+          activeColumnId={activeColumnId}
+          onActivateColumn={(columnId) => setActiveColumnId(columnId)}
+        >
+          <ColumnSurface
+            columnId='timeline-1'
+            title='Timeline'
+            scopeLabel='general'
+            position={1}
+            total={2}
+            span={1}
+            active={activeColumnId === 'timeline-1'}
+            pinned
+          >
+            Timeline body
+          </ColumnSurface>
+          <ColumnSurface
+            columnId='explore-1'
+            title='Explore'
+            scopeLabel='general'
+            position={2}
+            total={2}
+            span={1}
+            active={activeColumnId === 'explore-1'}
+            pinned
+          >
+            <button type='button' onClick={onClick}>
+              Discover
+            </button>
+          </ColumnSurface>
+        </ColumnCanvas>
+      );
+    }
+    const onClick = vi.fn();
+    render(<Harness onClick={onClick} />);
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
+    scrollIntoView.mockClear();
+    const button = screen.getByRole('button', { name: 'Discover' });
+
+    fireEvent.pointerDown(button, { button: 0, isPrimary: true, pointerId: 1 });
+    expect(screen.getByRole('region', { name: /^Explore Column,/ })).toHaveAttribute(
+      'aria-current',
+      'true'
+    );
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(button, { button: 0, isPrimary: true, pointerId: 1 });
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
   });
 
   it('offers keyboard reorder and allowed span choices from the Column menu', async () => {

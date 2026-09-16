@@ -183,6 +183,23 @@ export function activeWorkspaceScope(state: WorkspaceState): ColumnScope {
   };
 }
 
+// scope に一致する Timeline Column の id。topic 切替後の Timeline は id を変えず scope だけ
+// 変わるため、identity id だけで探すと既存 Column を見落として重複を開く(Issue #1053)。
+// active → identity id → 先頭の順に一致を探し、無ければ identity id を返す。
+export function timelineColumnIdForScope(state: WorkspaceState, scope: ColumnScope): string {
+  const identityId = columnIdentityId('timeline', scope);
+  const matches = (column: ColumnState) =>
+    column.kind === 'timeline' &&
+    column.scope?.topicId === scope.topicId &&
+    column.scope.channelId === scope.channelId;
+  return (
+    state.columns.find((column) => column.id === state.activeColumnId && matches(column))?.id ??
+    state.columns.find((column) => column.id === identityId && matches(column))?.id ??
+    state.columns.find(matches)?.id ??
+    identityId
+  );
+}
+
 export function primarySectionForColumn(column: ColumnState): PrimarySection {
   switch (column.kind) {
     case 'notifications':

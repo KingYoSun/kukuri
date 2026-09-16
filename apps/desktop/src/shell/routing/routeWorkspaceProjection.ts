@@ -4,6 +4,7 @@ import {
   columnIdentityId,
   openTransientColumn,
   setColumnTimelineView,
+  timelineColumnIdForScope,
   type ColumnKind,
   type ColumnScope,
   type ColumnTimelineView,
@@ -39,20 +40,7 @@ export function workspaceForRoute(
     selectedLiveSessionId,
     selectedThread,
   } = projection;
-  const canonicalTimelineId = columnIdentityId('timeline', routeScope);
-  const timelineMatchesRoute = (column: WorkspaceState['columns'][number]) =>
-    column.kind === 'timeline' &&
-    column.scope?.topicId === routeScope.topicId &&
-    column.scope.channelId === routeScope.channelId;
-  const timelineId =
-    incoming.columns.find(
-      (column) => column.id === incoming.activeColumnId && timelineMatchesRoute(column)
-    )?.id ??
-    incoming.columns.find(
-      (column) => column.id === canonicalTimelineId && timelineMatchesRoute(column)
-    )?.id ??
-    incoming.columns.find(timelineMatchesRoute)?.id ??
-    canonicalTimelineId;
+  const timelineId = timelineColumnIdForScope(incoming, routeScope);
   const ensureTimelineColumn = (current: WorkspaceState) => {
     const withView = setColumnTimelineView(current, timelineId, nextTimelineView);
     if (withView.columns.some((column) => column.id === timelineId)) return withView;
