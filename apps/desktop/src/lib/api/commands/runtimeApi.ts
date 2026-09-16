@@ -6,6 +6,8 @@ import type {
   ChannelAccessTokenExport,
   ChannelAccessTokenPreview,
   CommunityNodeConfig,
+  CommunityNodeContentAdvisoryLookupRequest,
+  CommunityNodeContentAdvisoryLookupResult,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexingStatusRequest,
   CommunityNodeIndexQueryRequest,
@@ -905,6 +907,15 @@ export const runtimeApi: DesktopApi = {
       } satisfies CommunityNodeTargetRequest,
     });
   }),
+  lookupCommunityNodeContentAdvisories: command(
+    'lookupCommunityNodeContentAdvisories',
+    async (request) => {
+      return invokeDesktop<CommunityNodeContentAdvisoryLookupResult>(
+        'lookup_community_node_content_advisories',
+        { request: request satisfies CommunityNodeContentAdvisoryLookupRequest }
+      );
+    }
+  ),
   readCommunityNodeTrustUser: command('readCommunityNodeTrustUser', async (request) => {
     return invokeDesktop<TrustUserReadResponse>('read_community_node_trust_user', {
       request: request satisfies CommunityNodeUserAdvisoryRequest,

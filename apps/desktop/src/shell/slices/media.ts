@@ -1,4 +1,9 @@
 import type { PostView } from '@/lib/api';
+import {
+  INITIAL_TIMELINE_ADVISORY_LOOKUP_STATE,
+  type TimelineAdvisoryLookupState,
+  type TimelineContentAdvisoryIndex,
+} from '@/shell/contentAdvisories';
 
 /// メディア(blob object URL・非対応動画)(WP-H6 PR3 のドメインスライス)。
 export type MediaSliceState = {
@@ -16,6 +21,11 @@ export type MediaSliceState = {
   // プリフェッチの起点をどこに持つ表示経路からも要求しないために使う(ADR 0046 §6.2)。
   // 一時状態であり永続化しない(ADR 0028 §8.10)。
   advisoryGatedMediaHashes: string[];
+  // #1056: タイムライン系の可視 subject を採用 node へ一括照会した結果(subject key → advisory)と、
+  // 照会の進み具合。どちらも一時状態で永続化しない(ADR 0028 §8.10)。照会中の投稿のメディアは
+  // 取得せずスケルトンにし、advisory の確定後に代替表示か通常表示へ切り替える。
+  timelineContentAdvisories: TimelineContentAdvisoryIndex;
+  timelineAdvisoryLookup: TimelineAdvisoryLookupState;
 };
 
 export function createInitialMediaSlice(): MediaSliceState {
@@ -25,5 +35,7 @@ export function createInitialMediaSlice(): MediaSliceState {
     adultContentEnabled: false,
     communityIndexResolvedPosts: [],
     advisoryGatedMediaHashes: [],
+    timelineContentAdvisories: {},
+    timelineAdvisoryLookup: INITIAL_TIMELINE_ADVISORY_LOOKUP_STATE,
   };
 }

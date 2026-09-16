@@ -27,6 +27,7 @@ type ConnectivityMock = Pick<
   | 'withdrawCommunityNodeConsents'
   | 'refreshCommunityNodeMetadata'
   | 'fetchCommunityNodeManifest'
+  | 'lookupCommunityNodeContentAdvisories'
   | 'readCommunityNodeTrustUser'
   | 'readCommunityNodeRelationUser'
   | 'listCommunityNodeRelationNeighbors'
@@ -114,10 +115,18 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
       const previousNodes = new Map(runtime.communityNodeConfig.nodes.map((node) => [node.base_url, node]));
       const previousStatuses = new Map(runtime.communityNodeStatuses.map((status) => [status.base_url, status]));
       runtime.communityNodeConfig = {
-        nodes: nodes.map((node) => previousNodes.get(node.base_url) ?? ({
-          base_url: node.base_url,
-          resolved_urls: null,
-        })),
+        nodes: nodes.map((node) => {
+          const previous = previousNodes.get(node.base_url);
+          const contentAdvisoryEnabled =
+            node.content_advisory_enabled ?? previous?.content_advisory_enabled ?? true;
+          return previous
+            ? { ...previous, content_advisory_enabled: contentAdvisoryEnabled }
+            : {
+                base_url: node.base_url,
+                resolved_urls: null,
+                content_advisory_enabled: contentAdvisoryEnabled,
+              };
+        }),
       };
       runtime.communityNodeStatuses = nodes.map((node) => previousStatuses.get(node.base_url) ?? ({
         base_url: node.base_url,
@@ -319,6 +328,25 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
           privacy_url: `${baseUrl}/privacy`,
           moderation_policy_url: `${baseUrl}/moderation-policy`,
         },
+      };
+    },
+    // #1056: 既定の mock は advisory を返さない(fixture は runtime.contentAdvisories で差し込む)。
+    async lookupCommunityNodeContentAdvisories(request) {
+      const requested = new Set([...request.post_ids, ...request.blob_hashes]);
+      const nodes = runtime.communityNodeConfig.nodes.filter(
+        (node) => node.content_advisory_enabled !== false
+      );
+      return {
+        nodes: nodes.map((node) => ({
+          base_url: node.base_url,
+          node_id: runtime.contentAdvisoryIssuerNodeId,
+          advisories: runtime.contentAdvisories.filter(
+            (advisory) =>
+              requested.has(advisory.subject_id) &&
+              advisory.issuer_node_id === runtime.contentAdvisoryIssuerNodeId
+          ),
+          error: null,
+        })),
       };
     },
     async readCommunityNodeTrustUser(request) {

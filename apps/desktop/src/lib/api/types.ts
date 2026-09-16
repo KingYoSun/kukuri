@@ -13,6 +13,8 @@ import type {
   ChannelRef,
   CommunityNodeConfig,
   CommunityNodeConsentDocumentRef,
+  CommunityNodeContentAdvisoryLookupRequest,
+  CommunityNodeContentAdvisoryLookupResult,
   CommunityNodeIndexingRequest,
   CommunityNodeIndexingStatusRequest,
   CommunityNodeIndexQueryRequest,
@@ -211,6 +213,8 @@ export type CreateRepostInput = {
 
 export type CommunityNodeConfigInput = {
   base_url: string;
+  /// #1056: この node の content advisory(成人向け表現の推定)を採用するか。未指定は保存済みの値を維持する。
+  content_advisory_enabled?: boolean | null;
 };
 
 // community node manifest (#355/#356) の client 側表現。public manifest endpoint から取得し、
@@ -534,6 +538,10 @@ export interface DesktopApi {
   withdrawCommunityNodeConsents(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   refreshCommunityNodeMetadata(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   fetchCommunityNodeManifest(baseUrl: string): Promise<CommunityNodeManifestFetch>;
+  // #1056: 可視 post id / blob hash の content advisory を、採用 ON の設定済み node へ一括照会する。
+  lookupCommunityNodeContentAdvisories(
+    request: CommunityNodeContentAdvisoryLookupRequest
+  ): Promise<CommunityNodeContentAdvisoryLookupResult>;
   readCommunityNodeTrustUser(
     request: CommunityNodeUserAdvisoryRequest
   ): Promise<TrustUserReadResponse>;

@@ -3,6 +3,11 @@ import { describe, expect, test } from 'vitest';
 
 import type { AttachmentView, PostView } from '@/lib/api';
 
+import type {
+  TimelineAdvisoryLookupState,
+  TimelineContentAdvisoryIndex,
+} from '@/shell/contentAdvisories';
+
 import { usePreviewableMediaAttachments } from './usePreviewableMediaAttachments';
 
 const INDEX_IMAGE_HASH = 'a'.repeat(64);
@@ -47,6 +52,8 @@ function renderAttachments(
     profileTimeline?: PostView[];
     advisoryGatedMediaHashes?: string[];
     adultContentEnabled?: boolean;
+    timelineContentAdvisories?: TimelineContentAdvisoryIndex;
+    timelineAdvisoryLookup?: TimelineAdvisoryLookupState;
   } = {}
 ) {
   const { result } = renderHook(() =>
@@ -54,6 +61,8 @@ function renderAttachments(
       activeTimeline: overrides.activeTimeline ?? [],
       activePublicTimeline: [],
       advisoryGatedMediaHashes: overrides.advisoryGatedMediaHashes ?? [],
+      timelineContentAdvisories: overrides.timelineContentAdvisories,
+      timelineAdvisoryLookup: overrides.timelineAdvisoryLookup,
       communityIndexResolvedPosts: overrides.communityIndexResolvedPosts ?? [],
       profileTimeline: overrides.profileTimeline ?? [],
       selectedAuthorTimeline: [],
@@ -122,5 +131,61 @@ describe('usePreviewableMediaAttachments', () => {
         adultContentEnabled: true,
       })
     ).toContain(INDEX_IMAGE_HASH);
+  });
+
+  // #1056: 照会中の投稿の添付は表示設定にかかわらず取得しない。「見つける」の投稿は対象外。
+  test('holds timeline attachments while the advisory lookup is pending', () => {
+    const hashes = renderAttachments({
+      activeTimeline: [imagePost('timeline-post', TIMELINE_IMAGE_HASH)],
+      communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH)],
+      timelineAdvisoryLookup: { active: true, settled: {} },
+      adultContentEnabled: true,
+    });
+    expect(hashes).not.toContain(TIMELINE_IMAGE_HASH);
+    expect(hashes).toContain(INDEX_IMAGE_HASH);
+  });
+
+  test('releases settled attachments and keeps advisory ones gated while display is off', () => {
+    const settled: Record<string, true> = {
+      'post_id:timeline-post': true,
+      [`blob_cid:${TIMELINE_IMAGE_HASH}`]: true,
+      'post_id:other-post': true,
+      [`blob_cid:${INDEX_IMAGE_HASH}`]: true,
+    };
+    const advisories: TimelineContentAdvisoryIndex = {
+      [`blob_cid:${TIMELINE_IMAGE_HASH}`]: [
+        {
+          nodeBaseUrl: 'https://node.example',
+          advisory: {
+            issuer_node_id: 'd'.repeat(64),
+            subject_kind: 'blob_cid',
+            subject_id: TIMELINE_IMAGE_HASH,
+            category: 'nsfw',
+            label: 'adult',
+            confidence: 84,
+            signal_id: 'signal-1',
+            basis: 'classifier_score',
+          },
+        },
+      ],
+    };
+    const posts = [
+      imagePost('timeline-post', TIMELINE_IMAGE_HASH),
+      imagePost('other-post', INDEX_IMAGE_HASH),
+    ];
+    const off = renderAttachments({
+      activeTimeline: posts,
+      timelineContentAdvisories: advisories,
+      timelineAdvisoryLookup: { active: true, settled },
+    });
+    expect(off).not.toContain(TIMELINE_IMAGE_HASH);
+    expect(off).toContain(INDEX_IMAGE_HASH);
+    const on = renderAttachments({
+      activeTimeline: posts,
+      timelineContentAdvisories: advisories,
+      timelineAdvisoryLookup: { active: true, settled },
+      adultContentEnabled: true,
+    });
+    expect(on).toContain(TIMELINE_IMAGE_HASH);
   });
 });

@@ -1,6 +1,7 @@
 import { type SyntheticEvent, useCallback, useMemo } from 'react';
 
 import type {
+  ContentAdvisoryView,
   MentionAuthorView,
   PostCardView,
   ReferencedAuthorMeta,
@@ -30,6 +31,11 @@ import {
   type DesktopShellState,
 } from '@/shell/store';
 import { buildPostMediaView } from '@/shell/viewModels/postMediaView';
+import {
+  resolvePostAdvisory,
+  type TimelineAdvisoryLookupState,
+  type TimelineContentAdvisoryIndex,
+} from '@/shell/contentAdvisories';
 
 type UseTimelineViewModelsArgs = {
   activeJoinedChannels: DesktopShellState['joinedChannelsByTopic'][string];
@@ -46,7 +52,16 @@ type UseTimelineViewModelsArgs = {
   selectedAuthorTimeline: PostView[];
   thread: PostView[];
   unsupportedVideoManifests: DesktopShellState['unsupportedVideoManifests'];
+  /// #1056: 採用 node への一括照会の結果と照会中の subject。
+  timelineContentAdvisories?: TimelineContentAdvisoryIndex;
+  timelineAdvisoryLookup?: TimelineAdvisoryLookupState;
+  /// #1056: advisory の発行元の表示名を manifest から引く。
+  communityNodeManifests?: DesktopShellState['communityNodeManifests'];
 };
+
+const EMPTY_ADVISORIES: TimelineContentAdvisoryIndex = {};
+const INACTIVE_LOOKUP: TimelineAdvisoryLookupState = { active: false, settled: {} };
+const EMPTY_MANIFESTS: DesktopShellState['communityNodeManifests'] = {};
 
 export function useTimelineViewModels({
   activeJoinedChannels,
@@ -63,6 +78,9 @@ export function useTimelineViewModels({
   selectedAuthorTimeline,
   thread,
   unsupportedVideoManifests,
+  timelineContentAdvisories = EMPTY_ADVISORIES,
+  timelineAdvisoryLookup = INACTIVE_LOOKUP,
+  communityNodeManifests = EMPTY_MANIFESTS,
 }: UseTimelineViewModelsArgs) {
   const setUnsupportedVideoManifests = useDesktopShellFieldSetter(
     'unsupportedVideoManifests'
@@ -74,12 +92,47 @@ export function useTimelineViewModels({
       joinedChannels = activeJoinedChannels
     ): PostCardView => {
       // #858: 表示許可前は成人向けラベル付き投稿の本文・メディアを代替表示にする。
-      const adultContentGated = !adultContentEnabled && isAdultLabeledPost(post);
+      // #1056: 第 2 のラベル源として、採用 node が発行した content advisory も同じゲートへ合成する
+      // (ADR 0046 §6.1)。advisory は `content_labels` へ書き戻さず、説明用の別欄で運ぶ。
+      const selfLabeled = isAdultLabeledPost(post);
+      const advisoryState = resolvePostAdvisory(
+        post,
+        timelineContentAdvisories,
+        timelineAdvisoryLookup
+      );
+      const adultContentGated =
+        !adultContentEnabled && (selfLabeled || advisoryState.advisory !== null);
+      const gatedBy = adultContentGated ? (selfLabeled ? 'self_label' : 'advisory') : undefined;
+      const advisoryEntry = advisoryState.advisory;
+      const manifestEntry = advisoryEntry
+        ? communityNodeManifests[advisoryEntry.nodeBaseUrl]
+        : undefined;
+      const contentAdvisory: ContentAdvisoryView | null =
+        adultContentGated && advisoryEntry
+          ? {
+              issuerNodeId: advisoryEntry.advisory.issuer_node_id,
+              nodeBaseUrl: advisoryEntry.nodeBaseUrl,
+              nodeName:
+                manifestEntry?.status === 'ok'
+                  ? manifestEntry.manifest.node_name.trim() || null
+                  : null,
+              category: advisoryEntry.advisory.category,
+              label: advisoryEntry.advisory.label,
+              confidence: advisoryEntry.advisory.confidence ?? null,
+              basis: advisoryEntry.advisory.basis,
+              signalId: advisoryEntry.advisory.signal_id,
+              subjectKind: advisoryEntry.advisory.subject_kind,
+              subjectId: advisoryEntry.advisory.subject_id,
+            }
+          : null;
       const videoPoster = selectVideoPoster(post);
       const videoManifest = selectVideoManifest(post);
       // #1052: メディア表示データは「見つける」の解決済み投稿と同じ builder を使う。
+      // #1056: 照会が未決の間はメディアを取得せずスケルトンにする(確定後の代替表示とは分ける)。
       const media = buildPostMediaView(post, {
         adultContentGated,
+        gatedBy,
+        advisoryPending: advisoryState.pending,
         locale,
         mediaObjectUrls,
         unsupportedVideoManifests,
@@ -213,6 +266,8 @@ export function useTimelineViewModels({
         suppressReplyPreview: context === 'thread',
         showUnavailableDiagnostics: developerModeEnabled,
         adultContentGated,
+        gatedBy,
+        contentAdvisory,
         media: {
           ...media,
           // 再生診断ログはイベントを購読するタイムライン側の責務として builder の外に置く。
@@ -234,6 +289,7 @@ export function useTimelineViewModels({
     [
       activeJoinedChannels,
       adultContentEnabled,
+      communityNodeManifests,
       developerModeEnabled,
       knownAuthorsByPubkey,
       localAuthorPubkey,
@@ -241,6 +297,8 @@ export function useTimelineViewModels({
       locale,
       mediaObjectUrls,
       setUnsupportedVideoManifests,
+      timelineAdvisoryLookup,
+      timelineContentAdvisories,
       unsupportedVideoManifests,
     ]
   );

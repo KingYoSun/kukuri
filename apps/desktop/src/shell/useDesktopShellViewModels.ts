@@ -164,6 +164,9 @@ export function useDesktopShellViewModels({
     selectedAuthorTimeline,
     thread,
     unsupportedVideoManifests,
+    timelineContentAdvisories: state.timelineContentAdvisories,
+    timelineAdvisoryLookup: state.timelineAdvisoryLookup,
+    communityNodeManifests: state.communityNodeManifests,
   });
 
   const {

@@ -5,6 +5,7 @@ import {
   type BookmarkedPostView,
   type CommunityNodeConfig,
   type CommunityNodeNodeStatus,
+  type ContentAdvisory,
   type CustomReactionAssetView,
   type DirectMessageConversationView,
   type DirectMessageMessageView,
@@ -67,6 +68,9 @@ export interface MockRuntime {
   discoveryConfig: DiscoveryConfig;
   communityNodeConfig: CommunityNodeConfig;
   communityNodeStatuses: CommunityNodeNodeStatus[];
+  // #1056: 一括照会で返す content advisory と、その発行元(manifest node_id)。
+  contentAdvisories: ContentAdvisory[];
+  contentAdvisoryIssuerNodeId: string;
   // ヘルパ
   mockConsentItems: (accepted: boolean) => ConsentItems;
   mutedAuthorPubkeys: () => Set<string>;
@@ -343,6 +347,8 @@ export function createMockRuntime(options?: DesktopMockApiOptions): MockRuntime 
         },
       ],
     },
+    contentAdvisories: [],
+    contentAdvisoryIssuerNodeId: '',
     communityNodeStatuses: [
       {
         base_url: 'https://api.kukuri.app',

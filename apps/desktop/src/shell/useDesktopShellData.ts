@@ -36,11 +36,17 @@ import {
   uniquePostsByIdentity,
 } from '@/shell/data/timelineMerge';
 import { usePreviewableMediaAttachments } from '@/shell/data/usePreviewableMediaAttachments';
+import {
+  adoptingContentAdvisoryNodes,
+  useTimelineContentAdvisoryLookup,
+} from '@/shell/data/useTimelineContentAdvisoryLookup';
+import { resolvePostAdvisory } from '@/shell/contentAdvisories';
 import { isAdultLabeledPost } from '@/shell/media';
 import {
   activeTimelineStorageKey,
   PUBLIC_TIMELINE_SCOPE,
   timelineScopeStorageKey,
+  timelineStorageKeyForChannel,
   useDesktopShellFieldSetter,
   useDesktopShellStore,
   useDesktopShellStoreApi,
@@ -91,6 +97,11 @@ export function useDesktopShellData({
     adultContentEnabled,
     communityIndexResolvedPosts,
     advisoryGatedMediaHashes,
+    bookmarkedPosts,
+    communityNodeConfig,
+    communityNodeStatuses,
+    timelineAdvisoryLookup,
+    timelineContentAdvisories,
     selectedThread,
     gameRoomsByScopeKey,
     joinedChannelsByTopic,
@@ -221,11 +232,82 @@ export function useDesktopShellData({
     state.syncStatus.local_author_pubkey,
   ]);
 
+  // #1056: 開いている Timeline Column と各表示経路の投稿を、採用 node へ一括照会する対象にする。
+  // 「見つける」の解決済み投稿は index 応答の advisory(#1055)で扱うため対象外。
+  // `buildPostCardView` を通る投稿源(Timeline / Thread / Profile Column、ブックマーク等)は
+  // すべて照会対象に含める。含めない投稿は照会済みにならず、スケルトンのまま残るため。
+  const workspaceColumns = state.workspaceState.columns;
+  const timelinesByKey = state.timelinesByKey;
+  const authorTimelinesByPubkey = state.authorTimelinesByPubkey;
+  const advisoryLookupPosts = useMemo(() => {
+    const columnPosts = workspaceColumns.flatMap((column) => {
+      if (column.kind === 'timeline' && column.scope) {
+        return (
+          timelinesByKey[
+            timelineStorageKeyForChannel(column.scope.topicId, column.scope.channelId)
+          ] ?? EMPTY_POSTS
+        );
+      }
+      if (column.kind === 'thread' && column.entityId) {
+        return threadsById[column.entityId] ?? EMPTY_POSTS;
+      }
+      if (column.kind === 'profile' && column.entityId) {
+        return authorTimelinesByPubkey[column.entityId] ?? EMPTY_POSTS;
+      }
+      return EMPTY_POSTS;
+    });
+    return [
+      ...activeTimeline,
+      ...activePublicTimeline,
+      ...profileTimeline,
+      ...selectedAuthorTimeline,
+      ...thread,
+      ...bookmarkedPosts.map((item) => item.post),
+      ...columnPosts,
+    ];
+  }, [
+    activePublicTimeline,
+    activeTimeline,
+    authorTimelinesByPubkey,
+    bookmarkedPosts,
+    profileTimeline,
+    selectedAuthorTimeline,
+    thread,
+    threadsById,
+    timelinesByKey,
+    workspaceColumns,
+  ]);
+  const communityNodeConfigLoaded = state.communityNodeConfigLoaded;
+  // 状態の取得に失敗した場合も、手元の状態で確定させる(照会中のまま止めない)。
+  const communityNodeStatusesLoaded =
+    state.communityNodeStatusesLoaded || Boolean(state.communityNodeStatusError);
+  const adoptingNodes = useMemo(
+    () =>
+      adoptingContentAdvisoryNodes(communityNodeConfig, communityNodeStatuses, {
+        configLoaded: communityNodeConfigLoaded,
+        statusesLoaded: communityNodeStatusesLoaded,
+      }),
+    [
+      communityNodeConfig,
+      communityNodeConfigLoaded,
+      communityNodeStatuses,
+      communityNodeStatusesLoaded,
+    ]
+  );
+  useTimelineContentAdvisoryLookup({
+    api,
+    posts: advisoryLookupPosts,
+    notifications,
+    adoptingNodes,
+  });
+
   const previewableMediaAttachments = usePreviewableMediaAttachments({
     activeTimeline,
     activePublicTimeline,
     communityIndexResolvedPosts,
     advisoryGatedMediaHashes,
+    timelineContentAdvisories,
+    timelineAdvisoryLookup,
     profileTimeline,
     selectedAuthorTimeline,
     thread,
@@ -254,7 +336,14 @@ export function useDesktopShellData({
       ...thread,
       ...communityIndexResolvedPosts,
     ]) {
-      if (!isAdultLabeledPost(post)) {
+      // #1056: 採用 node の advisory が付いた投稿も、表示設定 OFF へ戻したら表示済みを破棄する。
+      if (
+        !isAdultLabeledPost(post) &&
+        !resolvePostAdvisory(post, timelineContentAdvisories, {
+          active: false,
+          settled: {},
+        }).advisory
+      ) {
         continue;
       }
       for (const attachment of post.attachments) {
@@ -273,6 +362,7 @@ export function useDesktopShellData({
     profileTimeline,
     selectedAuthorTimeline,
     thread,
+    timelineContentAdvisories,
   ]);
 
   const clearPendingTimeline = useCallback(
