@@ -44,6 +44,8 @@ function renderAttachments(
   overrides: {
     communityIndexResolvedPosts?: PostView[];
     activeTimeline?: PostView[];
+    profileTimeline?: PostView[];
+    advisoryGatedMediaHashes?: string[];
     adultContentEnabled?: boolean;
   } = {}
 ) {
@@ -51,8 +53,9 @@ function renderAttachments(
     usePreviewableMediaAttachments({
       activeTimeline: overrides.activeTimeline ?? [],
       activePublicTimeline: [],
+      advisoryGatedMediaHashes: overrides.advisoryGatedMediaHashes ?? [],
       communityIndexResolvedPosts: overrides.communityIndexResolvedPosts ?? [],
-      profileTimeline: [],
+      profileTimeline: overrides.profileTimeline ?? [],
       selectedAuthorTimeline: [],
       thread: [],
       selectedDirectMessageTimeline: [],
@@ -92,6 +95,30 @@ describe('usePreviewableMediaAttachments', () => {
     expect(
       renderAttachments({
         communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH, ['adult'])],
+        adultContentEnabled: true,
+      })
+    ).toContain(INDEX_IMAGE_HASH);
+  });
+
+  // #1055 / ADR 0046 §6.2: advisory でゲート中の hash は、どの表示経路から現れても
+  // プリフェッチ対象に入れない(advisory は `PostView` に現れないため hash 単位で止める)。
+  test('excludes advisory-gated hashes regardless of which surface carries them', () => {
+    const hashes = renderAttachments({
+      communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH)],
+      profileTimeline: [imagePost('profile-post', INDEX_IMAGE_HASH)],
+      activeTimeline: [imagePost('timeline-post', TIMELINE_IMAGE_HASH)],
+      advisoryGatedMediaHashes: [INDEX_IMAGE_HASH],
+    });
+    expect(hashes).not.toContain(INDEX_IMAGE_HASH);
+    expect(hashes).toContain(TIMELINE_IMAGE_HASH);
+  });
+
+  // 表示設定 ON では呼出元が除外集合を空にするため、通常どおり取得対象になる。
+  test('includes previously gated hashes once the caller clears the gate set', () => {
+    expect(
+      renderAttachments({
+        communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH)],
+        advisoryGatedMediaHashes: [],
         adultContentEnabled: true,
       })
     ).toContain(INDEX_IMAGE_HASH);

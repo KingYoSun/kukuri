@@ -2,9 +2,10 @@ use super::super::*;
 use axum::extract::Query;
 use axum::http::{Uri, header::RETRY_AFTER};
 use kukuri_cn_protocol::{
-    ApiErrorBody, IndexEntryView, IndexQueryParams, IndexQueryResponse, IndexScopeKind,
-    IndexingRequestStatus, IndexingRequestView, IndexingStatusParams, IndexingStatusResponse,
-    IndexingTargetStatus, SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
+    AdvisorySubjectKind, ApiErrorBody, Basis, ContentAdvisory, IndexEntryView, IndexQueryParams,
+    IndexQueryResponse, IndexScopeKind, IndexingRequestStatus, IndexingRequestView,
+    IndexingStatusParams, IndexingStatusResponse, IndexingTargetStatus, SafetyCategory,
+    SubmitIndexingRequestRequest, SubmitIndexingRequestResponse,
 };
 
 pub(super) type ForcedIndexError = (StatusCode, ApiErrorBody, Option<&'static str>);
@@ -22,6 +23,41 @@ pub(super) struct MockIndexQueryState {
     pub(super) unauthorized_remaining: Arc<AtomicUsize>,
     pub(super) response_object_id: Arc<Mutex<String>>,
     pub(super) response_author_pubkey: Arc<Mutex<String>>,
+    /// #1055: index entry へ同梱する content advisory。
+    pub(super) response_advisories: Arc<Mutex<Vec<ContentAdvisory>>>,
+    /// #1055: `/v1/node/manifest` が返す node_id。`None` は manifest 未公開(404)。
+    pub(super) manifest_node_id: Arc<Mutex<Option<String>>>,
+    pub(super) manifest_hits: Arc<AtomicUsize>,
+}
+
+/// #1055: index を返した node の manifest。advisory の issuer 照合に使う。
+async fn mock_index_manifest(State(state): State<MockIndexQueryState>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    state.manifest_hits.fetch_add(1, Ordering::SeqCst);
+    let Some(node_id) = state.manifest_node_id.lock().await.clone() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    Json(serde_json::json!({
+        "node_id": node_id,
+        "node_name": "index-node.example",
+        "manifest_version": "v1",
+    }))
+    .into_response()
+}
+
+/// #1055: 検証に使う advisory。既定は issuer 一致・`adult` ラベルの blob 対象。
+pub(super) fn blob_advisory(issuer_node_id: &str, blob_hash: &str) -> ContentAdvisory {
+    ContentAdvisory {
+        issuer_node_id: issuer_node_id.to_string(),
+        subject_kind: AdvisorySubjectKind::BlobCid,
+        subject_id: blob_hash.to_string(),
+        category: SafetyCategory::Nsfw,
+        label: "adult".to_string(),
+        confidence: Some(84),
+        signal_id: "signal-1".to_string(),
+        basis: Basis::ClassifierScore,
+    }
 }
 
 async fn mock_indexing_request(
@@ -205,7 +241,7 @@ async fn mock_index_query(
             author_pubkey: state.response_author_pubkey.lock().await.clone(),
             text: "hello\nderived-tag".to_string(),
             created_at: 42,
-            content_advisories: Vec::new(),
+            content_advisories: state.response_advisories.lock().await.clone(),
         }],
     })
     .into_response()
@@ -249,6 +285,9 @@ pub(super) async fn index_runtime(
         unauthorized_remaining: Arc::new(AtomicUsize::new(0)),
         response_object_id: Arc::new(Mutex::new("post-1".to_string())),
         response_author_pubkey: Arc::new(Mutex::new("author".to_string())),
+        response_advisories: Arc::new(Mutex::new(Vec::new())),
+        manifest_node_id: Arc::new(Mutex::new(Some(INDEX_NODE_ID.to_string()))),
+        manifest_hits: Arc::new(AtomicUsize::new(0)),
     };
     let managed_router = Router::new()
         .route("/v1/auth/challenge", post(mock_managed_auth_challenge))
@@ -268,6 +307,7 @@ pub(super) async fn index_runtime(
         .route("/v1/index/recommendations", get(mock_index_query))
         .route("/v1/indexing/requests", post(mock_indexing_request))
         .route("/v1/indexing/status", get(mock_indexing_status))
+        .route("/v1/node/manifest", get(mock_index_manifest))
         .route(
             "/v1/rendezvous/topics/heartbeat",
             post(mock_index_rendezvous),
@@ -300,6 +340,11 @@ pub(super) async fn index_runtime(
     seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     (runtime, base_url, managed, index, server, dir)
 }
+
+/// #1055: mock node の署名鍵 x-only 公開鍵 hex 相当(manifest `node_id`)。
+pub(super) const INDEX_NODE_ID: &str =
+    "1111111111111111111111111111111111111111111111111111111111111111";
+const ADVISORY_BLOB_HASH: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 
 fn scoped_request(base_url: &str) -> CommunityNodeIndexQueryRequest {
     CommunityNodeIndexQueryRequest {
@@ -899,5 +944,116 @@ async fn community_node_private_scoped_query_attaches_membership_proof() {
     assert_eq!(headers.len(), 2);
     assert!(headers[1].is_none());
     runtime.shutdown().await;
+    server.abort();
+}
+
+// #1055 / ADR 0046 §6.2 / AC-3: 合成が有効なとき、index を返した設定済み node が発行した
+// blob 対象の advisory は `blob_media_payload` の取得ゲートへ登録され、応答の
+// `content_advisories` はそのまま client へ渡る(第 2 のラベル源として保持する)。
+#[tokio::test]
+async fn community_node_index_registers_advisory_media_hashes_from_configured_issuer() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    runtime.set_content_advisory_synthesis_enabled(true);
+    *state.response_advisories.lock().await =
+        vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert_eq!(search.entries[0].content_advisories.len(), 1);
+    assert_eq!(
+        search.entries[0].content_advisories[0].subject_id,
+        ADVISORY_BLOB_HASH
+    );
+    assert!(
+        runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
+    assert_eq!(state.manifest_hits.load(Ordering::SeqCst), 1);
+
+    server.abort();
+}
+
+// #1055 / AC-4 / TR-5: entry の `issuer_node_id` が index を返した node の manifest `node_id` と
+// 一致しない advisory は採用せず、取得ゲートにも登録しない。
+#[tokio::test]
+async fn community_node_index_drops_advisories_from_mismatched_issuer() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    runtime.set_content_advisory_synthesis_enabled(true);
+    let other_issuer = "3333333333333333333333333333333333333333333333333333333333333333";
+    *state.response_advisories.lock().await = vec![blob_advisory(other_issuer, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert!(search.entries[0].content_advisories.is_empty());
+    assert!(
+        !runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
+
+    server.abort();
+}
+
+// #1055 / AC-4 / TR-8: manifest を取得できない node の advisory は issuer を確認できないため
+// 採用しない(fail-closed)。ゲート登録も行わない。
+#[tokio::test]
+async fn community_node_index_drops_advisories_when_manifest_is_unavailable() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    runtime.set_content_advisory_synthesis_enabled(true);
+    *state.manifest_node_id.lock().await = None;
+    *state.response_advisories.lock().await =
+        vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert!(search.entries[0].content_advisories.is_empty());
+    assert!(
+        !runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
+
+    server.abort();
+}
+
+// #1055 / ADR 0046 §6.4 / TR-6: 利用規約改訂(C4 = #1056)が入るまで advisory は合成しない。
+// 既定では応答から落とし、manifest も引かず、取得ゲートにも登録しない。
+#[tokio::test]
+async fn community_node_index_strips_advisories_until_synthesis_enabled() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let (runtime, base_url, _managed, state, server, _dir) = index_runtime(None).await;
+    *state.response_advisories.lock().await =
+        vec![blob_advisory(INDEX_NODE_ID, ADVISORY_BLOB_HASH)];
+
+    let search = runtime
+        .search_community_node_index(scoped_request(base_url.as_str()))
+        .await
+        .expect("search");
+
+    assert!(search.entries[0].content_advisories.is_empty());
+    assert!(
+        !runtime
+            .app_service
+            .is_advisory_media_hash(ADVISORY_BLOB_HASH)
+            .await
+    );
+    assert_eq!(state.manifest_hits.load(Ordering::SeqCst), 0);
+
     server.abort();
 }

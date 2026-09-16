@@ -1,6 +1,14 @@
 import type * as React from 'react';
 
-import type { AuthorSocialView, ChannelAudienceKind, ContentProvenance, PostView } from '@/lib/api';
+import type {
+  AdvisorySubjectKind,
+  AuthorSocialView,
+  Basis,
+  ChannelAudienceKind,
+  ContentProvenance,
+  PostView,
+  SafetyCategory,
+} from '@/lib/api';
 
 export type TopicChannelSummary = {
   channelId: string;
@@ -49,6 +57,9 @@ export type PostMediaView = {
   statusLabel?: string | null;
   extraAttachmentCount: number;
   state: 'loading' | 'ready' | 'unavailable' | 'gated';
+  // #1055: `gated` の判定元。`advisory` は Community Node の推定(ADR 0046 §6)であり、
+  // 投稿者の自己申告(`self_label`)とは文言を分ける。
+  gatedBy?: 'self_label' | 'advisory';
   metaMime?: string | null;
   metaBytesLabel?: string | null;
   imagePreviewSrc?: string | null;
@@ -98,6 +109,25 @@ export type MentionCandidate = {
   picture?: string | null;
 };
 
+/// #1055: 代替表示に出す content advisory の説明。Community Node の node-local な推定であり、
+/// 投稿の canonical でも署名対象でもない(ADR 0046 §6.1)。断定表現にせず issuer を必ず伴う。
+export type ContentAdvisoryView = {
+  /// 発行 node の manifest `node_id`(署名鍵の x-only 公開鍵 hex)。
+  issuerNodeId: string;
+  /// index を返した node の base URL。manifest 名を引けなかった場合の表示と申し立てに使う。
+  nodeBaseUrl: string;
+  /// manifest から解決した表示名。取得できなければ null。
+  nodeName?: string | null;
+  category: SafetyCategory;
+  label: string;
+  confidence?: number | null;
+  basis: Basis;
+  /// 異議申し立ての対象になる risk signal id。
+  signalId: string;
+  subjectKind: AdvisorySubjectKind;
+  subjectId: string;
+};
+
 export type PostCardView = {
   post: PostView;
   // index previewの表示用PostViewと、操作対象の正本PostViewを分離する。
@@ -120,6 +150,15 @@ export type PostCardView = {
   showUnavailableDiagnostics?: boolean;
   // #858: 成人向けラベル付き投稿で、表示設定 OFF のため本文・メディアを代替表示にする。
   adultContentGated?: boolean;
+  // #1055: 代替表示の根拠。両方あるときは投稿者自身の申告(`self_label`)を根拠として示す。
+  gatedBy?: 'self_label' | 'advisory';
+  // #1055: 代替表示の本文文言。未指定なら共通の「成人向け」文言を使う。canonical 解決が
+  // 済んでいない entry で、待機中であることを保ったまま代替表示にするために使う。
+  gatedBodyText?: string | null;
+  // #1055: 成人向けゲートの根拠が Community Node の content advisory(ADR 0028 §8.6)である
+  // 場合の説明。issuer / category / confidence / basis を出し、異議申し立てへ導線を持つ。
+  // 投稿者の自己申告ラベルだけが根拠のときは undefined。
+  contentAdvisory?: ContentAdvisoryView | null;
   mentionAuthors?: Record<string, MentionAuthorView>;
   // 正本（通常は author_docs）と、index / moderation / cache 等の観測経路を分離して保持する。
   // 通報ルーティング（#310）・content details・default node boundary 説明に使う。

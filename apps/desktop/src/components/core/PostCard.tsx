@@ -14,7 +14,13 @@ import type {
   SubmitCommunityNodeReportRequest,
   SubmitCommunityNodeReportResult,
 } from '@/lib/api';
-import { planReportRouting } from '@/lib/api/reportRouting';
+import { planAppealReportRouting, planReportRouting } from '@/lib/api/reportRouting';
+import {
+  advisoryBasisLabel,
+  advisoryCategoryLabel,
+  advisoryIssuerLabel,
+  shortenNodeId,
+} from './contentAdvisoryPresentation';
 import { useReportManifests } from './useReportManifests';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
@@ -38,7 +44,11 @@ import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
-import { ReportRoutingDialog, type ReportSubmitInput } from './ReportRoutingDialog';
+import {
+  ReportRoutingDialog,
+  type ReportAppealContext,
+  type ReportSubmitInput,
+} from './ReportRoutingDialog';
 import type { ReportRoutingSubject } from './ReportRoutingDialog';
 import { RelationshipBadge } from './RelationshipBadge';
 import { SmartReferenceText } from './SmartReferenceText';
@@ -151,6 +161,9 @@ export function PostCard({
   const [reportProvenance, setReportProvenance] = useState<ContentProvenance | undefined>(
     view.provenance
   );
+  // #1055: Community Node の content advisory に対する異議申し立て。通報と同じ dialog を
+  // appeal mode で使い、対象 risk signal を発行した node だけを送信先候補にする。
+  const [reportAppeal, setReportAppeal] = useState<ReportAppealContext | null>(null);
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -229,8 +242,11 @@ export function PostCard({
     fetchManifest: onFetchReportManifest,
   });
   const reportPlan = useMemo(
-    () => planReportRouting(reportProvenance, reportManifests),
-    [reportProvenance, reportManifests]
+    () =>
+      reportAppeal
+        ? planAppealReportRouting(reportAppeal.issuerNodeId, reportManifests)
+        : planReportRouting(reportProvenance, reportManifests),
+    [reportAppeal, reportProvenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport) && (!readOnly || view.allowReadOnlyReport === true);
 
@@ -250,6 +266,8 @@ export function PostCard({
       reason,
       details: details.trim() ? details.trim() : null,
       reporter_contact: reporterContact.trim() ? reporterContact.trim() : null,
+      // #1055: 異議申し立ては対象 risk signal を伴う(ADR 0046 §6.3)。
+      appeal: input.appeal,
     };
     return onSubmitReport(request);
   };
@@ -453,13 +471,84 @@ export function PostCard({
           </p>
         ) : view.adultContentGated ? (
           // #858: 成人向けとして申告された投稿は、表示設定 OFF の間は本文も代替表示にする。
-          <p
-            className='topic-diagnostic topic-diagnostic-secondary'
-            role='status'
-            data-testid={`post-adult-gated-${post.object_id}`}
-          >
-            {t('feed.adultContentHidden')}
-          </p>
+          // #1055: 判定元が Community Node の content advisory のときは、断定せず推定であることと
+          // 発行元・根拠を示し、異議申し立てへの導線を添える(ADR 0046 §6.3)。
+          <>
+            <p
+              className='topic-diagnostic topic-diagnostic-secondary'
+              role='status'
+              data-testid={`post-adult-gated-${post.object_id}`}
+            >
+              {view.gatedBodyText ??
+                (view.gatedBy === 'advisory'
+                  ? t('feed.advisoryContentHidden')
+                  : t('feed.adultContentHidden'))}
+            </p>
+            {view.contentAdvisory ? (
+              <div
+                className='post-advisory-note'
+                data-testid={`post-advisory-gated-${post.object_id}`}
+              >
+                <p className='post-advisory-title'>{t('advisory.title')}</p>
+                <p className='topic-diagnostic topic-diagnostic-secondary'>
+                  {t('advisory.description', {
+                    node: advisoryIssuerLabel(view.contentAdvisory),
+                  })}
+                </p>
+                <dl className='post-advisory-facts'>
+                  <div>
+                    <dt>{t('advisory.issuer')}</dt>
+                    <dd data-testid={`post-advisory-issuer-${post.object_id}`}>
+                      {advisoryIssuerLabel(view.contentAdvisory)}
+                      <span className='post-advisory-issuer-id'>
+                        {shortenNodeId(view.contentAdvisory.issuerNodeId)}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('advisory.category')}</dt>
+                    <dd>{advisoryCategoryLabel(t, view.contentAdvisory.category)}</dd>
+                  </div>
+                  {typeof view.contentAdvisory.confidence === 'number' ? (
+                    <div>
+                      <dt>{t('advisory.confidence')}</dt>
+                      <dd>{t('advisory.confidenceValue', {
+                        value: view.contentAdvisory.confidence,
+                      })}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>{t('advisory.basis')}</dt>
+                    <dd>{advisoryBasisLabel(t, view.contentAdvisory.basis)}</dd>
+                  </div>
+                </dl>
+                {showReportAction && onSubmitReport ? (
+                  <Button
+                    variant='secondary'
+                    type='button'
+                    data-testid={`post-advisory-appeal-${post.object_id}`}
+                    onClick={() => {
+                      const advisory = view.contentAdvisory;
+                      if (!advisory) return;
+                      setReportSubject(
+                        advisory.subjectKind === 'blob_cid'
+                          ? { kind: 'media', id: advisory.subjectId, label: view.authorLabel }
+                          : { kind: 'post', id: advisory.subjectId, label: view.authorLabel }
+                      );
+                      setReportProvenance(view.provenance);
+                      setReportAppeal({
+                        riskSignalId: advisory.signalId,
+                        issuerNodeId: advisory.issuerNodeId,
+                      });
+                      setReportDialogOpen(true);
+                    }}
+                  >
+                    {t('advisory.appeal')}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         ) : isUnavailableText ? (
           view.showUnavailableDiagnostics ? (
             <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
@@ -911,7 +1000,12 @@ export function PostCard({
       {showReportAction && onSubmitReport ? (
         <ReportRoutingDialog
           open={reportDialogOpen}
-          onOpenChange={setReportDialogOpen}
+          onOpenChange={(open) => {
+            setReportDialogOpen(open);
+            // 通常の通報へ戻すため、閉じるときに appeal 文脈を捨てる(#1055)。
+            if (!open) setReportAppeal(null);
+          }}
+          appeal={reportAppeal}
           subject={reportSubject}
           plan={reportPlan}
           onSubmit={handleSubmitReport}

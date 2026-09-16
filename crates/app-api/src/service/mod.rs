@@ -401,6 +401,11 @@ pub struct AppService {
     /// #858: 成人向け表現の表示設定(既定 OFF)。canonical source は desktop-runtime の
     /// ローカル JSON で、ここは blob 取得ゲートが参照する in-memory ミラー。
     pub(crate) adult_content_display_enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// #1055: Community Node の content advisory(ADR 0028 §8.6)が付いた添付 blob hash。
+    /// node-local な advisory であり投稿の canonical でも署名対象でもないため、self-label 由来の
+    /// `adult_media_hashes` と違って永続化せず、プロセス内の一時集合に留める(ADR 0028 §8.10)。
+    /// 表示経路は必ず index 照会を経由するので、再起動後も表示より先に再登録される。
+    pub(crate) advisory_media_hashes: Arc<Mutex<HashSet<String>>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -569,6 +574,7 @@ impl AppService {
             private_channel_capability_persist_guard: Arc::new(Mutex::new(())),
             notification_inserted_notify: Arc::new(tokio::sync::Notify::new()),
             adult_content_display_enabled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            advisory_media_hashes: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 

@@ -1,6 +1,7 @@
 import {
   type AttachmentView,
   type BlobMediaPayload,
+  type ContentAdvisory,
 } from '@/lib/api';
 import {
   blobToCreateAttachment,
@@ -32,6 +33,32 @@ export function isAdultLabeledPost(post: {
     hasAdultContentLabel(post.content_labels) ||
     hasAdultContentLabel(post.repost_of?.content_labels) ||
     hasAdultContentLabel(post.reply_preview?.content_labels)
+  );
+}
+
+// #1055: Community Node が発行した content advisory(ADR 0028 §8.6)のうち、client が成人向け
+// ゲートの対象として扱う表示ラベル。未知ラベルは無視する(前方互換。node が語彙を増やしても
+// client が勝手にゲートしない)。Rust 側 `GATING_ADVISORY_LABELS` と対。
+export const GATING_ADVISORY_LABELS = ['adult', 'sensitive'] as const;
+
+export function isGatingContentAdvisory(advisory: ContentAdvisory): boolean {
+  return (GATING_ADVISORY_LABELS as readonly string[]).includes(advisory.label.trim());
+}
+
+export function hasGatingContentAdvisory(
+  advisories: ContentAdvisory[] | null | undefined
+): boolean {
+  return (advisories ?? []).some(isGatingContentAdvisory);
+}
+
+/// 代替表示の説明に出す advisory を 1 件選ぶ。添付そのものへの判定(`blob_cid`)を優先し、
+/// 無ければ投稿本文への判定(`post_id`)を使う。
+export function primaryContentAdvisory(
+  advisories: ContentAdvisory[] | null | undefined
+): ContentAdvisory | null {
+  const gating = (advisories ?? []).filter(isGatingContentAdvisory);
+  return (
+    gating.find((advisory) => advisory.subject_kind === 'blob_cid') ?? gating[0] ?? null
   );
 }
 

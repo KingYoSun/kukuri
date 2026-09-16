@@ -573,6 +573,9 @@ export function DesktopShellPrimarySurface({
             onResolvedPostsChange={(posts) =>
               patchState({ communityIndexResolvedPosts: posts })
             }
+            onAdvisoryGatedMediaHashesChange={(hashes) =>
+              patchState({ advisoryGatedMediaHashes: hashes })
+            }
             onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
             onOpenThread={openThreadInSurfaceScope}
             onOpenThreadInTopic={openThreadInTopicFromSurface}

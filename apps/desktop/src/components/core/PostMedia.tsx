@@ -36,7 +36,8 @@ export function PostMedia({
       >
         <div className='media-skeleton' aria-hidden='true' />
         <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
-          {t('media.adultGated')}
+          {/* #1055: 判定元が Community Node の推定か、投稿者の自己申告かで文言を分ける。 */}
+          {media.gatedBy === 'advisory' ? t('media.advisoryGated') : t('media.adultGated')}
         </p>
       </div>
     );

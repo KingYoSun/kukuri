@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
@@ -47,12 +47,13 @@ use crate::attachments::{
     normalize_custom_reaction_upload, pending_attachment_from_request, reaction_key_from_request,
 };
 use crate::community_node::{
-    AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE, CommunityNodeConfig,
-    CommunityNodeConsentPreflight, CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest,
-    CommunityNodeIndexingRequest, CommunityNodeIndexingRequestError, CommunityNodeManifestFetch,
-    CommunityNodeNodeConfig, CommunityNodeNodeStatus, CommunityNodeReconnectState,
-    CommunityNodeRelationNeighborsRequest, CommunityNodeReportError, CommunityNodeSessionPhase,
-    CommunityNodeSessionState, CommunityNodeTargetRequest, CommunityNodeTesterFeedbackError,
+    AcceptCommunityNodeConsentsRequest, COMMUNITY_NODE_TOKEN_PURPOSE,
+    CONTENT_ADVISORY_SYNTHESIS_DEFAULT, CommunityNodeConfig, CommunityNodeConsentPreflight,
+    CommunityNodeIndexQueryError, CommunityNodeIndexQueryRequest, CommunityNodeIndexingRequest,
+    CommunityNodeIndexingRequestError, CommunityNodeManifestFetch, CommunityNodeNodeConfig,
+    CommunityNodeNodeStatus, CommunityNodeReconnectState, CommunityNodeRelationNeighborsRequest,
+    CommunityNodeReportError, CommunityNodeSessionPhase, CommunityNodeSessionState,
+    CommunityNodeTargetRequest, CommunityNodeTesterFeedbackError,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeTrustRelationError, CommunityNodeUserAdvisoryRequest,
     FetchCommunityNodePoliciesRequest, IndexOperation, IndexQueryResponse,
@@ -131,6 +132,10 @@ pub struct DesktopRuntime {
         Arc<Mutex<Option<crate::community_node::EffectiveSeedPeerApplyState>>>,
     pub(crate) runtime_connectivity_apply_version: Arc<AtomicU64>,
     pub(crate) effective_seed_peer_apply_version: Arc<AtomicU64>,
+    /// #1055: Community Node の content advisory を成人向けゲートへ合成するかどうか。
+    /// ADR 0046 §6.4 により、利用規約 第3条 4 項の改訂と再同意(C4 = #1056)が入るまで
+    /// 合成しない。既定 OFF で、index 応答から advisory を落とし取得ゲートにも登録しない。
+    pub(crate) content_advisory_synthesis_enabled: Arc<AtomicBool>,
     event_sender: tokio::sync::broadcast::Sender<RuntimeEvent>,
 }
 
@@ -450,6 +455,9 @@ impl DesktopRuntime {
             ))),
             runtime_connectivity_apply_version: Arc::new(AtomicU64::new(0)),
             effective_seed_peer_apply_version: Arc::new(AtomicU64::new(0)),
+            content_advisory_synthesis_enabled: Arc::new(AtomicBool::new(
+                CONTENT_ADVISORY_SYNTHESIS_DEFAULT,
+            )),
             event_sender,
         })
     }

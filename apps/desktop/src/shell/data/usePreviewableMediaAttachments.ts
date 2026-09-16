@@ -28,6 +28,10 @@ type UsePreviewableMediaAttachmentsArgs = {
   /// #1052: 「見つける」Column の解決済み投稿。タイムラインと同じ規則でメディアを
   /// プリフェッチする(未解決 entry は attachments を持たないため対象にならない)。
   communityIndexResolvedPosts: PostView[];
+  /// #1055: Community Node の content advisory でゲート中の添付 blob hash。表示設定 OFF の間は
+  /// どの表示経路から現れてもプリフェッチしない(ADR 0046 §6.2)。advisory は `PostView` に
+  /// 現れないため、投稿単位ではなく hash 単位で止める。
+  advisoryGatedMediaHashes: string[];
   profileTimeline: PostView[];
   selectedAuthorTimeline: PostView[];
   thread: PostView[];
@@ -45,6 +49,7 @@ export function usePreviewableMediaAttachments({
   activeTimeline,
   activePublicTimeline,
   communityIndexResolvedPosts,
+  advisoryGatedMediaHashes,
   profileTimeline,
   selectedAuthorTimeline,
   thread,
@@ -59,6 +64,7 @@ export function usePreviewableMediaAttachments({
 }: UsePreviewableMediaAttachmentsArgs): AttachmentView[] {
   return useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
+    const gatedHashes = new Set(advisoryGatedMediaHashes);
 
     const tryAddAttachment = (attachment: AttachmentView | null) => {
       if (!attachment) {
@@ -66,6 +72,10 @@ export function usePreviewableMediaAttachments({
       }
       const hash = attachment.hash.trim();
       const mime = attachment.mime.trim();
+      // #1055: advisory でゲート中の hash は取得対象に入れない。
+      if (gatedHashes.has(hash)) {
+        return;
+      }
       if (!hash || !mime) {
         logMediaDebug('warn', 'remote media metadata skipped', {
           hash: attachment.hash || null,
@@ -180,6 +190,7 @@ export function usePreviewableMediaAttachments({
     activePublicTimeline,
     activeTimeline,
     adultContentEnabled,
+    advisoryGatedMediaHashes,
     bookmarkedReactionAssets,
     communityIndexResolvedPosts,
     knownAuthorsByPubkey,

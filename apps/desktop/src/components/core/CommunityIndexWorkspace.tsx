@@ -38,6 +38,7 @@ import {
   communityIndexEmptyGuidance,
 } from './communityIndexEmptyGuidance';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
+import { hasGatingContentAdvisory, isGatingContentAdvisory } from '@/shell/media';
 import { PostCard } from './PostCard';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -76,6 +77,9 @@ type CommunityIndexWorkspaceProps = {
   /// #1052: 表示中の解決済み投稿。呼出元がメディアのプリフェッチと成人向け取得ゲートの
   /// 対象へ加えるために使う。結果の失効と Column の終了では空配列を通知する。
   onResolvedPostsChange?: (posts: PostView[]) => void;
+  /// #1055: 表示設定 OFF のため advisory でゲート中の添付 blob hash。呼出元がプリフェッチの
+  /// 除外集合に使う。結果の失効と Column の終了では空配列を通知する。
+  onAdvisoryGatedMediaHashesChange?: (hashes: string[]) => void;
   onOpenAuthor: (pubkey: string) => void;
   onOpenThread?: (threadId: string) => void;
   onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
@@ -267,6 +271,7 @@ export function CommunityIndexWorkspace({
   unsupportedVideoManifests = EMPTY_UNSUPPORTED_VIDEO_MANIFESTS,
   locale = null,
   onResolvedPostsChange,
+  onAdvisoryGatedMediaHashesChange,
   onOpenAuthor,
   onOpenThread,
   onOpenThreadInTopic,
@@ -354,6 +359,44 @@ export function CommunityIndexWorkspace({
         : {},
     [resolvedPostState, visibleResult]
   );
+  // #1055: 代替表示で発行元 node を名前で示すため、gating 対象の advisory を含む結果のときだけ
+  // その node の manifest を 1 回引く。取得できなければ base URL の host へ落とす。
+  const advisoryNodeBaseUrl =
+    visibleResult &&
+    visibleResult.entries.some((entry) => hasGatingContentAdvisory(entry.content_advisories))
+      ? visibleResult.context.nodeBaseUrl
+      : null;
+  const [advisoryNodeName, setAdvisoryNodeName] = useState<{
+    baseUrl: string;
+    nodeName: string | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!advisoryNodeBaseUrl || typeof api.fetchCommunityNodeManifest !== 'function') {
+      return;
+    }
+    if (advisoryNodeName?.baseUrl === advisoryNodeBaseUrl) {
+      return;
+    }
+    let active = true;
+    void api
+      .fetchCommunityNodeManifest(advisoryNodeBaseUrl)
+      .then((response) => {
+        if (!active) return;
+        setAdvisoryNodeName({
+          baseUrl: advisoryNodeBaseUrl,
+          nodeName:
+            response.status === 'ok' ? response.manifest?.node_name?.trim() || null : null,
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setAdvisoryNodeName({ baseUrl: advisoryNodeBaseUrl, nodeName: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [advisoryNodeBaseUrl, advisoryNodeName?.baseUrl, api]);
+
   const resolvedAuthorsByPubkey = useMemo(
     () =>
       visibleResult && resolvedAuthorState?.contextKey === visibleResult.context.key
@@ -392,11 +435,16 @@ export function CommunityIndexWorkspace({
             adultContentEnabled,
             unsupportedVideoManifests,
             locale,
+            nodeName:
+              advisoryNodeName?.baseUrl === visibleResult.context.nodeBaseUrl
+                ? advisoryNodeName.nodeName
+                : null,
           }),
         };
       }) ?? [],
     [
       adultContentEnabled,
+      advisoryNodeName,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,
@@ -412,13 +460,50 @@ export function CommunityIndexWorkspace({
 
   // #1052: 表示中の解決済み投稿を呼出元へ公開し、タイムラインと同じプリフェッチ・
   // 成人向け取得ゲートの対象に含める。同じ添付集合を繰り返し通知しない。
+  // #1055: advisory でゲート中の投稿は公開しない。self-label 由来のゲートは
+  // `usePreviewableMediaAttachments` が `isAdultLabeledPost` で除外するが、advisory は
+  // `PostView` に現れないため、判定を持つこの層で外す。Rust 側の hash ゲート
+  // (`blob_media_payload`)は独立した fail-closed backstop として別に効く。
   const resolvedPosts = useMemo(
     () =>
-      visiblePostCards.flatMap(({ resolvedEntry }) =>
-        resolvedEntry?.post ? [resolvedEntry.post] : []
+      visiblePostCards.flatMap(({ resolvedEntry, view }) =>
+        resolvedEntry?.post && view.gatedBy !== 'advisory' ? [resolvedEntry.post] : []
       ),
     [visiblePostCards]
   );
+  // #1055: 表示設定 OFF の間、gating 対象 advisory が指す blob hash をプリフェッチの除外集合
+  // として公開する。ON の間は空にして通常の ephemeral fetch へ戻す。
+  const advisoryGatedMediaHashes = useMemo(() => {
+    if (adultContentEnabled || !visibleResult) return [];
+    const hashes = new Set<string>();
+    for (const entry of visibleResult.entries) {
+      for (const advisory of entry.content_advisories ?? []) {
+        if (!isGatingContentAdvisory(advisory)) continue;
+        if (advisory.subject_kind !== 'blob_cid') continue;
+        const hash = advisory.subject_id.trim();
+        if (hash) hashes.add(hash);
+      }
+    }
+    return [...hashes];
+  }, [adultContentEnabled, visibleResult]);
+  const advisoryGatedHashesChangeRef = useRef(onAdvisoryGatedMediaHashesChange);
+  useEffect(() => {
+    advisoryGatedHashesChangeRef.current = onAdvisoryGatedMediaHashesChange;
+  }, [onAdvisoryGatedMediaHashesChange]);
+  const publishedAdvisoryHashes = useRef<string | null>(null);
+  useEffect(() => {
+    const signature = advisoryGatedMediaHashes.join('|');
+    if (publishedAdvisoryHashes.current === signature) return;
+    publishedAdvisoryHashes.current = signature;
+    onAdvisoryGatedMediaHashesChange?.(advisoryGatedMediaHashes);
+  }, [advisoryGatedMediaHashes, onAdvisoryGatedMediaHashesChange]);
+  useEffect(
+    () => () => {
+      advisoryGatedHashesChangeRef.current?.([]);
+    },
+    []
+  );
+
   const resolvedPostsChangeRef = useRef(onResolvedPostsChange);
   useEffect(() => {
     resolvedPostsChangeRef.current = onResolvedPostsChange;
