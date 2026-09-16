@@ -53,6 +53,23 @@ describe('Column Draft persistence', () => {
     expect(readColumnDrafts(storage)).toEqual({});
   });
 
+  // #1056: Draft 以外の store 更新が続いても、書き込みの待ち時間はやり直さない。
+  it('does not postpone the debounced write for unrelated store updates', () => {
+    const storage = memoryStorage();
+    const events = new EventTarget();
+    const store = createDesktopShellStore({ draftStorage: storage });
+    const stop = startColumnDraftPersistence(store, storage, events);
+    store.getState().setField('columnDraftsByKey', {
+      [columnDraftKey(target)]: { ...createColumnDraft(target), content: 'typed once' },
+    });
+    for (let tick = 0; tick < 5; tick += 1) {
+      vi.advanceTimersByTime(100);
+      store.getState().setField('timelineAdvisoryLookup', { active: true, settled: { [`k${tick}`]: true } });
+    }
+    expect(readColumnDrafts(storage)[columnDraftKey(target)]?.content).toBe('typed once');
+    stop();
+  });
+
   it('round-trips only serializable text Draft state', () => {
     const storage = memoryStorage();
     const draft = {

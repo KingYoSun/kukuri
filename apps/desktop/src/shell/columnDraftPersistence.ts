@@ -136,6 +136,7 @@ export function startColumnDraftPersistence(
   let previous = serializeColumnDrafts(store.getState().columnDraftsByKey);
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let pending: Record<string, ColumnDraftState> | null = null;
+  let pendingSerialized: string | null = null;
   let suspended = false;
   const flush = () => {
     if (timeoutId !== null) clearTimeout(timeoutId);
@@ -143,6 +144,7 @@ export function startColumnDraftPersistence(
     if (suspended || !pending) return;
     const next = pending;
     pending = null;
+    pendingSerialized = null;
     previous = serializeColumnDrafts(next);
     writeColumnDrafts(storage, next);
   };
@@ -150,7 +152,10 @@ export function startColumnDraftPersistence(
     if (suspended) return;
     const serialized = serializeColumnDrafts(state.columnDraftsByKey);
     if (serialized === previous) return;
+    // Draft 以外の store 更新(照会状態など)で書き込みの待ち時間をやり直さない(#1056)。
+    if (serialized === pendingSerialized) return;
     pending = state.columnDraftsByKey;
+    pendingSerialized = serialized;
     if (timeoutId !== null) clearTimeout(timeoutId);
     timeoutId = setTimeout(flush, DRAFT_WRITE_DELAY_MS);
   });
@@ -159,7 +164,7 @@ export function startColumnDraftPersistence(
     if (!writeColumnDrafts(storage, store.getState().columnDraftsByKey)) throw new Error('Could not retain account drafts');
     suspended = true;
     if (timeoutId !== null) clearTimeout(timeoutId);
-    timeoutId = null; pending = null;
+    timeoutId = null; pending = null; pendingSerialized = null;
     return () => {
       suspended = false;
       pending = store.getState().columnDraftsByKey;
