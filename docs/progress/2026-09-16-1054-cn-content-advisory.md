@@ -130,9 +130,29 @@ test に対応付けた。未分類 0。
   （allowed_path 1、denied_paths 1、failure_paths 6、recovery 1、trust_relation_graph 1。2026-09-16）。
   `trust_relation_graph.rs` の相対成分 signal は spam へ切り替えた（advisory-only の nsfw では相対成分が動かない）。
 
+### 監査後の是正
+
+- 1 回目の独立監査（対象 `e8feaaf2`）で、`general_advisory_contributes_zero_to_trust`（cn-trust / cn-core）と
+  `index_entry_advisories_derive_from_latest_verdict`（cn-core）が repo に存在しないことが判明した
+  （追記スクリプトの判定ミスで未追加。残骸の未使用 import / dead fn で `cargo xtask cn-check` も赤）。
+  `9eebfe37` で 3 test を追加し、cn-check / cn-test を再実行した（結果は上表と本節の数値に反映）。
+- CI の `linux-rust-static`（oversized-files）に 4 件抵触したため、`be02a034` で分割した:
+  cn-operator `docs_moderation_policy.rs`（`gen_moderation_policy`）、`ResolvedConfig::warnings` を
+  `safety_config.rs` へ、cn-operator tests の共有 fixture を `generate_support/`、moderation-policy contract を
+  `generate_moderation_policy.rs`、cn-indexer の media fixture を `ingest_support/` へ共有化し #1054 の contract を
+  `advisory_ingestion_contracts.rs` へ。
+- 監査指摘 4（`route()` 規則 8 が result 間で先頭一致し、別 provider の spam `Exclude` を nsfw の advisory 付き
+  `Allow` が隠し得る）は Existing-gap として同 PR で修正した（result 間でも非 index 側を優先。
+  `general_nsfw_is_indexed_with_advisory_label` に別 provider の spam を並べるケースを追加）。
+- 監査指摘 5（`Cleared` 後も verdict 行の advisory が残り `content_advisories` に出続ける）は New-requirement
+  として親 #1051 へ申し送り（C3 / C4 で扱いを決める）。
+
 ## 独立監査
 
-（PR head 固定後に別コンテキストで実施し追記）
+- 1 回目（対象 `e8feaaf2`、別コンテキストの subagent）: 判定 **FAIL**。blocker 0 件、inventory 12 件中 適合 10 /
+  不適合 2（AC-5 / AC-6 の named contract 欠落）/ 未分類 0、必須 validation（cn-check / CI）赤。記録は PR #1067 の
+  comment。是正は上記「監査後の是正」。
+- 2 回目（delta `e8feaaf2..<最終 head>`）: （実施後に追記）
 
 ## 本番反映
 

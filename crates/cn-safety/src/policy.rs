@@ -253,11 +253,24 @@ pub fn route(
     //    score も confidence も無い categorical な検知は従来どおり発火する。
     //    同じ result に複数の一般ラベルが並ぶ場合は、非 index に写像される category を優先する
     //    （nsfw と spam が並べば Exclude。advisory 化で index を緩めない）。
-    if let Some((result, category)) = scan_outcomes.iter().find_map(|r| {
-        general_category(r, policy)
-            .filter(|_| effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold))
-            .map(|category| (r, category))
-    }) {
+    //    result 間でも同じ規則を適用し、別 provider の spam / malware / phishing（非 index）を
+    //    先頭 result の nsfw / objectionable（advisory 付き allow）が隠さないようにする。
+    let general_candidates: Vec<(&ProviderScanResult, SafetyCategory)> = scan_outcomes
+        .iter()
+        .filter_map(|r| {
+            general_category(r, policy)
+                .filter(|_| {
+                    effective_general_score(r).is_none_or(|s| s >= policy.suspected_threshold)
+                })
+                .map(|category| (r, category))
+        })
+        .collect();
+    if let Some((result, category)) = general_candidates
+        .iter()
+        .copied()
+        .find(|(_, category)| !general_action(policy, *category).allows_indexing())
+        .or_else(|| general_candidates.first().copied())
+    {
         let action = general_action(policy, category);
         let mut verdict = base(action, ReasonCode::GeneralModeration, false);
         verdict.provider = Some(result.provider.clone());

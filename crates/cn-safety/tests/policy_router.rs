@@ -614,6 +614,23 @@ fn general_nsfw_is_indexed_with_advisory_label() {
     assert_eq!(verdict.action, SafetyAction::Exclude);
     assert!(verdict.advisory_labels.is_empty());
 
+    // 別 provider の result に spam が並ぶ場合も同様（result 間で先頭一致に頼らない。監査指摘 4）。
+    let mut other_provider = general_result(SafetyCategory::Spam);
+    other_provider.provider = "unknown-csam-vlm".to_string();
+    other_provider.capability = SafetyProviderCapability::SpamAbuseModeration;
+    let verdict = route(
+        &[
+            no_known_match_result(),
+            general_result(SafetyCategory::Nsfw),
+            other_provider,
+        ],
+        &policy,
+        SCANNED_AT,
+    );
+    assert_eq!(verdict.action, SafetyAction::Exclude);
+    assert_eq!(verdict.provider.as_deref(), Some("unknown-csam-vlm"));
+    assert!(verdict.advisory_labels.is_empty());
+
     // 閾値未満の nsfw は従来どおり検知なし扱い（advisory も付かない）。
     let mut low = general_result(SafetyCategory::Nsfw);
     low.score = Some(policy.suspected_threshold - 1);
