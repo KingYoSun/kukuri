@@ -24,8 +24,14 @@ const LOCK_CLASSIFICATION: &[(&str, &str, usize)] = &[
         "CommunityNodeServer",
         7,
     ),
-    // #1055 で content advisory の合成・issuer 照合・無効化の 4 test を追加(14 -> 18)。
-    ("community_node/index_query.rs", "CommunityNodeServer", 18),
+    ("community_node/index_query.rs", "CommunityNodeServer", 14),
+    // #1055 で content advisory の合成・issuer 照合・無効化の 4 test を追加。
+    // oversized-files の上限に合わせ、index_query.rs から子モジュールへ分けている。
+    (
+        "community_node/index_query/content_advisory.rs",
+        "CommunityNodeServer",
+        4,
+    ),
     (
         "community_node/indexing_status.rs",
         "CommunityNodeServer",

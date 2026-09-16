@@ -38,7 +38,10 @@ import {
   communityIndexEmptyGuidance,
 } from './communityIndexEmptyGuidance';
 import { communityIndexPostCardView } from './communityIndexPostCardView';
-import { hasGatingContentAdvisory, isGatingContentAdvisory } from '@/shell/media';
+import {
+  useCommunityIndexAdvisories,
+  usePublishedAdvisoryHashes,
+} from './useCommunityIndexAdvisories';
 import { PostCard } from './PostCard';
 
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
@@ -359,43 +362,15 @@ export function CommunityIndexWorkspace({
         : {},
     [resolvedPostState, visibleResult]
   );
-  // #1055: 代替表示で発行元 node を名前で示すため、gating 対象の advisory を含む結果のときだけ
-  // その node の manifest を 1 回引く。取得できなければ base URL の host へ落とす。
-  const advisoryNodeBaseUrl =
-    visibleResult &&
-    visibleResult.entries.some((entry) => hasGatingContentAdvisory(entry.content_advisories))
-      ? visibleResult.context.nodeBaseUrl
-      : null;
-  const [advisoryNodeName, setAdvisoryNodeName] = useState<{
-    baseUrl: string;
-    nodeName: string | null;
-  } | null>(null);
-  useEffect(() => {
-    if (!advisoryNodeBaseUrl || typeof api.fetchCommunityNodeManifest !== 'function') {
-      return;
-    }
-    if (advisoryNodeName?.baseUrl === advisoryNodeBaseUrl) {
-      return;
-    }
-    let active = true;
-    void api
-      .fetchCommunityNodeManifest(advisoryNodeBaseUrl)
-      .then((response) => {
-        if (!active) return;
-        setAdvisoryNodeName({
-          baseUrl: advisoryNodeBaseUrl,
-          nodeName:
-            response.status === 'ok' ? response.manifest?.node_name?.trim() || null : null,
-        });
-      })
-      .catch(() => {
-        if (!active) return;
-        setAdvisoryNodeName({ baseUrl: advisoryNodeBaseUrl, nodeName: null });
-      });
-    return () => {
-      active = false;
-    };
-  }, [advisoryNodeBaseUrl, advisoryNodeName?.baseUrl, api]);
+  // #1055: 発行元の表示名とゲート中の添付 hash は専用フックが持つ。
+  const { issuerNodeName: advisoryIssuerNodeName, gatedMediaHashes: advisoryGatedMediaHashes } =
+    useCommunityIndexAdvisories({
+      api,
+      entries: visibleResult?.entries ?? null,
+      nodeBaseUrl: visibleResult?.context.nodeBaseUrl ?? null,
+      adultContentEnabled,
+    });
+  usePublishedAdvisoryHashes(advisoryGatedMediaHashes, onAdvisoryGatedMediaHashesChange);
 
   const resolvedAuthorsByPubkey = useMemo(
     () =>
@@ -435,16 +410,13 @@ export function CommunityIndexWorkspace({
             adultContentEnabled,
             unsupportedVideoManifests,
             locale,
-            nodeName:
-              advisoryNodeName?.baseUrl === visibleResult.context.nodeBaseUrl
-                ? advisoryNodeName.nodeName
-                : null,
+            nodeName: advisoryIssuerNodeName,
           }),
         };
       }) ?? [],
     [
       adultContentEnabled,
-      advisoryNodeName,
+      advisoryIssuerNodeName,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,
@@ -471,39 +443,6 @@ export function CommunityIndexWorkspace({
       ),
     [visiblePostCards]
   );
-  // #1055: 表示設定 OFF の間、gating 対象 advisory が指す blob hash をプリフェッチの除外集合
-  // として公開する。ON の間は空にして通常の ephemeral fetch へ戻す。
-  const advisoryGatedMediaHashes = useMemo(() => {
-    if (adultContentEnabled || !visibleResult) return [];
-    const hashes = new Set<string>();
-    for (const entry of visibleResult.entries) {
-      for (const advisory of entry.content_advisories ?? []) {
-        if (!isGatingContentAdvisory(advisory)) continue;
-        if (advisory.subject_kind !== 'blob_cid') continue;
-        const hash = advisory.subject_id.trim();
-        if (hash) hashes.add(hash);
-      }
-    }
-    return [...hashes];
-  }, [adultContentEnabled, visibleResult]);
-  const advisoryGatedHashesChangeRef = useRef(onAdvisoryGatedMediaHashesChange);
-  useEffect(() => {
-    advisoryGatedHashesChangeRef.current = onAdvisoryGatedMediaHashesChange;
-  }, [onAdvisoryGatedMediaHashesChange]);
-  const publishedAdvisoryHashes = useRef<string | null>(null);
-  useEffect(() => {
-    const signature = advisoryGatedMediaHashes.join('|');
-    if (publishedAdvisoryHashes.current === signature) return;
-    publishedAdvisoryHashes.current = signature;
-    onAdvisoryGatedMediaHashesChange?.(advisoryGatedMediaHashes);
-  }, [advisoryGatedMediaHashes, onAdvisoryGatedMediaHashesChange]);
-  useEffect(
-    () => () => {
-      advisoryGatedHashesChangeRef.current?.([]);
-    },
-    []
-  );
-
   const resolvedPostsChangeRef = useRef(onResolvedPostsChange);
   useEffect(() => {
     resolvedPostsChangeRef.current = onResolvedPostsChange;
