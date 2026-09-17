@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | PR1 | ADR 0026 §8 / ADR 0022 追補、観測 envelope、CN の観測受付・取消・保持、T/R の合算と一括評価、wire 追従 | merge 済み（[#1125](https://github.com/kukuri-app/kukuri/pull/1125)、`1599ff5a`） |
 | PR2 | client の提供トグル（任意文書への同意）・送信待ち・取消 | merge 済み（[#1129](https://github.com/kukuri-app/kukuri/pull/1129)、`a35604d4`） |
-| PR3 | CN の採用順位、6 経路と引用元の折りたたみ・再表示・著者例外 | 実装中 |
+| PR3 | CN の採用順位、6 経路と引用元の折りたたみ・再表示・著者例外 | [#1130](https://github.com/kukuri-app/kukuri/pull/1130) |
 
 ## 利用者決定（2026-09-17）
 
@@ -76,7 +76,22 @@
 | --- | --- | --- |
 | AC-3 / AC-6 / AC-7 / INV-4 / TR-4 / TR-5 / TR-7 | `CommunityNodeConfig.trust_node_priority`（設定済み node に正規化、空なら機能オフ）と `trust_gate_support.rs` の `evaluate_author_trust_gates`。優先順に一括評価を読み、viewer・対象・期限を照合して最初の有効値を採る。失敗・401・期限切れは次の選択済み node へ進み、全滅なら未評価（折りたたまない）。cache は (node, target) 単位で、設定・同意・認証の変更で世代を進めて捨てる | `trust_gates.rs` 7 件（優先順・未選択 0 件・失敗 fallback・viewer/期限の照合・cache と設定変更・restart 復元・social state 不変） |
 | AC-4 / INVAR-1 / INVAR-4 / INV-5 / INV-6 | `resolvePostTrustGate`（著者と引用元）、`AuthorTrustGateNotice`（理由・採用 CN・表示する・作者を開く）、live / game 一覧の同じ案内、作者詳細の「この作者を常に表示する」、設定画面の採用順位 UI | `DesktopShellPage.authorTrustGate.test.tsx` 4 件、`authorTrustGates.test.ts` 3 件、`CommunityNodeTrustPriorityField.test.tsx` 3 件、[ui-review record](../ui-reviews/2026-09-18-1061-author-trust-gate.md) |
-| 法務 | legal bundle を version 7 へ（利用規約 第3条に第 5・6 項、外部送信表示に「信頼評価の照会」、データフロー突合表に行を追加、i18n ミラーと同意 fixture を同期）。2026-09-18 のユーザー判断どおり PR2 分と合わせて 1 回で上げる | Tauri の法務 bundle テスト、`App.test.tsx`、Playwright の同意 fixture |
+| AC-5 | 判断は評価の期限まで使い、期限切れは捨てて照会し直す。採用順位・認証・必須同意が変わったら全部捨てる。作者ごとの例外は設定・解除の時点で表示へ反映する | `useAuthorTrustGateLookup.test.tsx` 4 件、`DesktopShellPage.authorTrustGate.test.tsx` の例外 test |
+| 法務 | legal bundle を version 7 へ（利用規約 第3条に第 5・6 項、プライバシーポリシーと外部送信表示に「信頼評価の照会」「ブロック・ミュートの提供」の送信項目・送らない情報・取消時の削除要求、データフロー突合表に行を追加、i18n 本文とミラーと同意 fixture を同期）。2026-09-18 のユーザー判断どおり PR2 分と合わせて 1 回で上げる | Tauri の法務 bundle テスト（必須句に version 7 分を追加）、`App.test.tsx`、Playwright の同意 fixture |
+
+### PR3 独立監査（commit `ed71c6ec`）の指摘と対応
+
+| 指摘 | 対応 |
+| --- | --- |
+| Blocker: legal bundle version 7 の本文が changeSummary の主張と一致しない（プライバシーポリシー本文と i18n の `sections` が未更新） | `privacy-policy.md` の Community Node 節へ信頼評価の照会とブロック・ミュートの提供を追記し変更履歴を追加。3 locale の `documents.terms.sections` / `documents.privacy.sections` を更新。`state.rs` の必須句へ version 7 分を追加して本文未更新を CI で検知できるようにした |
+| Blocker: クライアント側の判断が `expires_at` も同意取消も反映せず、session 中は無期限に再利用される | `useAuthorTrustGateLookup` が判断ごとに期限を持ち、期限切れは store から捨てて照会し直す。採用順位に加えて認証・必須同意の状態も作り直しの契機にした |
+| Major: 作者詳細の「常に表示する」が表示中の投稿へ反映されない | 例外の設定・解除で返る判断を `authorTrustGates` へ書き戻す。test に折りたたみが解ける assert を追加 |
+| Major: debounce timer が cleanup 後に再設定されず、照会が丸ごと落ちうる | 待ち行列が残っていれば張り直す条件に変更し、再現 test を追加 |
+| Minor: 新規再利用 component に Story が無い | `AuthorTrustGateNotice` / `AuthorTrustDisplayExceptionField` / `CommunityNodeTrustPriorityField` の全 state Story を追加し、ui-review record の Preview を差し替えた |
+| Minor: 外部送信表示の変更履歴で v6 補記と v7 の記述が重複 | v7 を先頭へ移し、重複記述を落とした |
+| Minor: 採用順位の保存が編集中の下書きを送る | 保存済みのノード一覧を送り、保存後に下書きを再同期する |
+| Minor: `trust_node_priority` の 1 件でも URL として読めないと runtime 起動が失敗する | 表示設定なので読めない値は落とすだけにした（`normalize_trust_node_priority` は `Result` を返さない） |
+| Nit: game 一覧の案内に作者導線が無い / 100 件超の切り捨てが無記載 / 末尾の余分な空行 | いずれも修正した |
 
 ## 検証記録
 

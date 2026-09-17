@@ -118,16 +118,14 @@ test('no node is queried and nothing is collapsed without an adopted priority', 
   expect(evaluate).not.toHaveBeenCalled();
 });
 
-test('the author detail exception keeps a low trust author visible', async () => {
+test('the author detail exception reveals a low trust author again', async () => {
   const user = userEvent.setup();
-  const api = await createGatedApi([hiddenPost()], []);
+  const api = await createGatedApi([hiddenPost()]);
   const setException = vi.spyOn(api, 'setAuthorTrustDisplayException');
 
   render(<App api={api} />);
 
   // 折りたたまれた投稿の案内から作者詳細へ移動できる（管理導線への到達）。
-  const api2 = api;
-  vi.spyOn(api2, 'evaluateAuthorTrustGates').mockImplementation(gateResult([HIDDEN_AUTHOR]));
   const column = getActiveColumn('Timeline');
   const notice = await within(column).findByTestId('author-trust-gate-notice');
   await user.click(within(notice).getByTestId('author-trust-gate-open-author'));
@@ -136,4 +134,10 @@ test('the author detail exception keeps a low trust author visible', async () =>
   await user.click(toggle);
   await waitFor(() => expect(setException).toHaveBeenCalledWith(HIDDEN_AUTHOR, true));
   await waitFor(() => expect(toggle).toBeChecked());
+
+  // 設定はその場で効く（次の照会や再起動を待たない）。
+  await waitFor(() =>
+    expect(screen.queryByTestId('author-trust-gate-notice')).not.toBeInTheDocument()
+  );
+  expect(screen.getAllByText('post from a low trust author').length).toBeGreaterThan(0);
 });

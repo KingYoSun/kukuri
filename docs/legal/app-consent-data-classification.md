@@ -16,14 +16,14 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - 必須 scenario: 起動 gate（未同意 → runtime 非構築 = network 非開始 → 同意 → ready）。frontend は `App.test.tsx`、backend は `src-tauri` のユニットテストで担保。
 
 ## 補足
-- 同意は文書 slug 単位のレコード(#857)で管理する。現状は全文書が `LEGAL_BUNDLE_VERSION`（単調増加の整数、初期値 1、現在値 6）と同じ版番号を共有している。
+- 同意は文書 slug 単位のレコード(#857)で管理する。現状は全文書が `LEGAL_BUNDLE_VERSION`（単調増加の整数、初期値 1、現在値 7）と同じ版番号を共有している。
 - 文書ごとに `accepted_version < current_version` の場合に再同意を要求する。
 - version 2 は、投稿コンテンツの権利帰属、権利保有の表明、共有範囲と Community Node capability に限定した技術的利用許諾を追加する重要変更である。
 - version 3 は、利用資格（18歳以上）と成人向け表現の既定非表示に関する記載を追加する重要変更である(#858、ADR 0046)。18歳以上の自己申告の分類は `docs/legal/age-attestation-data-classification.md` を参照。
 - version 4 は、管理主体、実データフロー、外部送信、診断情報、P2P copy の削除限界、日本語正文と参考訳を明記する重要変更である(#854)。外部送信の突合は `docs/legal/app-data-flow-inventory.md` と `docs/legal/external-transmission-notice.md` を参照。
 - version 5 は、主体定義と責任範囲、投稿者責任、適切な権利主体への限定的許諾、鍵の中央復旧不能、Community Node 別規約、通報・利用制限、サービス変更・中断・終了、OSS ライセンスとの関係、責任制限、日本法・合意管轄、変更通知を全面改訂する重要変更である(#856)。
 - version 6 は、利用規約 第3条 4 項に成人向け表現の第 2 のラベル源（利用者が設定した Community Node の推定）を追加し、プライバシーポリシーと外部送信表示に推定の照会で送る識別子を追記する重要変更である(#1056、ADR 0046 §6.4)。
-- version 7 は、利用規約 第3条に信頼評価による折りたたみ（第 5 項）とブロック・ミュートの任意提供（第 6 項）を追加し、外部送信表示へ信頼評価の照会とブロック・ミュートの提供を載せる重要変更である(#1061、ADR 0026 §8)。
+- version 7 は、利用規約 第3条に信頼評価による折りたたみ（第 5 項）とブロック・ミュートの任意提供（第 6 項）を追加し、プライバシーポリシーと外部送信表示へ信頼評価の照会とブロック・ミュートの提供で送る項目・送らない情報・取消時の削除要求を追記する重要変更である(#1061、ADR 0026 §8)。
 - 各記録には記録時の build の種別 `build_profile`（配布版 `release`、開発ビルド `development`）を残す(#1105)。同意判定には使わない。#1105 より前の記録には無い。開発ビルドは配布版と別の app data dir を使うため、配布版の consent ファイルへ書き込まない（`docs/runbooks/dev.md`）。
 - 同意するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない（fail-closed = IP 取得前に同意）。
 

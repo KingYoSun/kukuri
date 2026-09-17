@@ -39,6 +39,8 @@ type GameRoomPanelProps = {
   onSaveRoom: (roomId: string) => void;
   /// #1061: 採用 CN の信頼値による主催者の表示判断（著者 pubkey → 判断）。
   trustGates?: Record<string, AuthorTrustGate>;
+  /// 折りたたんだ部屋の案内から主催者を開く。
+  onOpenAuthor?: (authorPubkey: string) => void;
 };
 
 export function GameRoomPanel({
@@ -62,6 +64,7 @@ export function GameRoomPanel({
   onDraftScoreChange,
   onSaveRoom,
   trustGates,
+  onOpenAuthor,
 }: GameRoomPanelProps) {
   const { t } = useTranslation(['common', 'game']);
   const { gateFor, reveal } = useAuthorTrustGateReveal(trustGates);
@@ -121,7 +124,11 @@ export function GameRoomPanel({
           if (trustGate) {
             return (
               <li key={room.room_id}>
-                <AuthorTrustGateNotice gate={trustGate} onReveal={() => reveal(trustGate.authorPubkey)} />
+                <AuthorTrustGateNotice
+                  gate={trustGate}
+                  onReveal={() => reveal(trustGate.authorPubkey)}
+                  onOpenAuthor={onOpenAuthor}
+                />
               </li>
             );
           }

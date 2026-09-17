@@ -175,7 +175,7 @@ impl DesktopRuntime {
                 .as_deref()
                 .unwrap_or(current_config.trust_node_priority.as_slice()),
             base_urls.as_slice(),
-        )?;
+        );
         let next_config = normalize_community_node_config(CommunityNodeConfig {
             nodes,
             trust_node_priority,

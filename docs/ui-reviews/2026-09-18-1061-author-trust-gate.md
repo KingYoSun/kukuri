@@ -5,7 +5,7 @@
 - Superseded by: None
 - PR: 本 record を含む #1061 の PR3（`Refs #1061`）
 - Issue / Scope revision: [#1061](https://github.com/kukuri-app/kukuri/issues/1061)、2026-09-15-r2
-- Preview: Storybook（`Settings/CommunityNodeObservationSharingField`）と Vitest / Playwright の deterministic mock
+- Preview: Storybook（`Core/AuthorTrustGateNotice`、`Core/AuthorTrustDisplayExceptionField`、`Settings/CommunityNodeTrustPriorityField`）と Vitest の deterministic mock
 - 対象 surface / 利用者 / 目的: タイムライン・スレッド・プロフィール・ブックマーク・live / game 一覧の閲覧者のうち、信頼評価を採用するコミュニティノードを選んだ人。評価の低い作者の投稿を既定で畳み、理由と採用ノードを示したうえで、その場で開く・作者ごとに解除する手段を残す。
 - 変更分類: 既存画面の改善（ADR 0014 §2）。共有 component（`PostCard`）への state 追加と、設定画面・作者詳細への欄追加。
 - 関連: [#1056 の record](2026-09-16-1056-timeline-advisory-and-node-adoption.md)（ノードごとの採用設定の置き方）と [#1108 の record](2026-09-17-1108-advisory-details-dialog.md)（一覧を圧迫しない代替表示）の方針を踏襲する。
@@ -28,16 +28,17 @@
 - Platform: Chromium（Vitest + Testing Library、deterministic mock）。Windows WebView2 実機は未確認。
 - Viewport: 1024 幅（shell 結合テスト）。
 - Theme: 既定（dark）。
-- 確認した state: 折りたたみ（理由・ノードあり）、表示する、引用元による折りたたみ、採用順位なし（照会も折りたたみもしない）、作者ごとの例外の設定・解除、提供トグルの全 state（Story）。
+- 確認した state: 折りたたみ（理由の種類ごと・ノードの有無・引用元）、表示する、採用順位なし（照会も折りたたみもしない）、採用順位の単独・複数・編集中・ノード未設定、作者ごとの例外の未設定・設定済み・読めない・保存失敗。いずれも Story を持つ。
 
 ## 検証
 
 - `apps/desktop/src/shell/DesktopShellPage.authorTrustGate.test.tsx`（4 件）
 - `apps/desktop/src/shell/authorTrustGates.test.ts`（3 件）
-- `apps/desktop/src/components/settings/CommunityNodeTrustPriorityField.test.tsx`
+- `apps/desktop/src/components/settings/CommunityNodeTrustPriorityField.test.tsx`（3 件）
+- `apps/desktop/src/shell/data/useAuthorTrustGateLookup.test.tsx`（4 件。期限切れ・同意取消・待ち行列）
 - `cargo xtask desktop-ui-check`（lint / typecheck / Vitest / Storybook / browser / visual）
 
 ## 残っている限界
 
-- 折りたたみの判断は評価の期限（既定 600 秒）で作り直す。期限内は同じ判断を使うため、ノード側の評価変更が即時には反映されない。
+- 折りたたみの判断は評価の期限（既定 600 秒）で捨てて照会し直す。期限内は同じ判断を使うため、ノード側の評価変更が即時には反映されない。採用順位・認証・必須同意の変更は、期限を待たずに判断を捨てる。
 - 作者ごとの例外は端末内の設定で、別の端末には共有されない（mute と同じ扱い）。

@@ -649,14 +649,19 @@ export function createProfileTopicChannelActions({
     }
   }
 
-  /// #1061: 信頼値の採用順位だけを保存する（ノード一覧の下書きは変えない）。
+  /// #1061: 信頼値の採用順位だけを保存する（ノード一覧の下書きは送らない）。
   async function handleSetCommunityNodeTrustPriority(priority: string[]) {
     try {
+      // 編集中の下書きではなく、保存済みのノード一覧をそのまま送る。
+      const saved = getState().communityNodeConfig;
       const nextConfig = await api.setCommunityNodeConfig(
-        communityNodeDraftNodesToConfigInput(communityNodeInput),
+        communityNodeDraftNodesToConfigInput(communityNodesToDraftNodes(saved)),
         priority
       );
       setCommunityNodeConfig(nextConfig);
+      // 保存側の正規化（URL 正規化・重複排除）と下書きをずらさない。
+      setCommunityNodeInput(communityNodesToDraftNodes(nextConfig));
+      setCommunityNodeEditorDirty(false);
       setCommunityNodeError(null);
     } catch (saveError) {
       setCommunityNodeError(

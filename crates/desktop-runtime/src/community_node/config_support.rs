@@ -69,7 +69,7 @@ pub(crate) fn normalize_community_node_config(
         trust_node_priority: normalize_trust_node_priority(
             config.trust_node_priority.as_slice(),
             deduped.keys().cloned().collect::<Vec<_>>().as_slice(),
-        )?,
+        ),
         nodes: deduped.into_values().collect(),
     })
 }

@@ -747,6 +747,7 @@ export function DesktopShellPrimarySurface({
             createPending={gameCreatePending}
             rooms={scoreGameRooms}
             trustGates={authorTrustGates}
+            onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
             drafts={surfaceGameDraftViews}
             savingByRoomId={gameSavingByRoomId}
             localAuthorPubkey={syncStatus.local_author_pubkey}

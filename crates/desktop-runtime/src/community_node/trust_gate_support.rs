@@ -214,7 +214,9 @@ impl DesktopRuntime {
                 break;
             }
             let mut requested = pending.clone();
-            requested.truncate(TRUST_EVALUATIONS_MAX_TARGETS);
+            // CN 側の一括評価の上限。超えた分はこのノードでは評価せず、未評価として扱う
+        // (desktop は AUTHOR_TRUST_GATE_LOOKUP_BATCH_SIZE で分割して送る)。
+        requested.truncate(TRUST_EVALUATIONS_MAX_TARGETS);
             let evaluations = match self
                 .request_author_trust_evaluations(base_url.as_str(), &requested)
                 .await
@@ -346,18 +348,20 @@ impl DesktopRuntime {
 }
 
 /// 設定の優先順位を、設定済み node のうち重複しないものへ正規化する。
-pub(crate) fn normalize_trust_node_priority(
-    priority: &[String],
-    nodes: &[String],
-) -> Result<Vec<String>> {
+///
+/// 表示設定にすぎないため、読めない値は落とすだけにする。破損した state で runtime の
+/// 起動を止めない(#1061 TR-4「有効な設定・根拠のみ復元」)。
+pub(crate) fn normalize_trust_node_priority(priority: &[String], nodes: &[String]) -> Vec<String> {
     let mut seen = BTreeSet::new();
     let mut normalized = Vec::new();
     for base_url in priority {
-        let base_url = normalize_http_url(base_url.as_str())?;
+        let Ok(base_url) = normalize_http_url(base_url.as_str()) else {
+            continue;
+        };
         if !nodes.contains(&base_url) || !seen.insert(base_url.clone()) {
             continue;
         }
         normalized.push(base_url);
     }
-    Ok(normalized)
+    normalized
 }
