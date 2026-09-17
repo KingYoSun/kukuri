@@ -202,6 +202,7 @@
     "videoPosterAlt": "视频预览",
     "adultGated": "发布者标记为成人内容的媒体。在设置中启用显示后才会加载。",
     "advisoryGated": "Community Node 推测该媒体可能包含成人内容。在设置中启用显示后即可加载。",
+    "sharedMediaGated": "相同的媒体在其他帖子中被视为成人内容。在设置中启用显示后才会加载。",
     "advisoryPending": "正在确认 Community Node 的推测"
   },
   "reactions": {

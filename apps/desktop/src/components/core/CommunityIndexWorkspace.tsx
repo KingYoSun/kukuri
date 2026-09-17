@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { CommunityNodeConsentDialog } from '@/components/settings/CommunityNodeConsentDialog';
 import type { CommunityNodeAvailability } from '@/lib/api/communityNodeAvailability';
+import { postGateableMediaHashes } from '@/shell/contentAdvisories';
 import { useCommunityNodeConsentFlow, type AcceptCommunityNodeConsents } from '@/shell/actions/useCommunityNodeConsentFlow';
 import { CommunityIndexAvailabilityNotice } from './CommunityIndexAvailabilityNotice';
 import { CommunityIndexEmptyState } from './CommunityIndexEmptyState';
@@ -47,6 +48,7 @@ import { PostCard } from './PostCard';
 type IndexOperation = 'search' | 'discovery' | 'recommendations';
 const EMPTY_KNOWN_AUTHORS: Record<string, AuthorSocialView> = {};
 const EMPTY_UNSUPPORTED_VIDEO_MANIFESTS: Record<string, true> = {};
+const EMPTY_GATED_MEDIA_HASHES: readonly string[] = [];
 
 type CommunityIndexWorkspaceProps = {
   api: DesktopApi;
@@ -82,7 +84,11 @@ type CommunityIndexWorkspaceProps = {
   onResolvedPostsChange?: (posts: PostView[]) => void;
   /// #1055: 表示設定 OFF のため advisory でゲート中の添付 blob hash。呼出元がプリフェッチの
   /// 除外集合に使う。結果の失効と Column の終了では空配列を通知する。
+  /// #1107: 投稿への advisory で代替表示にした解決済み投稿の添付も含める(その投稿は
+  /// `onResolvedPostsChange` へ公開しないため、ここで伝えないと同じ blob を別の投稿が表示する)。
   onAdvisoryGatedMediaHashesChange?: (hashes: string[]) => void;
+  /// #1107: 表示設定 OFF の間ゲートする添付 blob hash(全表示経路で共通)。
+  gatedMediaHashes?: readonly string[];
   onOpenAuthor: (pubkey: string) => void;
   onOpenThread?: (threadId: string) => void;
   onOpenThreadInTopic?: (threadId: string, topicId: string) => void;
@@ -275,6 +281,7 @@ export function CommunityIndexWorkspace({
   locale = null,
   onResolvedPostsChange,
   onAdvisoryGatedMediaHashesChange,
+  gatedMediaHashes = EMPTY_GATED_MEDIA_HASHES,
   onOpenAuthor,
   onOpenThread,
   onOpenThreadInTopic,
@@ -370,7 +377,6 @@ export function CommunityIndexWorkspace({
       nodeBaseUrl: visibleResult?.context.nodeBaseUrl ?? null,
       adultContentEnabled,
     });
-  usePublishedAdvisoryHashes(advisoryGatedMediaHashes, onAdvisoryGatedMediaHashesChange);
 
   const resolvedAuthorsByPubkey = useMemo(
     () =>
@@ -408,6 +414,7 @@ export function CommunityIndexWorkspace({
             resolvedEntry,
             mediaObjectUrls,
             adultContentEnabled,
+            gatedMediaHashes,
             unsupportedVideoManifests,
             locale,
             nodeName: advisoryIssuerNodeName,
@@ -417,6 +424,7 @@ export function CommunityIndexWorkspace({
     [
       adultContentEnabled,
       advisoryIssuerNodeName,
+      gatedMediaHashes,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,
@@ -443,6 +451,16 @@ export function CommunityIndexWorkspace({
       ),
     [visiblePostCards]
   );
+  const gatedResolvedMediaHashes = useMemo(() => {
+    const hashes = new Set(advisoryGatedMediaHashes);
+    for (const { resolvedEntry, view } of visiblePostCards) {
+      const post = resolvedEntry?.post;
+      if (!post || view.gatedBy !== 'advisory') continue;
+      for (const hash of postGateableMediaHashes(post)) hashes.add(hash);
+    }
+    return [...hashes].sort();
+  }, [advisoryGatedMediaHashes, visiblePostCards]);
+  usePublishedAdvisoryHashes(gatedResolvedMediaHashes, onAdvisoryGatedMediaHashesChange);
   const resolvedPostsChangeRef = useRef(onResolvedPostsChange);
   useEffect(() => {
     resolvedPostsChangeRef.current = onResolvedPostsChange;

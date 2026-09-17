@@ -598,4 +598,31 @@ describe('communityIndexPostCardView', () => {
     expect(view.media.state).toBe('gated');
     expect(view.contentAdvisory?.label).toBe('sensitive');
   });
+
+  // #1107 / AC-6: advisory の無い解決済み投稿でも、同じ blob が別の投稿でゲートされていれば
+  // メディアだけを代替表示にする(本文は伏せない)。
+  test('gates only the media of a plain post whose blob is gated elsewhere', () => {
+    const options = {
+      nodeBaseUrl: 'https://node.example',
+      operation: 'search' as const,
+      topicId: null,
+      knownAuthor,
+      resolutionStatus: 'resolved' as const,
+      resolvedEntry: resolvedImageEntry(),
+      mediaObjectUrls: { [PRIMARY_IMAGE_HASH]: 'blob:primary' },
+      locale: 'en',
+      gatedMediaHashes: [PRIMARY_IMAGE_HASH],
+    };
+    const view = communityIndexPostCardView(advisoryEntry([]), {
+      ...options,
+      adultContentEnabled: false,
+    });
+
+    expect(view.adultContentGated).toBe(false);
+    expect(view.contentAdvisory).toBeNull();
+    expect(view.media.state).toBe('gated');
+    expect(view.media.gatedBy).toBe('shared_media');
+    expect(view.media.imagePreviewSrc).toBeNull();
+    expect(view.media.imageGalleryItems).toEqual([]);
+  });
 });

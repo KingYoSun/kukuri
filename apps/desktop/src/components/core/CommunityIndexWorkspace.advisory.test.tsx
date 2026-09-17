@@ -239,3 +239,55 @@ test('an advisory with an unknown label does not gate the result', async () => {
   ).not.toBeInTheDocument();
   expect(api.fetchCommunityNodeManifest).not.toHaveBeenCalled();
 });
+
+// #1107 / AC-6: 投稿への advisory で代替表示にした解決済み投稿は `onResolvedPostsChange` へ
+// 公開しないため、その添付 blob をゲート集合として呼出元へ伝える。
+test('a post-level advisory publishes the gated attachment hashes of the resolved post', async () => {
+  const api = advisoryApi('post-advisory-post', { subjectKind: 'post_id' }) as unknown as DesktopApi;
+  const onAdvisoryGatedMediaHashesChange = vi.fn();
+  const onResolvedPostsChange = vi.fn();
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, { adultContentEnabled: false })}
+      onAdvisoryGatedMediaHashesChange={onAdvisoryGatedMediaHashesChange}
+      onResolvedPostsChange={onResolvedPostsChange}
+    />
+  );
+  runSearch();
+
+  expect(await screen.findByTestId('media-adult-gated-post-advisory-post')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(onAdvisoryGatedMediaHashesChange).toHaveBeenLastCalledWith([INDEX_IMAGE_HASH])
+  );
+  const publishedPosts = onResolvedPostsChange.mock.calls.flatMap(
+    ([posts]: [PostView[]]) => posts
+  );
+  expect(publishedPosts.map((post) => post.object_id)).not.toContain('post-advisory-post');
+});
+
+// #1107 / AC-6: advisory の無い結果でも、同じ blob が別の投稿でゲートされていればメディアだけを伏せる。
+test('a plain result whose blob is gated elsewhere shows the shared-media placeholder', async () => {
+  const api = {
+    ...advisoryApi('plain-result-post'),
+    searchCommunityNodeIndex: vi
+      .fn()
+      .mockResolvedValue({ entries: [indexEntry('plain-result-post', 'indexed text')] }),
+  } as unknown as DesktopApi;
+
+  render(
+    <CommunityIndexWorkspace
+      {...workspaceProps(api, {
+        mediaObjectUrls: { [INDEX_IMAGE_HASH]: 'blob:index-image' },
+        adultContentEnabled: false,
+      })}
+      gatedMediaHashes={[INDEX_IMAGE_HASH]}
+    />
+  );
+  runSearch();
+
+  const placeholder = await screen.findByTestId('media-adult-gated-plain-result-post');
+  expect(placeholder).toHaveTextContent('treated as adult material on another post');
+  expect(screen.queryByTestId('media-preview-plain-result-post')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('post-advisory-gated-plain-result-post')).not.toBeInTheDocument();
+});

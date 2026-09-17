@@ -60,7 +60,9 @@ export type PostMediaView = {
   state: 'loading' | 'ready' | 'unavailable' | 'gated' | 'pending';
   // #1055: `gated` の判定元。`advisory` は Community Node の推定(ADR 0046 §6)であり、
   // 投稿者の自己申告(`self_label`)とは文言を分ける。
-  gatedBy?: 'self_label' | 'advisory';
+  // #1107: `shared_media` は、この投稿自体は対象外だが、同じ blob が別の投稿で成人向けと
+  // 扱われているためメディアだけを代替表示にしている。
+  gatedBy?: 'self_label' | 'advisory' | 'shared_media';
   metaMime?: string | null;
   metaBytesLabel?: string | null;
   imagePreviewSrc?: string | null;

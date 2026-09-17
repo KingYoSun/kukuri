@@ -52,6 +52,8 @@ type UseDesktopShellViewModelsArgs = {
   locale: SupportedLocale;
   theme: DesktopTheme;
   profileAvatarPreviewUrl: string | null;
+  /// #1107: 表示設定 OFF の間ゲートする添付 blob hash(`useDesktopShellData` が計算する)。
+  gatedMediaHashes?: readonly string[];
 };
 
 const EMPTY_POSTS: PostView[] = [];
@@ -65,6 +67,7 @@ export function useDesktopShellViewModels({
   locale,
   theme,
   profileAvatarPreviewUrl,
+  gatedMediaHashes,
 }: UseDesktopShellViewModelsArgs) {
   const state = useDesktopShellStore(useShallow(selectShellViewModelsSlice));
   const activeTopic = state.activeTopic;
@@ -167,6 +170,7 @@ export function useDesktopShellViewModels({
     timelineContentAdvisories: state.timelineContentAdvisories,
     timelineAdvisoryLookup: state.timelineAdvisoryLookup,
     communityNodeManifests: state.communityNodeManifests,
+    gatedMediaHashes,
   });
 
   const {
@@ -382,6 +386,7 @@ export function useDesktopShellViewModels({
     selectedAuthorTimelinePostViews,
     threadPostViews,
     buildPostCardView,
+    gatedMediaHashes,
     topicNavItems,
     mentionCandidates,
     directMessageDraftViews,

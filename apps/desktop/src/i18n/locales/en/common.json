@@ -202,6 +202,7 @@
     "videoPosterAlt": "video preview",
     "adultGated": "Adult material (self-labeled). Enable display in Settings to load it.",
     "advisoryGated": "A Community Node estimates this media may contain adult material. Enable display in Settings to load it.",
+    "sharedMediaGated": "The same media is treated as adult material on another post. Enable display in Settings to load it.",
     "advisoryPending": "Checking the Community Node estimate"
   },
   "reactions": {

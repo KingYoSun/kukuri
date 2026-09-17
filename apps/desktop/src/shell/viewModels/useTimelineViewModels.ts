@@ -57,11 +57,14 @@ type UseTimelineViewModelsArgs = {
   timelineAdvisoryLookup?: TimelineAdvisoryLookupState;
   /// #1056: advisory の発行元の表示名を manifest から引く。
   communityNodeManifests?: DesktopShellState['communityNodeManifests'];
+  /// #1107: 表示設定 OFF の間ゲートする添付 blob hash(`useAdultGatedMediaHashes`)。
+  gatedMediaHashes?: readonly string[];
 };
 
 const EMPTY_ADVISORIES: TimelineContentAdvisoryIndex = {};
 const INACTIVE_LOOKUP: TimelineAdvisoryLookupState = { active: false, settled: {} };
 const EMPTY_MANIFESTS: DesktopShellState['communityNodeManifests'] = {};
+const EMPTY_HASHES: readonly string[] = [];
 
 export function useTimelineViewModels({
   activeJoinedChannels,
@@ -81,7 +84,9 @@ export function useTimelineViewModels({
   timelineContentAdvisories = EMPTY_ADVISORIES,
   timelineAdvisoryLookup = INACTIVE_LOOKUP,
   communityNodeManifests = EMPTY_MANIFESTS,
+  gatedMediaHashes = EMPTY_HASHES,
 }: UseTimelineViewModelsArgs) {
+  const gatedMediaHashSet = useMemo(() => new Set(gatedMediaHashes), [gatedMediaHashes]);
   const setUnsupportedVideoManifests = useDesktopShellFieldSetter(
     'unsupportedVideoManifests'
   );
@@ -129,9 +134,14 @@ export function useTimelineViewModels({
       const videoManifest = selectVideoManifest(post);
       // #1052: メディア表示データは「見つける」の解決済み投稿と同じ builder を使う。
       // #1056: 照会が未決の間はメディアを取得せずスケルトンにする(確定後の代替表示とは分ける)。
+      // #1107: 投稿自体は対象外でも、同じ blob が別の投稿でゲートされていればメディアだけを伏せる
+      // (本文は bytes 取得を伴わないため表示する)。照会中のスケルトンより確定した代替表示を優先する。
+      const sharedMediaGated =
+        !adultContentGated &&
+        post.attachments.some((attachment) => gatedMediaHashSet.has(attachment.hash));
       const media = buildPostMediaView(post, {
-        adultContentGated,
-        gatedBy,
+        adultContentGated: adultContentGated || sharedMediaGated,
+        gatedBy: sharedMediaGated ? 'shared_media' : gatedBy,
         advisoryPending: advisoryState.pending,
         locale,
         mediaObjectUrls,
@@ -291,6 +301,7 @@ export function useTimelineViewModels({
       adultContentEnabled,
       communityNodeManifests,
       developerModeEnabled,
+      gatedMediaHashSet,
       knownAuthorsByPubkey,
       localAuthorPubkey,
       localProfile,

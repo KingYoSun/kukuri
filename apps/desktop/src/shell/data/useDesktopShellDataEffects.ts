@@ -139,6 +139,19 @@ export function useDesktopShellDataEffects({
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
   const mediaFetchInputRef = useRef(new Map<string, AttachmentView>());
+  // #1107: 取得中の hash と、その取得を識別する番号。effect の再実行では取得結果を捨てない
+  // (捨てると取得済みの記録だけが残り、再取得されずスケルトンのまま残る)。ゲートで取得を
+  // 無効にしたときは記録を消し、完了した結果を表示に使わない。
+  const mediaFetchInFlightRef = useRef(new Map<string, number>());
+  const mediaFetchSequenceRef = useRef(0);
+  const gatedMediaHashesRef = useRef<ReadonlySet<string>>(new Set());
+  const mediaFetchMountedRef = useRef(true);
+  useEffect(() => {
+    mediaFetchMountedRef.current = true;
+    return () => {
+      mediaFetchMountedRef.current = false;
+    };
+  }, []);
   const setAdultContentEnabled = useDesktopShellFieldSetter('adultContentEnabled');
 
   // #858: 成人向け表現の表示設定(canonical は Rust 側ローカル JSON)を起動時に mirror する。
@@ -161,11 +174,14 @@ export function useDesktopShellDataEffects({
 
   // #858: 表示設定 OFF の間、ゲート対象 hash の表示済み object URL を破棄し、
   // 取得試行の記録も消して以後の取得を停止する(ON へ戻せば再取得される)。
+  // #1107: 取得中の hash も無効にし、完了した bytes を表示に使わない(INVAR-1)。
   useEffect(() => {
+    gatedMediaHashesRef.current = new Set(gatedAdultMediaHashes);
     if (gatedAdultMediaHashes.length === 0) {
       return;
     }
     for (const hash of gatedAdultMediaHashes) {
+      mediaFetchInFlightRef.current.delete(hash);
       const url = remoteObjectUrlRef.current.get(hash);
       if (url) {
         URL.revokeObjectURL(url);
@@ -541,7 +557,6 @@ export function useDesktopShellDataEffects({
   ]);
 
   useEffect(() => {
-    let disposed = false;
     const currentHashes = new Set(previewableMediaAttachments.map((attachment) => attachment.hash));
     for (const hash of mediaFetchInputRef.current.keys()) {
       if (!currentHashes.has(hash)) {
@@ -553,10 +568,27 @@ export function useDesktopShellDataEffects({
       if (typeof mediaObjectUrls[attachment.hash] === 'string') {
         continue;
       }
+      if (mediaFetchInFlightRef.current.has(attachment.hash)) {
+        continue;
+      }
       if (mediaFetchInputRef.current.get(attachment.hash) === attachment) {
         continue;
       }
       mediaFetchInputRef.current.set(attachment.hash, attachment);
+      const fetchId = ++mediaFetchSequenceRef.current;
+      mediaFetchInFlightRef.current.set(attachment.hash, fetchId);
+      // 完了時にこの取得の結果を使ってよいか。無効化されていれば記録を消さずに捨てる。
+      const settleFetch = () => {
+        const current = mediaFetchInFlightRef.current.get(attachment.hash) === fetchId;
+        if (current) {
+          mediaFetchInFlightRef.current.delete(attachment.hash);
+        }
+        return (
+          current &&
+          mediaFetchMountedRef.current &&
+          !gatedMediaHashesRef.current.has(attachment.hash)
+        );
+      };
 
       const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
       mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
@@ -571,13 +603,10 @@ export function useDesktopShellDataEffects({
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
-          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
-          if (disposed) {
-            if (nextUrl) {
-              URL.revokeObjectURL(nextUrl);
-            }
+          if (!settleFetch()) {
             return;
           }
+          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (!nextUrl) {
             logMediaDebug('warn', 'remote media fetch missing', {
               attempt: nextAttempt,
@@ -617,7 +646,7 @@ export function useDesktopShellDataEffects({
           });
         })
         .catch((fetchError: unknown) => {
-          if (disposed) {
+          if (!settleFetch()) {
             return;
           }
           logMediaDebug('warn', 'remote media fetch error', {
@@ -635,10 +664,6 @@ export function useDesktopShellDataEffects({
           );
         });
     }
-
-    return () => {
-      disposed = true;
-    };
   }, [
     api,
     mediaFetchAttemptRef,
