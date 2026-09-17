@@ -1,9 +1,8 @@
 # actionlint が runs-on の label を検査するための設定。
-# Blacksmith の runner label（#1073）。label 一覧は https://docs.blacksmith.sh/blacksmith-runners/overview
+# Namespace の runner profile（#1073）。Linux job は `;overrides.cache-tag=<tag>` で
+# Cache Volume を分けるため、label はパターンで登録する。
 self-hosted-runner:
   labels:
-    - blacksmith-4vcpu-ubuntu-2404
-    - blacksmith-8vcpu-ubuntu-2404
-    - blacksmith-16vcpu-ubuntu-2404
-    - blacksmith-8vcpu-windows-2025
-    - blacksmith-16vcpu-windows-2025
+    - namespace-profile-kukuri
+    - namespace-profile-kukuri;overrides.cache-tag=*
+    - namespace-profile-kukuri-win

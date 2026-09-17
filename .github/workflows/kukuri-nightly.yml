@@ -10,7 +10,7 @@ env:
 
 jobs:
   linux-app-api-slow:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-app-api-slow
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -22,16 +22,15 @@ jobs:
           toolchain: 1.92.0
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: App API slow iroh integration tests
         run: cargo xtask app-api-slow-test
 
   linux-additional-scenarios:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -66,10 +65,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Run scenario
         run: cargo xtask scenario ${{ matrix.scenario }}
@@ -83,7 +81,7 @@ jobs:
           if-no-files-found: warn
 
   linux-rust-static:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-static
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -114,10 +112,9 @@ jobs:
           node-version: 22
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-static
-          save-if: false
+          cache: rust
 
       - name: Doctor
         run: cargo xtask doctor
@@ -132,7 +129,7 @@ jobs:
         run: cargo xtask tauri-check
 
   linux-rust-tests:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-tests
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -157,10 +154,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Install nextest
         uses: taiki-e/install-action@nextest
@@ -169,7 +165,7 @@ jobs:
         run: cargo xtask rust-test
 
   linux-desktop-ui:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -207,10 +203,9 @@ jobs:
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Install desktop dependencies
         working-directory: apps/desktop
@@ -223,7 +218,7 @@ jobs:
         run: cargo xtask desktop-test
 
   linux-desktop-browser:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -261,10 +256,9 @@ jobs:
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Install desktop dependencies
         working-directory: apps/desktop
@@ -281,7 +275,7 @@ jobs:
         run: cargo xtask desktop-browser-test
 
   linux-cn:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -307,10 +301,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-cn
-          save-if: false
+          cache: rust
 
       - name: Community-node checks
         run: cargo xtask cn-check
@@ -319,7 +312,7 @@ jobs:
         run: cargo xtask cn-test
 
   linux-smoke:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -344,10 +337,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: E2E smoke
         run: cargo xtask e2e-smoke
@@ -361,7 +353,7 @@ jobs:
           if-no-files-found: warn
 
   linux-community-node:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -386,10 +378,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Community-node connectivity scenario
         env:
@@ -406,7 +397,7 @@ jobs:
           if-no-files-found: warn
 
   linux-community-node-multi-device:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -431,10 +422,9 @@ jobs:
           patchelf
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-dev
-          save-if: false
+          cache: rust
 
       - name: Community-node multi-device scenario
         env:
