@@ -179,7 +179,11 @@ async fn index_read(pool: &PgPool, post_id: &str) -> Result<Vec<ContentAdvisory>
     )
     .await?;
     assert_eq!(entries.len(), 1, "allow verdict must be surfaceable");
-    Ok(entries.into_iter().next().expect("surfaceable entry").content_advisories)
+    Ok(entries
+        .into_iter()
+        .next()
+        .expect("surfaceable entry")
+        .content_advisories)
 }
 
 fn categories(advisories: &[ContentAdvisory]) -> Vec<(SafetyCategory, String)> {
