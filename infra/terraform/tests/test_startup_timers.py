@@ -57,9 +57,9 @@ def next_elapse(timer, boot, started, last_service_start, now=None, last_trigger
     """systemd の monotonic timer の次回時刻（RandomizedDelaySec 加算前）。
 
     OnBootSec / OnActiveSec は基準時刻からの一回限りの予定。評価時点（既定は timer 起動時点）で
-    まだ来ていなければその時刻になる。過ぎていれば、基準時刻以降に trigger 済みなら予定に入らず、
-    未 trigger なら即時に実行される（systemd 249 で確認）。OnUnitActiveSec は service の
-    前回起動記録が無ければ予定に入らない。
+    まだ来ていなければその時刻になる。過ぎていれば、trigger 記録（Persistent の stamp を含み、
+    時刻は問わない）があれば予定に入らず、無ければ即時に実行される（systemd 249 で確認）。
+    OnUnitActiveSec は service の前回起動記録が無ければ予定に入らない。
     """
     now = started if now is None else now
     candidates = []
@@ -69,7 +69,7 @@ def next_elapse(timer, boot, started, last_service_start, now=None, last_trigger
         elapse = base + seconds(timer[key])
         if elapse > now:
             candidates.append(elapse)
-        elif last_trigger is None or last_trigger < base:
+        elif last_trigger is None:
             candidates.append(now)
     if 'OnUnitActiveSec' in timer and last_service_start is not None:
         candidates.append(last_service_start + seconds(timer['OnUnitActiveSec']))
