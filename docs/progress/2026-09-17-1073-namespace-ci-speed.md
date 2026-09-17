@@ -93,8 +93,16 @@ profile 側の前提（ユーザー設定）: `namespace-profile-kukuri` の cac
 
 ### 2 回目（`windows-fast` を Cache Volume へ変更した head）
 
-計測後に追記する。確認項目: `windows-fast` で junction の mount と post step の `cached`、Linux job の cache hit による短縮。
+run 35218391291 で全 job 成功。`windows-fast` は Cache Volume を junction で mount し、post step で全 path が `cached` になった（初回のため空）。Linux の Cache Volume は tag によって当たり外れがあり、外れた job は空または古い版を受け取った。詳細は [#1073 の comment](https://github.com/kukuri-app/kukuri/issues/1073) を参照。
 
 ## CI 計測（AC-1〜AC-3）
 
-merge 後に追記する。
+2026-09-17 の main 連続 3 run（run 35237509901 / 35237542903 / 35249923970）で判定し、2026-09-18 に Close した。数値と判定の全文は #1073 の comment にある。
+
+| 条件 | 結果 |
+| --- | --- |
+| AC-1 | run 全体の中央値 13.0 分（移行前 48 分） |
+| AC-2 | 2 本目以降の対象 6 job で、依存 crate の再 compile は 12 回中 5 回。Namespace が古い版や空の volume を渡すことを仕様として受け入れ、ユーザーの判断で「半数以下」の基準に改めた |
+| AC-3 | GitHub Actions cache は 12.56 GB だったが、超過分は範囲外の package 系 workflow の PR 用 rust-cache。ユーザーの判断で「対象 workflow が保存するのは pnpm だけ」の基準に改めた |
+
+後続の改善は #1116（Docker の layer cache）、#1117（同時実行枠、完了）、#1120（xtask の軽量化と Cache Volume の容量）、#1121（test の並列度）、#1122（cn-images の build 構成）で扱う。

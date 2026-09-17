@@ -6,5 +6,6 @@ self-hosted-runner:
     - namespace-profile-kukuri
     - namespace-profile-kukuri;overrides.cache-tag=*
     - namespace-profile-kukuri-win
+    - namespace-profile-kukuri-win;overrides.cache-tag=*
     - namespace-profile-kukuri-4v;overrides.cache-tag=*
     - namespace-profile-kukuri-cn-images
