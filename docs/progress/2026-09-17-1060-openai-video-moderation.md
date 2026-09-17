@@ -206,3 +206,32 @@ runbookの移転時の手順も同期した。CIの再実行で認証とplanの�
 検証環境の失敗は製品成功と分離した。WSLでWindows worktreeのgitdirを読む際はgit.exeのwrapperを使い、
 Docker credential helperを含むPATHを保持して専用Compose project/portを起動した。最初の環境不備やfixture失敗を成功扱いせず、
 修正後に全suiteを完走した。WSLのtargetは再起動で消える `/tmp` から検証用cacheへ移した。
+
+## CIで検出したdecoder設定差分
+
+`7bb25896` のlinux-cnで、FFmpeg 6.1.1の通常fixture抽出がnonzero終了した。
+Ubuntu 24.04でCPU数64を模した実decodeも失敗したため、入力decoderのthread自動選択を調査。
+元の `-threads 1` は `-i` より後にあり出力JPEG側にしか適用されていなかった。
+入力既定を64threadにした `input_decoder_threads_are_bounded` を追加すると、修正前は
+`Resource temporarily unavailable` で失敗。ffprobeと `-i` 前の入力decoderも1threadへ固定後は
+同じ512 MiB制限でMP4/WebMの60秒・8frameが成功した。
+
+- メモリ・CPU時間・出力サイズ・network sandboxの上限は緩めない。
+- 抽出設定の変更をcacheへ反映するため `video-midpoints-v2` に更新する。
+- Ubuntu 22.04の全video suite（unit1 + integration7）と、CPU数64を模したUbuntu 24.04のintegration7が成功。
+- production Debian runtimeでもPythonを必要とするcancel test以外の6件が成功。
+  cancel/network境界はLinuxの上記suiteが担い、test skipをその成功の代わりにしない。
+- このdecoder deltaの全CN検証、実API計測との照合、独立監査、CIを改めて確認してからmergeする。
+
+### decoder修正後の再検証
+
+`video-midpoints-v2` の `cn-check` / `cn-test` / `cn-e2e` / oversized はすべて再成功。
+同じproduction Debian runtimeでv2のtest binaryを用い、実API cold14requestと再利用を再測定した。
+MP4単一frame 3,241ms、WebM単一frame 932ms、音声付き12秒59,744ms、60秒177,982ms。
+別著者・service再構築後の4件は67/69/70/64msで、元blob fetch・decode・API追加はすべて0。
+計測JSONの `decoder_v2_recheck` に結果と関連sourceのSHA256を記録し、最初の計測も履歴として保持した。
+初回readiness実API probeのclient/credential処理には変更がなく、v2の同梱decoder probeも実行済み。
+本段階の実APIは初回16 + v2再検証14 = 30request（計画時の3requestは別の履歴）。
+
+同じCIで既存 `theme-palette.spec.ts` の色判定も失敗したが、desktopの製品コードとtestに今回のdiffはない。
+fixture/期待値の変更やskipで回避せず、更新headの通常CIでもう一度確認する。

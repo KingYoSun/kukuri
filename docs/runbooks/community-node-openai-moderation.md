@@ -56,6 +56,7 @@ deploy:
 
 `docker/cn/Dockerfile` は cn-indexer / cn-cli imageへFFmpeg・ffprobeを導入し、decoder build情報を保存する。
 ComposeのindexerとTerraformのreadinessには専用tmpfsを設定する。通常diskへfallbackしない。
+入力decoder・probe・JPEG encoderは各1threadに固定する（`video-midpoints-v2`）。
 MP4/H.264、WebM/VP8・VP9、32 MiB・600秒以下・長辺3840/短辺2160以下を扱う。
 `N=min(8,max(1,ceil(duration/5秒)))` で全区間の中央時刻から長辺512px以下のJPEGを作り、1requestにつき1枚送る。
 静止画はJPEG/PNG/GIF/WebPを正規化し、アニメーションGIF/WebP/APNGは拒否する。

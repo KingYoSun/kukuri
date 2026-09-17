@@ -2,7 +2,7 @@ use kukuri_cn_safety::ScanError;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
 
-pub const EXTRACTOR_VERSION: &str = "video-midpoints-v1";
+pub const EXTRACTOR_VERSION: &str = "video-midpoints-v2";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VideoExtractConfig {

@@ -121,6 +121,8 @@ async fn extract_job(
     let mut args = args_of(&[
         "-v",
         "error",
+        "-threads",
+        "1",
         "-protocol_whitelist",
         "file,pipe",
         "-format_whitelist",
@@ -172,6 +174,9 @@ async fn extract_job(
     if mp4 {
         args.extend(args_of(&["-enable_drefs", "0", "-use_absolute_path", "0"]));
     }
+    // Input and output codec options have separate scopes in FFmpeg. Bound the
+    // decoder before -i as well as the JPEG encoder below, regardless of CPU count.
+    args.extend(args_of(&["-threads", "1"]));
     args.push("-i".into());
     args.push(input.as_os_str().into());
     args.extend(args_of(&[
