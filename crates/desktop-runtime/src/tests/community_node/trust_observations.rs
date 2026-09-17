@@ -553,7 +553,7 @@ async fn local_mute_succeeds_when_cn_unreachable() {
 }
 
 #[tokio::test]
-async fn sharing_consent_required_stops_sending_until_reenabled() {
+async fn sharing_consent_required_revokes_and_stops_sending_until_reenabled() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let harness = harness().await;
     harness.enable(false).await;
@@ -566,9 +566,18 @@ async fn sharing_consent_required_stops_sending_until_reenabled() {
         .runtime
         .flush_community_node_trust_observations_once()
         .await;
+    // 同意が失効したら、送信済みの観測も残さず削除を要求する（要求は次の tick で送る）。
     let status = harness.status().await;
     assert!(!status.enabled);
     assert!(status.needs_reconsent);
+    assert_eq!(status.pending_count, 0);
+    assert!(status.revocation_pending);
+    harness
+        .runtime
+        .flush_community_node_trust_observations_once()
+        .await;
+    assert_eq!(harness.state.revocations.load(Ordering::SeqCst), 1);
+    assert!(!harness.status().await.revocation_pending);
 
     // 再同意まで、操作は積まず送らない。
     *harness.state.submit_error.lock().await = None;
@@ -579,42 +588,41 @@ async fn sharing_consent_required_stops_sending_until_reenabled() {
         .await;
     assert_eq!(harness.submission_count().await, 0);
 
-    // 再同意すると、止まっていた間に積んだ送信待ちを捨てずに送る。
+    // 再同意すると提供を再開する。既存分を選ばなければ、以後の操作だけを送る。
     let status = harness.enable(false).await;
     assert!(status.enabled);
     assert!(!status.needs_reconsent);
-    // 提供が止まっている間の操作は積まないが、止まる前に積んだ分は捨てずに送る。
-    let targets: Vec<String> = harness
-        .submitted()
-        .await
-        .into_iter()
-        .map(|observation| observation.target_pubkey.0)
-        .collect();
-    assert_eq!(targets, vec![author('1')]);
-    assert_eq!(harness.status().await.pending_count, 0);
+    assert!(!status.revocation_pending);
+    assert_eq!(harness.submission_count().await, 0);
+    harness.mute(author('3').as_str()).await;
+    harness
+        .runtime
+        .flush_community_node_trust_observations_once()
+        .await;
+    let submitted = harness.submitted().await;
+    assert_eq!(submitted.len(), 1);
+    assert_eq!(submitted[0].target_pubkey.as_str(), author('3'));
     harness.finish().await;
 }
 
 #[tokio::test]
 async fn reconsent_does_not_send_observations_that_no_longer_match_local_state() {
-    // 提供が止まっている間の解除は積まれないため、止まる前の「有効」が残ったままだと、
-    // 再同意で解除済みの観測を送ってしまう。端末の現在の状態と突き合わせて捨てる。
+    // 提供が止まっている間の解除は積まれない。止まる前の送信待ちが残っていても、
+    // 端末の現在の状態と合わないものは再同意時に捨てる。
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let harness = harness().await;
     harness.enable(false).await;
-    *harness.state.submit_error.lock().await = Some((
-        StatusCode::FORBIDDEN,
-        "TRUST_OBSERVATION_SHARING_CONSENT_REQUIRED".to_string(),
-    ));
+    *harness.state.submit_error.lock().await =
+        Some((StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE".to_string()));
     harness.mute(author('1').as_str()).await;
     harness.mute(author('2').as_str()).await;
     harness
         .runtime
         .flush_community_node_trust_observations_once()
         .await;
-    assert!(harness.status().await.needs_reconsent);
+    assert_eq!(harness.status().await.pending_count, 2);
 
-    // 止まっている間に author 1 のミュートを解除する（解除は積まれない）。
+    // 送信できていない間に author 1 のミュートを解除する（提供は有効なので解除も積まれる）。
     harness
         .runtime
         .unmute_author(AuthorRequest {
@@ -622,14 +630,21 @@ async fn reconsent_does_not_send_observations_that_no_longer_match_local_state()
         })
         .await
         .expect("unmute");
-
     *harness.state.submit_error.lock().await = None;
     harness.enable(false).await;
     let submitted = harness.submitted().await;
-    assert_eq!(submitted.len(), 1, "{submitted:?}");
-    assert_eq!(submitted[0].target_pubkey.as_str(), author('2'));
-    assert!(submitted[0].active);
-    assert_eq!(harness.status().await.pending_count, 0);
+    let targets: Vec<&str> = submitted
+        .iter()
+        .map(|observation| observation.target_pubkey.as_str())
+        .collect();
+    assert!(targets.contains(&author('2').as_str()), "{targets:?}");
+    // 解除は解除として送られ、古い「有効」は送られない。
+    let author_one = author('1');
+    let one: Vec<&TrustObservation> = submitted
+        .iter()
+        .filter(|observation| observation.target_pubkey.as_str() == author_one)
+        .collect();
+    assert!(one.iter().all(|observation| !observation.active), "{one:?}");
     harness.finish().await;
 }
 

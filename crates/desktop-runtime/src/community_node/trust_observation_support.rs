@@ -374,13 +374,18 @@ impl DesktopRuntime {
                     }
                 }
             }
+            // 提供の同意が失効した / 文書が無くなった CN には、送信済みの観測も残さない。
+            // 送信待ちを破棄したうえで削除を要求し、再同意までは新しい観測を送らない。
             SubmitOutcome::ConsentRequired => {
                 node.enabled = false;
                 node.needs_reconsent = true;
+                node.pending.clear();
+                node.revocation_pending = true;
             }
             SubmitOutcome::NotOffered => {
                 node.enabled = false;
                 node.pending.clear();
+                node.revocation_pending = true;
             }
             SubmitOutcome::Retry => return Ok(()),
         }
@@ -615,10 +620,15 @@ impl DesktopRuntime {
             (TrustObservationKind::Block, SocialConnectionKind::Blocking),
         ] {
             for view in self.app_service.list_social_connections(connection).await? {
-                current.insert(pending_key(
-                    normalize_pubkey(view.author_pubkey.as_str())?.as_str(),
-                    kind,
-                ));
+                // 正規化できない保存値（旧 version の残骸など）は観測にできないので飛ばす。
+                match normalize_pubkey(view.author_pubkey.as_str()) {
+                    Ok(pubkey) => {
+                        current.insert(pending_key(pubkey.as_str(), kind));
+                    }
+                    Err(error) => {
+                        warn!(error = %error, "skipped a social connection with an invalid pubkey");
+                    }
+                }
             }
         }
         {
