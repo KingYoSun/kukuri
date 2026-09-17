@@ -59,6 +59,10 @@ export default defineConfig({
           // run two files at a time: #1121 measured repeated CI runs at this
           // width without failures. Lower it again if flakes come back.
           maxWorkers: 2,
+          // これらは full App を mount して数十回の操作を挟むため、既定の 5 秒では
+          // CPU が混むと待ち切れずに落ちる（#1121 の反復計測で 20 回中 1 回）。
+          // timeout は待ち時間の上限であって assertion ではないので、余裕を持たせる。
+          testTimeout: 20000,
           sequence: { groupOrder: 1 },
         },
       },
