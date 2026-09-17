@@ -396,8 +396,9 @@ scenario は Feature Data Classification の「2026-09-15 追加」3 件を正�
 - hold / exclude / 失敗の再 scan では失効させない（subject は index されず、signal は従来どおり集約される）。
 - 失効させない行: operator 確定の印がある行（§7.3、#1058）、`appeal_status` が `Disputed` / `Cleared` の行、
   appeal 通報から参照される行（棄却 = 判定維持を含む）、critical・spam / malware / phishing、
-  `ClassifierScore` 以外の basis。これらが残る subject では照会が advisory を返し続ける（operator・審査の
-  判断を scanner の判定より優先する）。
+  `ClassifierScore` 以外の basis。operator・審査の判断を scanner の判定より優先するため、nsfw / objectionable の
+  `Disputed` 行・operator 確定行・棄却済み行が残る subject では照会が advisory を返し続ける（`Cleared` 行は
+  従来どおり照会から除外される）。
 - 行は削除しない。signed moderation event は不変で追加発行もしない（§7.3）。配布済み advisory は既存の
   `expires_at` 失効契約（配布クエリと trust 供給から除外）で伝わる。nsfw / objectionable は元から trust 寄与 0
   のため評価値は変わらず、利用者向け trust read の basis から失効行が外れる。
