@@ -21,7 +21,26 @@ export async function seedUnconsentedCommunityNodes(page: Page, {
         api.fetchCommunityNodePolicies = async (baseUrl, language) => {
           calls.push(`policies:${baseUrl}`);
           if (failPoliciesOnce && !failed) { failed = true; throw new Error('offline fixture'); }
-          return fetch(baseUrl, language);
+          // #1106: node が配信する Markdown 本文(見出し・箇条書き・引用・リンク)を再現する。
+          const response = await fetch(baseUrl, language);
+          return {
+            ...response,
+            policies: response.policies.map((policy) => policy.policy_slug === 'terms_of_service'
+              ? {
+                  ...policy,
+                  body_markdown: [
+                    policy.body_markdown,
+                    '',
+                    '> Note: generated from the operator config. This is not legal advice.',
+                    '',
+                    '## Scope',
+                    '',
+                    '- Applies only to features this node provides, such as `index` and `relay`.',
+                    '- Contact: [operator support](https://example.com/support)',
+                  ].join('\n'),
+                }
+              : policy),
+          };
         };
         const accept = api.acceptCommunityNodeConsents.bind(api);
         api.acceptCommunityNodeConsents = async (...args) => {

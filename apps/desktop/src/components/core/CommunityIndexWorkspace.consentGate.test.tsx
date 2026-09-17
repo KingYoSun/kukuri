@@ -44,17 +44,25 @@ test('community index surfaces a consent prompt and per-node policy modal before
 
   const dialog = await screen.findByRole('dialog');
   expect(fetchPolicies).toHaveBeenCalledWith(NODE, 'en');
-  // 公開カタログ由来の文書本文と版が提示される。
+  // 公開カタログ由来の文書は見出しで一覧され(#1106)、展開すると本文を読める。
+  const terms = await within(dialog).findByRole('button', { name: 'Terms of Service' });
+  const privacy = within(dialog).getByRole('button', { name: 'Privacy Policy' });
+  expect(terms).toHaveAttribute('aria-expanded', 'false');
+  expect(privacy).toHaveAttribute('aria-expanded', 'false');
+  await user.click(terms);
+  await user.click(privacy);
   expect(
-    await within(dialog).findByText('You must follow the community node terms of service.')
+    within(dialog).getByText('You must follow the community node terms of service.')
   ).toBeInTheDocument();
   expect(
     within(dialog).getByText('You must acknowledge the community node privacy policy.')
   ).toBeInTheDocument();
+  await user.click(privacy);
+  expect(privacy).toHaveAttribute('aria-expanded', 'false');
 
   await user.click(within(dialog).getByRole('button', { name: 'Accept' }));
 
-  // 提示された文書と版をそのまま受諾し、表示言語を記録用に渡す。
+  // 折りたたみ中の文書も含め、提示された文書と版をそのまま受諾し、表示言語を記録用に渡す。
   expect(acceptConsents).toHaveBeenCalledWith(
     NODE,
     [
@@ -82,7 +90,7 @@ test('declining the consent modal closes it without accepting', async () => {
 
   await user.click(screen.getByRole('button', { name: `Review policies: ${NODE}` }));
   const dialog = await screen.findByRole('dialog');
-  await within(dialog).findByText('You must follow the community node terms of service.');
+  await within(dialog).findByRole('button', { name: 'Terms of Service' });
 
   await user.click(within(dialog).getByRole('button', { name: 'Not now' }));
 

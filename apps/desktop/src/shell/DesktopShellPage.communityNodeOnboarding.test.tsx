@@ -33,7 +33,7 @@ test('explains the configured first node, then enables search immediately after 
   expect(search).not.toHaveBeenCalled();
   await user.click(within(intro).getByRole('button', { name: 'Review terms' }));
   const terms = await screen.findByRole('dialog');
-  await within(terms).findByText('You must follow the community node terms of service.');
+  await within(terms).findByRole('button', { name: 'Terms of Service' });
   expect(screen.getAllByRole('dialog')).toHaveLength(1);
   expect(policies).toHaveBeenCalledWith(FIRST, 'en');
   expect(accept).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ test('Later does not accept, does not repeat, and leaves the Explore terms actio
   expect(fetch).not.toHaveBeenCalled();
   const explore = await screen.findByTestId('community-index-explore');
   await user.click(within(explore).getByRole('button', { name: 'Review terms' }));
-  await within(await screen.findByRole('dialog')).findByText('You must follow the community node terms of service.');
+  await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Terms of Service' });
   await user.keyboard('{Escape}');
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(accept).not.toHaveBeenCalled();

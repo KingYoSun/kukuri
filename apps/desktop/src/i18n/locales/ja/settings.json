@@ -205,6 +205,7 @@
       "optional": "任意",
       "updatedBadge": "更新",
       "updatedDetail": "v{{previous}} から v{{current}} に更新されました。",
+      "updatedContentDetail": "内容が更新されました。",
       "effectiveDate": "施行日 {{date}}",
       "language": "言語 {{language}}",
       "referenceTranslation": "参考訳です。正文の内容が優先されます。",

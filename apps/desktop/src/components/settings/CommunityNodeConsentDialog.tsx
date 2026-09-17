@@ -1,5 +1,8 @@
-import { useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChevronRight } from 'lucide-react';
+
+import { MarkdownDocument } from '@/components/MarkdownDocument';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Notice } from '@/components/ui/notice';
 
-import { type CommunityNodeConsentView } from './types';
+import { type CommunityNodeConsentPolicyView, type CommunityNodeConsentView } from './types';
 
 type CommunityNodeConsentDialogProps = {
   open: boolean;
@@ -103,91 +106,13 @@ export function CommunityNodeConsentDialog({
             <Notice>{t('settings:communityNode.consent.noPolicies')}</Notice>
           ) : null}
 
-          {consent.loaded
-            ? consent.policies.map((policy) => (
-                <section
-                  key={policy.policySlug}
-                  className='space-y-3 rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)] p-4'
-                >
-              <div className='flex flex-wrap items-start justify-between gap-2'>
-                <div className='min-w-0 space-y-1'>
-                  <h5 className='break-words text-sm font-semibold text-foreground'>
-                    {policy.title}
-                  </h5>
-                  <p className='text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]'>
-                    v{policy.policyVersion}
-                  </p>
-                  {policy.effectiveDate || policy.language ? (
-                    <p className='text-xs text-[var(--muted-foreground)]'>
-                      {[
-                        policy.effectiveDate
-                          ? t('settings:communityNode.consent.effectiveDate', {
-                              date: policy.effectiveDate,
-                            })
-                          : null,
-                        policy.language
-                          ? t('settings:communityNode.consent.language', {
-                              language: policy.language,
-                            })
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' / ')}
-                    </p>
-                  ) : null}
-                  {policy.fallback ? (
-                    <p className='text-xs text-[var(--muted-foreground)]'>
-                      {t('settings:communityNode.consent.authoritativeFallback', {
-                        language: policy.authoritativeLanguage ?? policy.language ?? 'unknown',
-                      })}
-                    </p>
-                  ) : policy.referenceTranslation ? (
-                    <p className='text-xs text-[var(--muted-foreground)]'>
-                      {t('settings:communityNode.consent.referenceTranslation')}
-                    </p>
-                  ) : null}
-                </div>
-                <div className='flex flex-wrap items-center gap-2'>
-                  {policy.required ? (
-                    <Badge tone='accent'>{t('settings:communityNode.consent.required')}</Badge>
-                  ) : (
-                    <Badge tone='neutral'>{t('settings:communityNode.consent.optional')}</Badge>
-                  )}
-                  {policy.updated ? (
-                    <Badge tone='warning'>{t('settings:communityNode.consent.updatedBadge')}</Badge>
-                  ) : null}
-                </div>
-              </div>
-
-              {policy.updated && policy.previouslyAcceptedVersion != null ? (
-                <p className='text-xs text-[var(--muted-foreground)]'>
-                  {t('settings:communityNode.consent.updatedDetail', {
-                    previous: policy.previouslyAcceptedVersion,
-                    current: policy.policyVersion,
-                  })}
-                </p>
-              ) : null}
-
-              <p className='text-sm text-[var(--muted-foreground)]'>
-                {policy.acceptedAtLabel
-                  ? t('settings:communityNode.consent.acceptedAt', {
-                      timestamp: policy.acceptedAtLabel,
-                    })
-                  : t('settings:communityNode.consent.notAccepted')}
-              </p>
-
-              {policy.body.trim() ? (
-                <p className='whitespace-pre-wrap break-words text-sm leading-6 text-foreground'>
-                  {policy.body}
-                </p>
-              ) : (
-                <p className='text-sm italic text-[var(--muted-foreground)]'>
-                  {t('settings:communityNode.consent.noBody')}
-                </p>
-              )}
-                </section>
-              ))
-            : null}
+          {consent.loaded && consent.policies.length > 0 ? (
+            <ul className='space-y-3'>
+              {consent.policies.map((policy) => (
+                <ConsentPolicyItem key={`${baseUrl}:${policy.policySlug}`} policy={policy} />
+              ))}
+            </ul>
+          ) : null}
         </DialogBody>
 
         <DialogFooter className='flex flex-wrap justify-end gap-2'>
@@ -209,5 +134,93 @@ export function CommunityNodeConsentDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// #1106: 文書ごとの折りたたみ。見出し行だけで必須・更新・同意状況が分かり、本文は展開時に描画する。
+// 折りたたみは表示だけの状態で、同意対象(一覧のすべての文書)は変えない。
+function ConsentPolicyItem({ policy }: { policy: CommunityNodeConsentPolicyView }) {
+  const { t } = useTranslation('settings');
+  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const buttonId = `${id}-toggle`;
+  const panelId = `${id}-panel`;
+  const summaryId = `${id}-summary`;
+  const previous = policy.previouslyAcceptedVersion;
+  const updateDetail = policy.updated && previous != null
+    ? previous < policy.policyVersion
+      ? t('communityNode.consent.updatedDetail', { previous, current: policy.policyVersion })
+      : t('communityNode.consent.updatedContentDetail')
+    : null;
+  const metadata = [
+    policy.effectiveDate ? t('communityNode.consent.effectiveDate', { date: policy.effectiveDate }) : null,
+    policy.language ? t('communityNode.consent.language', { language: policy.language }) : null,
+  ].filter(Boolean).join(' / ');
+
+  return (
+    <li className='rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface-panel-soft)]'>
+      <h3 className='text-sm font-semibold text-foreground'>
+        <button
+          id={buttonId}
+          type='button'
+          aria-expanded={expanded}
+          aria-controls={expanded ? panelId : undefined}
+          aria-describedby={summaryId}
+          className='flex min-h-11 w-full items-start gap-2 rounded-[16px] px-4 pb-1 pt-3 text-left'
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <ChevronRight
+            aria-hidden='true'
+            className={`mt-0.5 size-4 shrink-0 text-[var(--muted-foreground)] motion-safe:transition-transform ${expanded ? 'rotate-90' : ''}`}
+          />
+          <span className='min-w-0 break-words [overflow-wrap:anywhere]'>{policy.title}</span>
+        </button>
+      </h3>
+      <div id={summaryId} className='flex flex-wrap items-center gap-x-2 gap-y-1 pb-3 pl-10 pr-4 text-xs text-[var(--muted-foreground)]'>
+        {policy.required ? (
+          <Badge tone='accent'>{t('communityNode.consent.required')}</Badge>
+        ) : (
+          <Badge tone='neutral'>{t('communityNode.consent.optional')}</Badge>
+        )}
+        {policy.updated ? <Badge tone='warning'>{t('communityNode.consent.updatedBadge')}</Badge> : null}
+        <span className='font-semibold uppercase tracking-[0.08em]'>v{policy.policyVersion}</span>
+        <span>
+          {policy.acceptedAtLabel
+            ? t('communityNode.consent.acceptedAt', { timestamp: policy.acceptedAtLabel })
+            : t('communityNode.consent.notAccepted')}
+        </span>
+        {updateDetail ? <span className='basis-full'>{updateDetail}</span> : null}
+      </div>
+      {expanded ? (
+        <div
+          id={panelId}
+          role='region'
+          aria-labelledby={buttonId}
+          className='space-y-3 border-t border-[var(--border-subtle)] px-4 py-3'
+        >
+          {metadata || policy.fallback || policy.referenceTranslation ? (
+            <div className='space-y-1 text-xs text-[var(--muted-foreground)]'>
+              {metadata ? <p>{metadata}</p> : null}
+              {policy.fallback ? (
+                <p>
+                  {t('communityNode.consent.authoritativeFallback', {
+                    language: policy.authoritativeLanguage ?? policy.language ?? 'unknown',
+                  })}
+                </p>
+              ) : policy.referenceTranslation ? (
+                <p>{t('communityNode.consent.referenceTranslation')}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {policy.body.trim() ? (
+            <MarkdownDocument source={policy.body} headingLevel={4} />
+          ) : (
+            <p className='text-sm italic text-[var(--muted-foreground)]'>
+              {t('communityNode.consent.noBody')}
+            </p>
+          )}
+        </div>
+      ) : null}
+    </li>
   );
 }

@@ -195,8 +195,11 @@ test('community node policies narrow English light', async ({ page }) => {
   await page.goto('/#/explore?topic=kukuri%3Atopic%3Ageneral');
   await page.getByRole('dialog').getByRole('button', { name: 'Review terms' }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('You must follow the community node terms of service.')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Privacy Policy' })).toBeVisible();
   await expect(dialog).toHaveScreenshot('community-node-policies-en-light.png');
+  await dialog.getByRole('button', { name: 'Terms of Service' }).click();
+  await expect(dialog.getByRole('heading', { name: 'Scope' })).toBeVisible();
+  await expect(dialog).toHaveScreenshot('community-node-policy-expanded-en-light.png');
 });
 
 test('Explore Japanese long policy labels stay inside the Column', async ({ page }) => {
