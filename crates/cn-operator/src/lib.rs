@@ -14,6 +14,8 @@ pub mod config;
 pub mod deploy;
 pub mod docs;
 mod docs_moderation_policy;
+mod docs_trust_observation_sharing;
+pub use docs_trust_observation_sharing::TRUST_OBSERVATION_SHARING_SLUG;
 pub mod drift;
 pub mod manifest;
 pub mod moderation_config;
@@ -28,8 +30,8 @@ pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestinati
 pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
     DeployConfig, DeployProfile, LegalConfig, LegalDocumentConfig, LegalDocumentKind,
-    OperatorConfig, ReferenceTranslationConfig, ResolvedConfig, ServerConfig,
-    TRUST_OBSERVATION_SHARING_SLUG, load_and_validate, parse_config, resolve_and_validate,
+    OperatorConfig, ReferenceTranslationConfig, ResolvedConfig, ServerConfig, load_and_validate,
+    parse_config, resolve_and_validate,
 };
 pub use deploy::generate_tfvars;
 pub use docs::{GeneratedFile, generate_all};

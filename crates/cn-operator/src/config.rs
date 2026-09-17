@@ -68,10 +68,6 @@ pub enum LegalDocumentKind {
     TrustObservationSharing,
 }
 
-/// 観測提供の任意文書に使う固定 slug（`kukuri_cn_protocol::TRUST_OBSERVATION_SHARING_POLICY_SLUG`
-/// と同じ値。client は slug で文書を識別する）。
-pub const TRUST_OBSERVATION_SHARING_SLUG: &str = "trust_observation_sharing";
-
 impl LegalDocumentKind {
     pub const ALL: [Self; 7] = [
         Self::Terms,
@@ -762,20 +758,7 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
             }
         }
     }
-    if let Some(document) = legal
-        .documents
-        .iter()
-        .find(|document| document.kind == LegalDocumentKind::TrustObservationSharing)
-    {
-        if document.required {
-            bail!("trust_observation_sharing は任意同意の文書です。required: false にしてください");
-        }
-        if document.slug.trim() != TRUST_OBSERVATION_SHARING_SLUG {
-            bail!(
-                "trust_observation_sharing の slug は `{TRUST_OBSERVATION_SHARING_SLUG}` にしてください"
-            );
-        }
-    }
+    crate::docs_trust_observation_sharing::validate_document(legal)?;
     for kind in LegalDocumentKind::ALL {
         if !kinds.contains(&kind) {
             bail!("legal.documents に kind {:?} が必要です", kind);

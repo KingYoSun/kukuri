@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "lines": 1318,
+      "lines": 1324,
       "path": "crates/cn-operator/src/config.rs"
     },
     {
@@ -21,7 +21,7 @@
       "path": "crates/metaverse-host/src/lib.rs"
     },
     {
-      "lines": 1149,
+      "lines": 1152,
       "path": "crates/cn-operator/src/docs.rs"
     },
     {
