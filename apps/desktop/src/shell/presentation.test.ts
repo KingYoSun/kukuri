@@ -766,6 +766,44 @@ describe('communityNodeConsentView', () => {
     expect(policy.acceptedAtLabel).toMatch(/2025/);
   });
 
+  // #1061: 観測提供の任意文書は CN 設定の専用トグルでだけ同意する。一括受諾の一覧に出さない。
+  it('omits the observation sharing document from the consent catalog', () => {
+    const view = communityNodeConsentView(
+      baseStatus(),
+      catalogEntry({
+        status: 'ok',
+        policies: [
+          {
+            policy_slug: 'terms',
+            policy_version: 1,
+            title: 'Terms',
+            body_markdown: 'Body text',
+            required: true,
+            is_current: true,
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
+          },
+          {
+            policy_slug: 'trust_observation_sharing',
+            policy_version: 1,
+            title: 'Sharing',
+            body_markdown: 'Sharing body',
+            required: false,
+            is_current: true,
+            reference_translation: false,
+            fallback: false,
+            material_change: false,
+            requires_reconsent: false,
+          },
+        ],
+      })
+    );
+
+    expect(view.policies.map((policy) => policy.policySlug)).toEqual(['terms']);
+  });
+
   it('flags a required re-acceptance as a pending update and ignores optional policies', () => {
     const status = baseStatus({
       local_consent: {

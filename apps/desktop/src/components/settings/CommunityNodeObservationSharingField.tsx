@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Notice } from '@/components/ui/notice';
 import type { CommunityNodeObservationSharingStatus } from '@/lib/api';
+import { TRUST_OBSERVATION_SHARING_POLICY_SLUG } from '@/lib/api/observationSharing';
 
 /// #1061: Community Node ごとに、この端末のブロック・ミュートを評価へ提供するかを選ぶ。
 ///
@@ -70,7 +71,13 @@ export function CommunityNodeObservationSharingField({
   }, [load]);
 
   // 文書を公開していないノードでは提供の選択肢を出さない。
-  if (!status?.offered || !status.policy) return null;
+  if (
+    !status?.offered ||
+    !status.policy ||
+    status.policy.policy_slug !== TRUST_OBSERVATION_SHARING_POLICY_SLUG
+  ) {
+    return null;
+  }
 
   const policy = status.policy;
   const openDialog = () => {

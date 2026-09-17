@@ -615,7 +615,8 @@ impl DesktopRuntime {
             node.enabled = true;
             node.needs_reconsent = false;
             node.revocation_pending = false;
-            node.pending = pending;
+            // 再同意までの間に積んだ送信待ちは捨てない。既存分（同じ対象・種別）は新しい署名で置き換える。
+            node.pending.extend(pending);
             save_state(&self.db_path, &state)?;
         }
         self.flush_community_node_trust_observations_once().await;

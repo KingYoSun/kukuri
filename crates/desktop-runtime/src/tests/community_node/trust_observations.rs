@@ -579,9 +579,19 @@ async fn sharing_consent_required_stops_sending_until_reenabled() {
         .await;
     assert_eq!(harness.submission_count().await, 0);
 
+    // 再同意すると、止まっていた間に積んだ送信待ちを捨てずに送る。
     let status = harness.enable(false).await;
     assert!(status.enabled);
     assert!(!status.needs_reconsent);
+    // 提供が止まっている間の操作は積まないが、止まる前に積んだ分は捨てずに送る。
+    let targets: Vec<String> = harness
+        .submitted()
+        .await
+        .into_iter()
+        .map(|observation| observation.target_pubkey.0)
+        .collect();
+    assert_eq!(targets, vec![author('1')]);
+    assert_eq!(harness.status().await.pending_count, 0);
     harness.finish().await;
 }
 
