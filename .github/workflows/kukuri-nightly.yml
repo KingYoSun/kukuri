@@ -7,6 +7,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # #1120: CI の dev / test build は行番号だけの debuginfo にし、link 時間と Cache Volume の容量を減らす。
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   linux-app-api-slow:
@@ -27,7 +29,11 @@ jobs:
           cache: rust
 
       - name: App API slow iroh integration tests
-        run: cargo xtask app-api-slow-test
+        run: cargo xtask-lite app-api-slow-test
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-additional-scenarios:
     runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
@@ -80,6 +86,10 @@ jobs:
           path: test-results/kukuri/
           if-no-files-found: warn
 
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask ci-prune-target
+
   linux-rust-static:
     runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-static
     timeout-minutes: 45
@@ -117,16 +127,20 @@ jobs:
           cache: rust
 
       - name: Doctor
-        run: cargo xtask doctor
+        run: cargo xtask-lite doctor
 
       - name: Oversized file report
-        run: cargo xtask oversized-files
+        run: cargo xtask-lite oversized-files
 
       - name: Rust checks
-        run: cargo xtask rust-check
+        run: cargo xtask-lite rust-check
 
       - name: Tauri compile check
-        run: cargo xtask tauri-check
+        run: cargo xtask-lite tauri-check
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-rust-tests:
     runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-tests
@@ -162,10 +176,14 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Rust tests
-        run: cargo xtask rust-test
+        run: cargo xtask-lite rust-test
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-desktop-ui:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-desktop
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -212,13 +230,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Desktop lint + typecheck
-        run: cargo xtask desktop-lint
+        run: cargo xtask-lite desktop-lint
 
       - name: Desktop Vitest
-        run: cargo xtask desktop-test
+        run: cargo xtask-lite desktop-test
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-desktop-browser:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-desktop
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -269,10 +291,14 @@ jobs:
         run: pnpm exec playwright install chromium
 
       - name: Desktop Storybook build
-        run: cargo xtask desktop-storybook
+        run: cargo xtask-lite desktop-storybook
 
       - name: Desktop browser tests
-        run: cargo xtask desktop-browser-test
+        run: cargo xtask-lite desktop-browser-test
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-cn:
     runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn
@@ -306,10 +332,14 @@ jobs:
           cache: rust
 
       - name: Community-node checks
-        run: cargo xtask cn-check
+        run: cargo xtask-lite cn-check
 
       - name: Community-node integration tests
-        run: cargo xtask cn-test
+        run: cargo xtask-lite cn-test
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask-lite ci-prune-target
 
   linux-smoke:
     runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
@@ -351,6 +381,10 @@ jobs:
           name: kukuri-nightly-smoke-artifacts
           path: test-results/kukuri/
           if-no-files-found: warn
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask ci-prune-target
 
   linux-community-node:
     runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
@@ -396,6 +430,10 @@ jobs:
           path: test-results/kukuri/
           if-no-files-found: warn
 
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask ci-prune-target
+
   linux-community-node-multi-device:
     runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
@@ -439,3 +477,7 @@ jobs:
           name: kukuri-nightly-community-node-multi-device-artifacts
           path: test-results/kukuri/
           if-no-files-found: warn
+
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      - name: Prune workspace build artifacts
+        run: cargo xtask ci-prune-target

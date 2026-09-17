@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 
 mod appimage;
 mod assets;
+mod ci_prune;
 mod cn;
 mod desktop;
 mod exec;
@@ -70,6 +71,7 @@ fn main() -> Result<()> {
             oversized_files(update_baseline)
         }
         "operator-neutrality-check" => operator_neutrality_check(),
+        "ci-prune-target" => ci_prune::ci_prune_target(),
         "refactoring-audit-check" => refactoring_audit::refactoring_audit_check(args),
         "ipc-types" => {
             let check = match args.next().as_deref() {
@@ -123,6 +125,6 @@ fn doctor() -> Result<()> {
 
 fn print_usage() {
     eprintln!(
-        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|cn-e2e|desktop-package|asset-check|release-check [tag]|oversized-files [--update-baseline]|operator-neutrality-check|refactoring-audit-check [--help]|ipc-types [--check]|e2e-smoke|scenario <name>>"
+        "usage: cargo xtask <doctor|check|test|rust-check|rust-test|app-api-slow-test|tauri-check|desktop-lint|desktop-test|desktop-storybook|desktop-browser-test|desktop-visual-test|desktop-ui-check|cn-check|cn-test|cn-e2e|desktop-package|asset-check|release-check [tag]|oversized-files [--update-baseline]|operator-neutrality-check|ci-prune-target|refactoring-audit-check [--help]|ipc-types [--check]|e2e-smoke|scenario <name>>"
     );
 }
