@@ -25,6 +25,8 @@ impl DesktopRuntime {
                 );
             }
         }
+        // #1061: 提供中の CN へ観測を送り、未完了の削除要求を再送する。
+        self.flush_community_node_trust_observations_once().await;
         match self.app_service.get_sync_status().await {
             Ok(status) => {
                 self.maybe_self_heal_community_node_connectivity(&status)

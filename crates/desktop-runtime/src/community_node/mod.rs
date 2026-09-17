@@ -45,6 +45,7 @@ mod session_runtime_support;
 mod session_state_support;
 mod tester_feedback_support;
 mod token_storage_support;
+mod trust_observation_support;
 mod trust_relation_support;
 
 pub(crate) use config_support::*;
@@ -90,6 +91,12 @@ pub use tester_feedback_support::{
     CommunityNodeTesterFeedbackError, CommunityNodeTesterFeedbackSubmission,
 };
 pub(crate) use token_storage_support::*;
+#[cfg(test)]
+pub(crate) use trust_observation_support::load_trust_observation_pending_count;
+pub(crate) use trust_observation_support::without_observation_sharing_document;
+pub use trust_observation_support::{
+    CommunityNodeObservationSharingStatus, EnableCommunityNodeObservationSharingRequest,
+};
 pub use trust_relation_support::{
     CommunityNodeRelationNeighborsRequest, CommunityNodeTrustRelationError,
     CommunityNodeUserAdvisoryRequest,

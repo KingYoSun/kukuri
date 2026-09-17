@@ -282,6 +282,20 @@
       "reviewPolicies": "查看条款",
       "later": "稍后",
       "openSettings": "打开社区节点设置"
+    },
+    "observationSharing": {
+      "title": "共享屏蔽和静音",
+      "description": "将你在此设备上的屏蔽和静音提供给该节点的信任评估。仅该节点接收，且只影响与你关系较近的用户看到的结果。",
+      "enabled": "正在共享。停止后会要求该节点删除已保存的记录。",
+      "disabled": "未共享。",
+      "start": "开始共享",
+      "stop": "停止共享",
+      "accept": "同意并开始共享",
+      "includeExisting": "同时发送现有的屏蔽和静音",
+      "dialogIntro": "同意此文档后开始共享。共享是可选的，随时可以停止。",
+      "needsReconsent": "该节点的文档已更新，共享已暂停。再次同意即可恢复。",
+      "revocationPending": "正在请求删除记录。完成前不会恢复共享。",
+      "failed": "无法更改共享设置。请稍后再试。"
     }
   },
   "connectivity": {

@@ -41,16 +41,16 @@
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
     {
+      "lines": 1065,
+      "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
+    },
+    {
       "lines": 1058,
       "path": "crates/app-api/src/game.rs"
     },
     {
       "lines": 1056,
       "path": "crates/metaverse-host/src/tests.rs"
-    },
-    {
-      "lines": 1049,
-      "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
       "lines": 1033,

@@ -1,5 +1,8 @@
 use super::*;
 
+use kukuri_core::TrustObservationKind;
+use tracing::warn;
+
 impl DesktopRuntime {
     pub(crate) async fn ensure_desired_subscription(
         &self,
@@ -317,23 +320,58 @@ impl DesktopRuntime {
     }
 
     pub async fn mute_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
-        self.app_service.mute_author(request.pubkey.as_str()).await
+        let view = self
+            .app_service
+            .mute_author(request.pubkey.as_str())
+            .await?;
+        self.record_trust_observation(request.pubkey.as_str(), TrustObservationKind::Mute, true)
+            .await;
+        Ok(view)
     }
 
     pub async fn unmute_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
-        self.app_service
+        let view = self
+            .app_service
             .unmute_author(request.pubkey.as_str())
-            .await
+            .await?;
+        self.record_trust_observation(request.pubkey.as_str(), TrustObservationKind::Mute, false)
+            .await;
+        Ok(view)
     }
 
     pub async fn block_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
-        self.app_service.block_author(request.pubkey.as_str()).await
+        let view = self
+            .app_service
+            .block_author(request.pubkey.as_str())
+            .await?;
+        self.record_trust_observation(request.pubkey.as_str(), TrustObservationKind::Block, true)
+            .await;
+        Ok(view)
     }
 
     pub async fn unblock_author(&self, request: AuthorRequest) -> Result<AuthorSocialView> {
-        self.app_service
+        let view = self
+            .app_service
             .unblock_author(request.pubkey.as_str())
+            .await?;
+        self.record_trust_observation(request.pubkey.as_str(), TrustObservationKind::Block, false)
+            .await;
+        Ok(view)
+    }
+
+    /// #1061: 提供中の CN へ送る観測を積む。ローカル操作は既に成立しているので、失敗は警告に留める。
+    async fn record_trust_observation(
+        &self,
+        target_pubkey: &str,
+        kind: TrustObservationKind,
+        active: bool,
+    ) {
+        if let Err(error) = self
+            .enqueue_trust_observation(target_pubkey, kind, active)
             .await
+        {
+            warn!(error = %error, "failed to queue a trust observation for community nodes");
+        }
     }
 
     pub async fn list_social_connections(

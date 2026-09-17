@@ -561,6 +561,38 @@ expires_at: string,
  */
 hide_recommended: boolean, reasons: Array<TrustEvaluationReason>, };
 
+export type CommunityNodeObservationSharingStatus = { base_url: string, 
+/**
+ * CN が任意文書を公開しているか。取得できなかった場合は false。
+ */
+offered: boolean, 
+/**
+ * 公開中の任意文書（有効化ダイアログで提示する）。
+ */
+policy?: CommunityNodePolicyDocument | null, 
+/**
+ * 提供中か。
+ */
+enabled: boolean, 
+/**
+ * CN の文書が更新され、再同意まで提供を止めているか。
+ */
+needs_reconsent: boolean, 
+/**
+ * 保存済み観測の削除要求が未完了か（完了まで提供を再開しない）。
+ */
+revocation_pending: boolean, 
+/**
+ * 送信待ちの件数。
+ */
+pending_count: number, };
+
+export type EnableCommunityNodeObservationSharingRequest = { base_url: string, policy_version: number, policy_snapshot_revision?: string | null, language: string, 
+/**
+ * 既存のブロック / ミュートも送るか（既定は送らない）。
+ */
+include_existing: boolean, };
+
 export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, 
 /**
  * 評価の版・期限・表示 policy（#1061）。旧 node の応答では欠落し、クライアントは未評価として扱う。

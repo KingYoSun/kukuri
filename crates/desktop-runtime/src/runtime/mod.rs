@@ -137,6 +137,8 @@ pub struct DesktopRuntime {
     pub(crate) content_advisory_synthesis_enabled: Arc<AtomicBool>,
     /// #1056: 一括照会で使う発行元(manifest `node_id`)の cache。node 設定の保存で破棄する。
     pub(crate) content_advisory_issuer_cache: Arc<Mutex<HashMap<String, String>>>,
+    /// #1061: ブロック / ミュート観測の提供状態ファイルの読み書きを直列化する。
+    pub(crate) trust_observation_guard: Arc<Mutex<()>>,
     event_sender: tokio::sync::broadcast::Sender<RuntimeEvent>,
 }
 
@@ -460,6 +462,7 @@ impl DesktopRuntime {
                 CONTENT_ADVISORY_SYNTHESIS_DEFAULT,
             )),
             content_advisory_issuer_cache: Arc::new(Mutex::new(HashMap::new())),
+            trust_observation_guard: Arc::new(Mutex::new(())),
             event_sender,
         })
     }

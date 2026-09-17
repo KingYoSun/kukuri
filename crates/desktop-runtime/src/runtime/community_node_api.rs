@@ -6,8 +6,9 @@ use kukuri_cn_protocol::{CommunityNodePoliciesResponse, IndexingStatusResponse};
 use crate::community_node::{
     CommunityNodeContentAdvisoryLookupError, CommunityNodeContentAdvisoryLookupRequest,
     CommunityNodeContentAdvisoryLookupResult, CommunityNodeIndexingStatusRequest,
-    default_content_advisory_enabled,
+    default_content_advisory_enabled, without_observation_sharing_document,
 };
+use tracing::warn;
 
 impl DesktopRuntime {
     pub async fn read_community_node_trust_user(
@@ -172,6 +173,20 @@ impl DesktopRuntime {
                 .iter()
                 .all(|next| next.base_url != current.base_url)
         }) {
+            // #1061: 削除前に、その CN に保存された自分の観測の削除を要求する（token があるうちに）。
+            if let Err(error) = self
+                .forget_community_node_trust_observations(removed_node.base_url.as_str())
+                .await
+            {
+                warn!(base_url = %removed_node.base_url, error = %error, "failed to forget trust observations for a removed community node");
+            }
+        }
+        for removed_node in current_config.nodes.iter().filter(|current| {
+            next_config
+                .nodes
+                .iter()
+                .all(|next| next.base_url != current.base_url)
+        }) {
             delete_community_node_invite_code(
                 &self.db_path,
                 self.identity_mode,
@@ -199,6 +214,13 @@ impl DesktopRuntime {
     pub async fn clear_community_node_config(&self) -> Result<()> {
         let existing = self.community_node_config.lock().await.clone();
         for node in existing.nodes {
+            // #1061: token を消す前に、保存済み観測の削除を要求する。
+            if let Err(error) = self
+                .forget_community_node_trust_observations(node.base_url.as_str())
+                .await
+            {
+                warn!(base_url = %node.base_url, error = %error, "failed to forget trust observations for a cleared community node");
+            }
             delete_community_node_invite_code(
                 &self.db_path,
                 self.identity_mode,
@@ -418,9 +440,11 @@ impl DesktopRuntime {
             self.identity_mode,
             base_url.as_str(),
         )?;
+        // #1061: 観測提供の任意文書は専用の操作でだけ同意する（一括受諾の対象にしない）。
+        let documents = without_observation_sharing_document(&request.documents);
         record_community_node_local_consents(
             &mut state,
-            &request.documents,
+            &documents,
             request.language.as_str(),
             app_version,
             Utc::now().timestamp(),
@@ -455,6 +479,9 @@ impl DesktopRuntime {
             self.identity_mode,
             base_url.as_str(),
         )?;
+        // #1061: token を消す前に、観測提供を止めて保存済み観測の削除を要求する。
+        self.revoke_community_node_trust_observations(base_url.as_str())
+            .await?;
         state.withdrawn_at = Some(Utc::now().timestamp());
         persist_community_node_local_consents(
             &self.db_path,

@@ -51,7 +51,15 @@ pub(super) fn status() -> Value {
 }
 
 pub(super) fn policies() -> Value {
-    let document = view(
+    view(
+        json!({"policies": array(policy_document()), "policy_snapshot_revision": string()}),
+        &["policy_snapshot_revision"],
+    )
+}
+
+/// 公開 policy カタログの文書 1 件。
+pub(super) fn policy_document() -> Value {
+    view(
         json!({"policy_slug": string(), "policy_version": integer(), "title": string(), "body_markdown": string(), "required": boolean(),
         "effective_date": string(), "language": string(), "policy_snapshot_revision": string(), "authoritative_language": string(), "reference_translation": boolean(),
         "translation_revision": integer(), "translation_of_version": integer(), "fallback": boolean(), "requested_language": string(),
@@ -73,10 +81,6 @@ pub(super) fn policies() -> Value {
             "next_policy_version",
             "next_policy_snapshot_revision",
         ],
-    );
-    view(
-        json!({"policies": array(document), "policy_snapshot_revision": string()}),
-        &["policy_snapshot_revision"],
     )
 }
 

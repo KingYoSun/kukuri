@@ -57,6 +57,8 @@ import type {
   MetaverseRoomEventV1,
   SpatialContextV1,
   MetaverseRoomEventView,
+  CommunityNodeObservationSharingStatus,
+  EnableCommunityNodeObservationSharingRequest,
   NotificationStatusView,
   NotificationView,
   PostView as WirePostView,
@@ -551,6 +553,16 @@ export interface DesktopApi {
   listCommunityNodeRelationNeighbors(
     request: CommunityNodeRelationNeighborsRequest
   ): Promise<RelationNeighborsResponse>;
+  // #1061: ブロック / ミュート観測の提供（CN の任意文書への同意）。
+  getCommunityNodeObservationSharing(
+    baseUrl: string
+  ): Promise<CommunityNodeObservationSharingStatus>;
+  enableCommunityNodeObservationSharing(
+    request: EnableCommunityNodeObservationSharingRequest
+  ): Promise<CommunityNodeObservationSharingStatus>;
+  disableCommunityNodeObservationSharing(
+    baseUrl: string
+  ): Promise<CommunityNodeObservationSharingStatus>;
   getCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;
   setCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;
   clearCommunityNodeRelationOptout(baseUrl: string): Promise<RelationOptoutResponse>;

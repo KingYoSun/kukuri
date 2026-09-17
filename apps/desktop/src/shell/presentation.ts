@@ -18,6 +18,7 @@ import {
   type TimelineScope,
   type TopicSyncStatus,
 } from '@/lib/api';
+import { TRUST_OBSERVATION_SHARING_POLICY_SLUG } from '@/lib/api/observationSharing';
 import type {
   CommunityNodeConsentPolicyView,
   CommunityNodeConsentView,
@@ -458,7 +459,10 @@ export function communityNodeConsentView(
 ): CommunityNodeConsentView {
   const localConsent = status?.local_consent ?? { records: [], withdrawn_at: null };
   const withdrawn = localConsent.withdrawn_at != null;
-  const catalog = policiesEntry?.status === 'ok' ? policiesEntry.policies : [];
+  // #1061: 観測提供の任意文書は、CN 設定の専用トグルでだけ同意する。一括受諾の一覧には出さない。
+  const catalog = (policiesEntry?.status === 'ok' ? policiesEntry.policies : []).filter(
+    (policy) => policy.policy_slug !== TRUST_OBSERVATION_SHARING_POLICY_SLUG
+  );
   const policies: CommunityNodeConsentPolicyView[] = catalog.map((policy) => {
     const slugRecords = localConsent.records.filter(
       (record) => record.policy_slug === policy.policy_slug

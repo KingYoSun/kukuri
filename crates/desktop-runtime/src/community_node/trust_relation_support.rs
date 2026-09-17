@@ -107,6 +107,7 @@ impl DesktopRuntime {
                 Method::GET,
                 format!("{TRUST_USERS_PATH_PREFIX}{target}").as_str(),
                 None,
+                None,
             )
             .await?;
         ensure_trust_relation_target(target.as_str(), response.view.target_id.as_str())?;
@@ -126,6 +127,7 @@ impl DesktopRuntime {
                 Method::GET,
                 format!("{RELATION_USERS_PATH_PREFIX}{target}").as_str(),
                 None,
+                None,
             )
             .await?;
         ensure_trust_relation_target(target.as_str(), response.target_pubkey.as_str())?;
@@ -141,6 +143,7 @@ impl DesktopRuntime {
             Method::GET,
             RELATION_NEIGHBORS_PATH,
             request.limit,
+            None,
         )
         .await
     }
@@ -150,16 +153,25 @@ impl DesktopRuntime {
         base_url: &str,
         method: Method,
     ) -> Result<RelationOptoutResponse, CommunityNodeTrustRelationError> {
-        self.request_community_node_trust_relation(base_url, method, RELATION_OPTOUT_PATH, None)
-            .await
+        self.request_community_node_trust_relation(
+            base_url,
+            method,
+            RELATION_OPTOUT_PATH,
+            None,
+            None,
+        )
+        .await
     }
 
-    async fn request_community_node_trust_relation<T: DeserializeOwned>(
+    /// 認証済み trust / relation 系 request の共通処理。session が Ready でなければ HTTP を送らず、
+    /// 401 は 1 回だけ再認証して再送する。`body` は JSON 本文（#1061 の観測提供・一括評価）。
+    pub(crate) async fn request_community_node_trust_relation<T: DeserializeOwned>(
         &self,
         base_url: &str,
         method: Method,
         path: &str,
         limit: Option<usize>,
+        body: Option<&serde_json::Value>,
     ) -> Result<T, CommunityNodeTrustRelationError> {
         let base_url = normalize_http_url(base_url).map_err(|error| {
             CommunityNodeTrustRelationError::new("INVALID_COMMUNITY_NODE_URL", error.to_string())
@@ -213,6 +225,7 @@ impl DesktopRuntime {
                 method.clone(),
                 path,
                 limit,
+                body,
                 token.access_token.as_str(),
             )
             .await
@@ -232,6 +245,7 @@ impl DesktopRuntime {
                     method,
                     path,
                     limit,
+                    body,
                     refreshed.access_token.as_str(),
                 )
                 .await
@@ -246,6 +260,7 @@ impl DesktopRuntime {
         method: Method,
         path: &str,
         limit: Option<usize>,
+        body: Option<&serde_json::Value>,
         access_token: &str,
     ) -> Result<T, CommunityNodeTrustRelationError> {
         let client = community_node_http_client().map_err(|error| {
@@ -259,6 +274,9 @@ impl DesktopRuntime {
             .bearer_auth(access_token);
         if let Some(limit) = limit {
             request = request.query(&[("limit", limit)]);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
         }
         let response = request.send().await.map_err(|error| {
             CommunityNodeTrustRelationError::new(
