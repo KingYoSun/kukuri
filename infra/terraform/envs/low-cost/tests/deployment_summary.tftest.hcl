@@ -116,3 +116,30 @@ run "readiness_timer_absent_without_operator_config" {
     error_message = "Readiness activation must not be scheduled without an operator config."
   }
 }
+
+run "relation_analyze_timer_survives_startup_rerun" {
+  command = plan
+  variables {
+    deploy_indexer_stack              = true
+    relation_analyze_interval_minutes = 45
+  }
+  assert {
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "OnBootSec=15min\nOnUnitActiveSec=45min\nRandomizedDelaySec=60\n[Install]\n")
+    error_message = "The relation analyze timer must keep its interval without a persistent stamp, so a startup rerun past the boot window runs it immediately (#1099)."
+  }
+  assert {
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "systemctl enable --now kukuri-relation-analyze.timer\n")
+    error_message = "The relation analyze timer must be re-enabled by the generated startup script."
+  }
+}
+
+run "relation_analyze_timer_absent_without_indexer_stack" {
+  command = plan
+  variables {
+    deploy_indexer_stack = false
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(module.vm.startup_script), "systemctl enable --now kukuri-relation-analyze.timer")
+    error_message = "Relation analysis must not be scheduled without the indexer stack."
+  }
+}
