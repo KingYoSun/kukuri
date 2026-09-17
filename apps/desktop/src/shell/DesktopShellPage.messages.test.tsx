@@ -363,8 +363,13 @@ test('switching messages peer closes a stale author pane', async () => {
 });
 
 test('messages workspace keeps the last successful DM state when status refresh fails', async () => {
+  // Issue #1086: polling の 1 周期を実時間で sleep すると 5 秒の予算の大半を消費し、
+  // CI 負荷で timeout する。fake timer で周期だけを即時に進める
+  // (shouldAdvanceTime で waitFor / userEvent の待ちは実時間どおり進む)。
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   const authorPubkey = 'b'.repeat(64);
   let failNextStatusRefresh = false;
+  let statusRefreshFailures = 0;
   const baseApi = createDesktopMockApi({
     seedPosts: {
       'kukuri:topic:general': [
@@ -403,12 +408,13 @@ test('messages workspace keeps the last successful DM state when status refresh 
     async getDirectMessageStatus(pubkey) {
       if (failNextStatusRefresh) {
         failNextStatusRefresh = false;
+        statusRefreshFailures += 1;
         throw new Error('temporary dm status failure');
       }
       return baseApi.getDirectMessageStatus(pubkey);
     },
   };
-  const user = userEvent.setup();
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
   render(<App api={api} />);
 
@@ -439,9 +445,10 @@ test('messages workspace keeps the last successful DM state when status refresh 
   });
 
   failNextStatusRefresh = true;
-  await new Promise((resolve) => window.setTimeout(resolve, REFRESH_INTERVAL_MS + 300));
+  await vi.advanceTimersByTimeAsync(REFRESH_INTERVAL_MS);
 
   await waitFor(() => {
+    expect(statusRefreshFailures).toBe(1);
     expect(screen.getAllByText('hello dm').length).toBeGreaterThan(0);
     expect(screen.getAllByText('temporary dm status failure').length).toBeGreaterThan(0);
     expect(
