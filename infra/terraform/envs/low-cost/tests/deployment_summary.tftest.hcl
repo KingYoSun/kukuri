@@ -143,3 +143,40 @@ run "relation_analyze_timer_absent_without_indexer_stack" {
     error_message = "Relation analysis must not be scheduled without the indexer stack."
   }
 }
+
+run "relation_analyze_interval_upper_bound_is_accepted" {
+  command = plan
+  variables {
+    deploy_indexer_stack              = true
+    relation_analyze_interval_minutes = 90
+  }
+  assert {
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "OnUnitActiveSec=90min\n")
+    error_message = "上限ちょうどの関係解析の間隔は受理され、timer に反映される必要がある（#1101）。"
+  }
+}
+
+run "relation_analyze_interval_beyond_readiness_limit_is_rejected" {
+  command = plan
+  variables {
+    deploy_indexer_stack              = true
+    relation_analyze_interval_minutes = 91
+  }
+  expect_failures = [var.relation_analyze_interval_minutes]
+}
+
+run "relation_analyze_interval_zero_is_rejected" {
+  command = plan
+  variables {
+    relation_analyze_interval_minutes = 0
+  }
+  expect_failures = [var.relation_analyze_interval_minutes]
+}
+
+run "relation_analyze_interval_fraction_is_rejected" {
+  command = plan
+  variables {
+    relation_analyze_interval_minutes = 1.5
+  }
+  expect_failures = [var.relation_analyze_interval_minutes]
+}

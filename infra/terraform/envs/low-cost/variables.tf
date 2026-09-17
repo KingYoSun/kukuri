@@ -283,9 +283,15 @@ variable "indexer_data_disk_gb" {
 }
 
 variable "relation_analyze_interval_minutes" {
-  description = "cn-cli relation analyze の実行間隔（分）。"
+  description = "cn-cli relation analyze の実行間隔（分、1〜90）。"
   type        = number
   default     = 60
+  validation {
+    # readiness は関係解析の成功を既定 7200 秒以内に要求する。boot / startup 再実行の直後は初回まで
+    # 最大 16 分（OnBootSec 15 分 + 遅延 1 分）かかるため、解析と boot の所要時間に 14 分を残す（#1101）。
+    condition     = var.relation_analyze_interval_minutes >= 1 && var.relation_analyze_interval_minutes <= 90 && floor(var.relation_analyze_interval_minutes) == var.relation_analyze_interval_minutes
+    error_message = "relation_analyze_interval_minutes は 1〜90 の整数で指定してください（readiness が求める関係解析の成功記録 7200 秒以内を保つため）。"
+  }
 }
 
 variable "indexer_own_relay" {

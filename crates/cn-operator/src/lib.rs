@@ -224,7 +224,7 @@ manifest:
 #   cn_indexer_image: ghcr.io/kukuri-app/kukuri-cn-indexer:latest
 #   arcadedb_image: arcadedata/arcadedb:26.8.1
 #   indexer_data_disk_gb: 10
-#   relation_analyze_interval_minutes: 60
+#   relation_analyze_interval_minutes: 60   # 1〜90
 #   channel_secret_key_secret_id: kukuri-cn-channel-secret-key
 #   legal_data_key_secret_id: kukuri-cn-legal-data-key
 #   arcadedb_password_secret_id: kukuri-cn-arcadedb-password

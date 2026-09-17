@@ -663,6 +663,23 @@ fn indexer_stack_rejects_invalid_vlm_response_format_and_zero_interval() {
 }
 
 #[test]
+fn indexer_stack_rejects_interval_beyond_readiness_limit() {
+    // readiness の関係解析の許容時間（既定 7200 秒）を保てない間隔は拒否する（#1101）。
+    let yaml = config_with_indexer_stack("  relation_analyze_interval_minutes: 91\n", "");
+    let err = load_and_validate(&yaml).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("relation_analyze_interval_minutes は 1〜90"),
+        "got: {err}"
+    );
+
+    let yaml = config_with_indexer_stack("  relation_analyze_interval_minutes: 90\n", "");
+    let resolved = load_and_validate(&yaml).unwrap();
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("relation_analyze_interval_minutes = 90"));
+}
+
+#[test]
 fn tfvars_never_contains_secret_values() {
     // deploy は secret ID のみを持つ。tfvars には ID のみ出力され、値は出ない。
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
