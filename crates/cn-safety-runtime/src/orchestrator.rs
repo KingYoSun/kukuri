@@ -130,17 +130,114 @@ impl SafetyOrchestrator {
     /// 合成する。集約結果を `route()` に渡して verdict を得て、未署名 moderation artifact を
     /// 生成する。
     pub async fn scan_subject(&self, request: &ProviderScanRequest) -> SafetyScanReport {
-        let scanned_at = self.clock.now_rfc3339();
+        self.scan_subject_guarded(request, None).await
+    }
 
+    pub async fn scan_subject_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        guard: Option<&dyn crate::ScanReferenceGuard>,
+    ) -> SafetyScanReport {
         let mut scan_results = Vec::with_capacity(self.providers.len());
         for provider in &self.providers {
-            match provider.scan(request).await {
+            let result = match guard {
+                Some(guard) => provider.scan_guarded(request, guard).await,
+                None => provider.scan(request).await,
+            };
+            match result {
                 Ok(result) => scan_results.push(result),
                 Err(error) => scan_results.push(synthesize_failure(provider.as_ref(), &error)),
             }
         }
 
-        let verdict = route(&scan_results, &self.policy, scanned_at);
+        self.report_from_results(request, scan_results)
+    }
+
+    pub fn supports_content_reuse(&self) -> bool {
+        self.providers
+            .iter()
+            .all(|provider| provider.supports_content_reuse())
+    }
+
+    pub fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        self.providers
+            .iter()
+            .find_map(|provider| provider.moderation_metrics())
+    }
+
+    pub fn cached_results_match(
+        &self,
+        request: &ProviderScanRequest,
+        results: &[ProviderScanResult],
+    ) -> bool {
+        use kukuri_cn_safety::{ProviderDecisionBasis, ScanInputKind};
+        results.len() == self.providers.len()
+            && results
+                .iter()
+                .zip(&self.providers)
+                .all(|(result, provider)| {
+                    if result.provider != provider.name()
+                        || !provider.capabilities().contains(&result.capability)
+                        || result.outcome.is_fail_closed()
+                    {
+                        return false;
+                    }
+                    if result.decision_basis == ProviderDecisionBasis::CategoryFlags {
+                        let Some(coverage) = &result.coverage else {
+                            return false;
+                        };
+                        if result.known_hash_match
+                            || coverage.audio_scanned
+                            || coverage.evaluated_categories.is_empty()
+                            || coverage.preprocessing_version.is_empty()
+                            || coverage
+                                .evaluated_categories
+                                .iter()
+                                .any(|category| coverage.unsupported_categories.contains(category))
+                        {
+                            return false;
+                        }
+                        match coverage.input {
+                            ScanInputKind::Text => {
+                                request.media_hint.is_none() && coverage.frames == 0
+                            }
+                            ScanInputKind::Image => {
+                                request.media_hint.is_some() && coverage.frames == 1
+                            }
+                            ScanInputKind::Video => {
+                                request.media_hint.is_some()
+                                    && (1..=8).contains(&coverage.frames)
+                                    && coverage
+                                        .duration_ms
+                                        .is_some_and(|duration| duration > 0 && duration <= 600_000)
+                            }
+                        }
+                    } else {
+                        true
+                    }
+                })
+    }
+
+    pub fn failed_report(
+        &self,
+        request: &ProviderScanRequest,
+        error: &ScanError,
+    ) -> SafetyScanReport {
+        self.report_from_results(
+            request,
+            self.providers
+                .iter()
+                .map(|provider| synthesize_failure(provider.as_ref(), error))
+                .collect(),
+        )
+    }
+
+    pub fn report_from_results(
+        &self,
+        request: &ProviderScanRequest,
+        scan_results: Vec<ProviderScanResult>,
+    ) -> SafetyScanReport {
+        let verdict = route(&scan_results, &self.policy, self.clock.now_rfc3339());
         let (moderation_event, risk_signal) = build_artifacts(
             &verdict,
             request,
@@ -231,6 +328,12 @@ impl SafetyOrchestratorBuilder {
             .policy
             .unwrap_or_else(SafetyPolicy::public_node_default);
         let scan_config_fingerprint = compute_scan_config_fingerprint(&policy, &self.providers);
+        // Both the subject shortcut and shared content cache belong to this issuer.
+        // A signing-identity rotation must not reuse another node's stored advisories.
+        let scan_config_fingerprint = hex::encode(Sha256::digest(
+            serde_json::to_vec(&["node-scan-v1", &issuer_node_id, &scan_config_fingerprint])
+                .expect("scan identity fields"),
+        ));
         Ok(SafetyOrchestrator {
             providers: self.providers,
             policy,

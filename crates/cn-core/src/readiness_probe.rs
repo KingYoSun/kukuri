@@ -11,6 +11,7 @@ use sqlx::PgPool;
 /// 保存された疎通確認の結果 1 件。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadinessProbeRecord {
+    pub configuration_fingerprint: Option<String>,
     /// 疎通確認の対象 slot（known_csam / general / unknown_csam）。
     pub provider_slot: String,
     /// slot に構成されたプロバイダ実装名。
@@ -27,19 +28,21 @@ pub struct ReadinessProbeRecord {
 pub async fn upsert_readiness_probe(pool: &PgPool, record: &ReadinessProbeRecord) -> Result<()> {
     sqlx::query(
         "INSERT INTO cn_admin.readiness_probe_cache \
-             (provider_slot, provider, status, detail, checked_at) \
-         VALUES ($1, $2, $3, $4, $5) \
+             (provider_slot, provider, status, detail, checked_at, configuration_fingerprint) \
+         VALUES ($1, $2, $3, $4, $5, $6) \
          ON CONFLICT (provider_slot) DO UPDATE SET \
              provider = EXCLUDED.provider, \
              status = EXCLUDED.status, \
              detail = EXCLUDED.detail, \
-             checked_at = EXCLUDED.checked_at",
+             checked_at = EXCLUDED.checked_at, \
+             configuration_fingerprint = EXCLUDED.configuration_fingerprint",
     )
     .bind(record.provider_slot.as_str())
     .bind(record.provider.as_str())
     .bind(if record.pass { "pass" } else { "fail" })
     .bind(record.detail.as_str())
     .bind(record.checked_at)
+    .bind(record.configuration_fingerprint.as_deref())
     .execute(pool)
     .await
     .context("failed to upsert the readiness probe cache")?;
@@ -48,8 +51,16 @@ pub async fn upsert_readiness_probe(pool: &PgPool, record: &ReadinessProbeRecord
 
 /// 保存済みの疎通確認結果を slot 順で返す。
 pub async fn list_readiness_probes(pool: &PgPool) -> Result<Vec<ReadinessProbeRecord>> {
-    let rows: Vec<(String, String, String, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT provider_slot, provider, status, detail, checked_at \
+    type ProbeRow = (
+        String,
+        String,
+        String,
+        String,
+        DateTime<Utc>,
+        Option<String>,
+    );
+    let rows: Vec<ProbeRow> = sqlx::query_as(
+        "SELECT provider_slot, provider, status, detail, checked_at, configuration_fingerprint \
          FROM cn_admin.readiness_probe_cache ORDER BY provider_slot",
     )
     .fetch_all(pool)
@@ -58,12 +69,15 @@ pub async fn list_readiness_probes(pool: &PgPool) -> Result<Vec<ReadinessProbeRe
     Ok(rows
         .into_iter()
         .map(
-            |(provider_slot, provider, status, detail, checked_at)| ReadinessProbeRecord {
-                provider_slot,
-                provider,
-                pass: status == "pass",
-                detail,
-                checked_at,
+            |(provider_slot, provider, status, detail, checked_at, configuration_fingerprint)| {
+                ReadinessProbeRecord {
+                    configuration_fingerprint,
+                    provider_slot,
+                    provider,
+                    pass: status == "pass",
+                    detail,
+                    checked_at,
+                }
             },
         )
         .collect())

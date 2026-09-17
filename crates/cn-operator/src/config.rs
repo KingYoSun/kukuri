@@ -330,6 +330,8 @@ fn default_rate_limit_burst() -> u32 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeployConfig {
+    #[serde(default)]
+    pub moderation: crate::moderation_config::ModerationDeployConfig,
     /// deployment profile（既定 low-cost）。
     #[serde(default = "default_deploy_profile")]
     pub profile: DeployProfile,
@@ -791,6 +793,7 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
 
 /// deploy セクションを検証する（#380）。
 fn validate_deploy(resolved: &ResolvedConfig, deploy: &DeployConfig) -> Result<()> {
+    deploy.moderation.validate()?;
     let project_id = require_deploy_string("deploy.project_id", &deploy.project_id)?;
     let acme_email = require_deploy_string("deploy.acme_email", &deploy.acme_email)?;
     let jwt_secret_id = require_deploy_string("deploy.jwt_secret_id", &deploy.jwt_secret_id)?;
@@ -1063,7 +1066,7 @@ fn validate_indexer_stack(resolved: &ResolvedConfig, deploy: &DeployConfig) -> R
         providers
             .iter()
             .flatten()
-            .any(|entry| entry.provider.trim() == name)
+            .any(|entry| entry.provider.trim().replace('_', "-") == name)
     };
     if uses("project-arachnid-shield") {
         require_secret(
@@ -1088,6 +1091,34 @@ fn validate_indexer_stack(resolved: &ResolvedConfig, deploy: &DeployConfig) -> R
             {
                 bail!("safety.providers に openai-compatible-vlm を使う場合、{field} は必須です");
             }
+        }
+    }
+
+    if uses("openai-moderation") {
+        require_secret(
+            "deploy.vlm_api_key_secret_id",
+            &deploy.vlm_api_key_secret_id,
+        )?;
+        if safety
+            .providers
+            .known_csam
+            .as_ref()
+            .is_some_and(|entry| entry.provider.replace('_', "-") == "openai-moderation")
+            || safety
+                .providers
+                .unknown_csam
+                .as_ref()
+                .is_some_and(|entry| entry.provider.replace('_', "-") == "openai-moderation")
+        {
+            bail!("openai-moderation は general slot 専用です");
+        }
+        if safety
+            .providers
+            .general
+            .as_ref()
+            .is_some_and(|entry| matches!(entry.hosting, Some(crate::ProviderHosting::SelfHost)))
+        {
+            bail!("OpenAI Moderation は第三者への外部送信として開示してください");
         }
     }
 

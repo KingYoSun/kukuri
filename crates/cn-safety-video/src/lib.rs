@@ -26,6 +26,18 @@ pub struct FfmpegVideoExtractor {
 }
 
 impl FfmpegVideoExtractor {
+    /// Decode only bundled synthetic fixtures; readiness never retrieves user content.
+    pub async fn readiness_probe(&self) -> Result<FetchedMedia, ScanError> {
+        let mp4 = self.extract(include_bytes!("probes/benign.mp4")).await?;
+        let webm = self.extract(include_bytes!("probes/benign.webm")).await?;
+        if mp4.frames.len() != 1 || webm.frames.len() != 1 {
+            return Err(invalid("decoder probe frame count mismatch"));
+        }
+        mp4.frames
+            .into_iter()
+            .next()
+            .ok_or_else(|| invalid("decoder probe has no frame"))
+    }
     pub fn new(config: VideoExtractConfig) -> Result<Self, ScanError> {
         config.validate()?;
         let mut digest = Sha256::new();
@@ -109,6 +121,8 @@ async fn extract_job(
     let mut args = args_of(&[
         "-v",
         "error",
+        "-threads",
+        "1",
         "-protocol_whitelist",
         "file,pipe",
         "-format_whitelist",
@@ -160,6 +174,9 @@ async fn extract_job(
     if mp4 {
         args.extend(args_of(&["-enable_drefs", "0", "-use_absolute_path", "0"]));
     }
+    // Input and output codec options have separate scopes in FFmpeg. Bound the
+    // decoder before -i as well as the JPEG encoder below, regardless of CPU count.
+    args.extend(args_of(&["-threads", "1"]));
     args.push("-i".into());
     args.push(input.as_os_str().into());
     args.extend(args_of(&[

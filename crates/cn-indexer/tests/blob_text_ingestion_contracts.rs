@@ -150,6 +150,20 @@ impl SwitchableBlobService {
 
 #[async_trait]
 impl BlobService for SwitchableBlobService {
+    async fn fetch_blob_ephemeral_bounded(
+        &self,
+        _hash: &kukuri_core::BlobHash,
+        max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        let body = self.body.lock().expect("blob body mutex");
+        if body
+            .as_ref()
+            .is_some_and(|bytes| bytes.len() as u64 > max_bytes)
+        {
+            return Err(kukuri_iroh_node::remote_fetch::BlobTooLarge { limit: max_bytes }.into());
+        }
+        Ok(body.clone())
+    }
     async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
         let hash = blob_hash(&data);
         let bytes = data.len() as u64;

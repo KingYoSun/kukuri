@@ -27,9 +27,13 @@
 
 mod artifacts;
 pub mod clock;
+pub mod content_cache;
 pub mod error;
 pub mod id;
 pub mod orchestrator;
+mod recording;
+pub mod reference_guard;
+pub use reference_guard::ScanReferenceGuard;
 pub mod reuse;
 pub mod service;
 pub mod signer;

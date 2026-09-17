@@ -114,6 +114,18 @@ fn safety_provider_destinations(config: &ResolvedConfig) -> Vec<SafetyProviderDe
                 保存・配布しない",
         });
     }
+    if providers
+        .general
+        .as_ref()
+        .is_some_and(|entry| normalized(entry) == "openai-moderation")
+    {
+        dests.push(SafetyProviderDestination {
+            display_name: "OpenAI Moderation API",
+            operator_controlled: false,
+            purpose: "投稿本文・静止画像・動画の抽出画像のモデレーション分類",
+            data_categories: "本文テキスト、正規化した静止画像、動画から採取したJPEGフレーム。動画本体・音声はOpenAIへ送信しない。CNは元メディア・抽出画像・API生応答を恒久保存せず、判定と最小coverageを内容hashと構成に結び付けて再利用する。動画は全フレーム検査ではない",
+        });
+    }
     dests
 }
 

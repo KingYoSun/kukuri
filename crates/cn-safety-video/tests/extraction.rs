@@ -28,6 +28,19 @@ fn samples_are_reproducible_and_cover_the_whole_duration() {
 mod linux {
     use super::*;
     use kukuri_cn_safety::provider::VideoFrameExtractor;
+
+    #[tokio::test]
+    async fn bundled_readiness_decodes_both_containers() {
+        let extractor =
+            kukuri_cn_safety_video::FfmpegVideoExtractor::new(VideoExtractConfig::default())
+                .expect("decoder");
+        let frame = extractor
+            .readiness_probe()
+            .await
+            .expect("synthetic MP4/WebM probe");
+        assert!(frame.bytes.starts_with(&[0xff, 0xd8]));
+        assert!(frame.bytes.len() <= 256 * 1024);
+    }
     use kukuri_cn_safety_video::FfmpegVideoExtractor;
     use std::{path::Path, process::Command, sync::Arc, time::Duration};
 
@@ -102,6 +115,39 @@ mod linux {
     }
 
     #[tokio::test]
+    async fn input_decoder_threads_are_bounded() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = private_tmpfs();
+        let programs = tempfile::tempdir().expect("trusted test wrapper directory");
+        let wrapper = programs.path().join("ffmpeg-many-threads");
+        std::fs::write(
+            &wrapper,
+            b"#!/bin/sh\nexec /usr/bin/ffmpeg -threads 64 \"$@\" 2>\"$0.stderr\"\n",
+        )
+        .expect("synthetic decoder thread default");
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700))
+            .expect("executable wrapper");
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            ffmpeg: wrapper,
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("bounded extractor");
+        for format in ["mp4", "webm"] {
+            let bytes = fixture(root.path(), format, "60", false);
+            let frames = extractor.extract(&bytes).await.unwrap_or_else(|error| {
+                panic!(
+                    "64-thread default {format} decode: {error}; synthetic fixture diagnostics: {}",
+                    std::fs::read_to_string(programs.path().join("ffmpeg-many-threads.stderr"))
+                        .unwrap_or_default()
+                )
+            });
+            assert_eq!(frames.frames.len(), 8);
+            assert!(jobs(root.path()).is_empty());
+        }
+    }
+
+    #[tokio::test]
     async fn mp4_webm_short_audio_and_long_video_extract_without_residue() {
         let root = private_tmpfs();
         let config = VideoExtractConfig {
@@ -117,7 +163,9 @@ mod linux {
                 ("60", false, 8),
             ] {
                 let bytes = fixture(root.path(), format, duration, audio);
-                let result = extractor.extract(&bytes).await.expect("bounded extraction");
+                let result = extractor.extract(&bytes).await.unwrap_or_else(|error| {
+                    panic!("bounded extraction {format}/{duration}/audio={audio}: {error}")
+                });
                 assert_eq!(result.frames.len(), count, "{format}/{duration}");
                 for frame in result.frames {
                     assert_eq!(frame.content_type, "image/jpeg");

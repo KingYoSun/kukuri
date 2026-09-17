@@ -36,6 +36,7 @@ const CAPABILITIES: [SafetyProviderCapability; 2] = [
 /// Project Arachnid Shield を known-CSAM（child-safety known-match）provider として実装する。
 pub struct ProjectArachnidShieldProvider {
     client: ShieldClient,
+    fingerprint: String,
     /// media_hint → 一時 bytes の取得手段。未構成なら media scan は `Unavailable`（fail-closed）。
     fetcher: Option<Arc<dyn MediaFetcher>>,
 }
@@ -55,10 +56,7 @@ impl ProjectArachnidShieldProvider {
     ///
     /// credentials 欠落は Err（呼び出し側で起動失敗 = fail-closed）。
     pub fn new(config: &ShieldProviderConfig) -> Result<Self, ShieldConfigError> {
-        Ok(Self {
-            client: ShieldClient::from_config(config)?,
-            fetcher: None,
-        })
+        Self::with_credentials(config, config.load_credentials()?)
     }
 
     /// env（base URL / timeout の上書き含む）から provider を組み立てる。
@@ -73,6 +71,16 @@ impl ProjectArachnidShieldProvider {
     ) -> Result<Self, ShieldConfigError> {
         Ok(Self {
             client: ShieldClient::new(config, credentials)?,
+            fingerprint: serde_json::json!([
+                PROVIDER_NAME,
+                "shield-v1",
+                config.api_base_url.trim_end_matches('/'),
+                config.timeout.as_secs(),
+                config.timeout.subsec_nanos(),
+                config.api_username_env,
+                config.api_password_env
+            ])
+            .to_string(),
             fetcher: None,
         })
     }
@@ -86,6 +94,12 @@ impl ProjectArachnidShieldProvider {
 
 #[async_trait]
 impl SafetyProvider for ProjectArachnidShieldProvider {
+    fn config_fingerprint(&self) -> String {
+        self.fingerprint.clone()
+    }
+    fn supports_content_reuse(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         PROVIDER_NAME
     }
@@ -95,6 +109,27 @@ impl SafetyProvider for ProjectArachnidShieldProvider {
     }
 
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
+        self.scan_with_reference(request, None).await
+    }
+
+    async fn scan_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        guard: &dyn kukuri_cn_safety::provider::ScanReferenceGuard,
+    ) -> Result<ProviderScanResult, ScanError> {
+        self.scan_with_reference(request, Some(guard)).await
+    }
+}
+
+impl ProjectArachnidShieldProvider {
+    async fn scan_with_reference(
+        &self,
+        request: &ProviderScanRequest,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
+    ) -> Result<ProviderScanResult, ScanError> {
+        if let Some(guard) = guard {
+            guard.check().await?;
+        }
         let media_hint = request
             .media_hint
             .as_deref()
@@ -119,6 +154,9 @@ impl SafetyProvider for ProjectArachnidShieldProvider {
         let media = fetcher
             .fetch(media_hint, request.media_mime.as_deref())
             .await?;
+        if let Some(guard) = guard {
+            guard.check().await?;
+        }
         let scan = self
             .client
             .scan_media(media.bytes, &media.content_type)

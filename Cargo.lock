@@ -3215,7 +3215,9 @@ dependencies = [
  "kukuri-cn-protocol",
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
+ "kukuri-cn-safety-openai",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-video",
  "kukuri-cn-safety-vlm",
  "reqwest 0.13.4",
  "serde_json",
@@ -3240,7 +3242,9 @@ dependencies = [
  "kukuri-cn-protocol",
  "kukuri-cn-safety",
  "kukuri-cn-safety-arachnid",
+ "kukuri-cn-safety-openai",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-video",
  "kukuri-cn-safety-vlm",
  "kukuri-cn-trust",
  "kukuri-core",
@@ -3305,7 +3309,9 @@ dependencies = [
  "kukuri-cn-core",
  "kukuri-cn-runtime-support",
  "kukuri-cn-safety",
+ "kukuri-cn-safety-openai",
  "kukuri-cn-safety-runtime",
+ "kukuri-cn-safety-video",
  "kukuri-cn-trust",
  "kukuri-core",
  "kukuri-docs-sync",
@@ -3350,6 +3356,7 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

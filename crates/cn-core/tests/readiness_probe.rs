@@ -33,6 +33,7 @@ async fn probe_cache_upserts_by_slot_and_round_trips() -> Result<()> {
     initialize_database(&pool).await?;
 
     let first = ReadinessProbeRecord {
+        configuration_fingerprint: None,
         provider_slot: "known_csam".to_string(),
         provider: "project-arachnid-shield".to_string(),
         pass: false,
@@ -51,6 +52,7 @@ async fn probe_cache_upserts_by_slot_and_round_trips() -> Result<()> {
     upsert_readiness_probe(&pool, &second).await?;
 
     let third = ReadinessProbeRecord {
+        configuration_fingerprint: Some("config-generation-1".into()),
         provider_slot: "general".to_string(),
         provider: "openai-compatible-vlm".to_string(),
         pass: true,

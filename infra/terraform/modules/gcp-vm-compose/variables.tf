@@ -584,3 +584,29 @@ variable "operator_config_file" {
   type        = string
   default     = ""
 }
+
+variable "moderation" {
+  description = "Non-secret OpenAI Moderation settings; credential uses vlm_api_key_secret_id."
+  type = object({
+    api_base_url   = string
+    model          = string
+    config_version = string
+    rpm            = number
+    rpd            = number
+    tpm            = number
+    image_tokens   = number
+  })
+  default = {
+    api_base_url   = "https://api.openai.com/v1"
+    model          = "omni-moderation-latest"
+    config_version = "1"
+    rpm            = 400
+    rpd            = 8000
+    tpm            = 8000
+    image_tokens   = 2048
+  }
+  validation {
+    condition     = var.moderation.rpm >= 1 && var.moderation.rpm <= 500 && var.moderation.rpd >= 1 && var.moderation.rpd <= 10000 && var.moderation.tpm >= 1 && var.moderation.tpm <= 10000 && var.moderation.image_tokens >= 1 && var.moderation.image_tokens <= var.moderation.tpm
+    error_message = "Moderation limits must fit the initial Tier 1 budget."
+  }
+}

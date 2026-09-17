@@ -2,6 +2,8 @@
 
 最終更新日: 2026-08-07
 
+専用 `openai-moderation` を使用する配備は、[動画・OpenAI Moderationの運用](community-node-openai-moderation.md) の設定、tmpfs、合成readiness probe、構成世代更新も適用する。
+
 ## 目的
 
 この runbook は、GCP `low-cost` Community Node の production image 更新から Terraform、

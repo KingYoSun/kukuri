@@ -16,6 +16,7 @@ pub enum ModerationInput<'a> {
 }
 
 pub struct ModerationClient {
+    metrics: Arc<kukuri_cn_safety::metrics::ModerationMetrics>,
     config: ModerationConfig,
     credentials: ModerationCredentials,
     http: reqwest::Client,
@@ -45,6 +46,7 @@ impl ModerationClient {
             .build()
             .map_err(|_| invalid("cannot construct moderation HTTP client"))?;
         Ok(Self {
+            metrics: Arc::new(kukuri_cn_safety::metrics::ModerationMetrics::default()),
             queue: Semaphore::new(config.queue_capacity),
             in_flight: Semaphore::new(1),
             config,
@@ -58,16 +60,29 @@ impl ModerationClient {
         &self.config
     }
 
+    pub fn metrics(&self) -> Arc<kukuri_cn_safety::metrics::ModerationMetrics> {
+        self.metrics.clone()
+    }
+
     pub async fn moderate(
         &self,
         input: ModerationInput<'_>,
         deadline: Instant,
     ) -> Result<ModerationAssessment, ScanError> {
+        self.moderate_guarded(input, deadline, None).await
+    }
+
+    pub async fn moderate_guarded(
+        &self,
+        input: ModerationInput<'_>,
+        deadline: Instant,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
+    ) -> Result<ModerationAssessment, ScanError> {
         let _queue = self
             .queue
             .try_acquire()
             .map_err(|_| ScanError::Unavailable("moderation queue is full".into()))?;
-        timeout_at(deadline, self.moderate_inner(input, deadline))
+        timeout_at(deadline, self.moderate_inner(input, deadline, guard))
             .await
             .map_err(|_| ScanError::Timeout("moderation scan deadline exceeded".into()))?
     }
@@ -76,6 +91,7 @@ impl ModerationClient {
         &self,
         input: ModerationInput<'_>,
         deadline: Instant,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
     ) -> Result<ModerationAssessment, ScanError> {
         let (part, kind, tokens) = match input {
             ModerationInput::Text(text) => {
@@ -120,6 +136,9 @@ impl ModerationClient {
         .map_err(|_| ScanError::Unavailable("moderation client is stopping".into()))?;
         for attempt in 0..3u32 {
             loop {
+                if let Some(guard) = guard {
+                    guard.check().await?;
+                }
                 let delay = self.budget.reserve(tokens, &self.config.budget).await?;
                 if delay.is_zero() {
                     break;
@@ -131,6 +150,10 @@ impl ModerationClient {
                 }
                 tokio::time::sleep(delay).await;
             }
+            if let Some(guard) = guard {
+                guard.check().await?;
+            }
+            self.metrics.record_api_attempt();
             let response = self
                 .http
                 .post(format!(

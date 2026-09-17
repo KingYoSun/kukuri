@@ -50,10 +50,34 @@ impl OpenAiModerationProvider {
         self
     }
 
+    async fn scan_run(
+        &self,
+        request: &ProviderScanRequest,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
+    ) -> Result<ProviderScanResult, ScanError> {
+        let started = Instant::now();
+        let _queue = self.queue.try_acquire().map_err(|_| {
+            self.client.metrics().record_scan(false, 0);
+            ScanError::Unavailable("moderation scan queue full".into())
+        })?;
+        let deadline = started + self.client.config().scan_timeout;
+        let result = match timeout_at(deadline, self.scan_inner(request, deadline, guard)).await {
+            Ok(result) => result,
+            Err(_) => Err(ScanError::Timeout(
+                "moderation scan deadline exceeded".into(),
+            )),
+        };
+        self.client
+            .metrics()
+            .record_scan(result.is_ok(), started.elapsed().as_millis() as u64);
+        result
+    }
+
     async fn scan_inner(
         &self,
         request: &ProviderScanRequest,
         deadline: Instant,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
     ) -> Result<ProviderScanResult, ScanError> {
         if let Some(hint) = request.media_hint.as_deref() {
             if request.text.as_ref().is_some_and(|text| !text.is_empty()) {
@@ -70,7 +94,13 @@ impl OpenAiModerationProvider {
                 .fetcher
                 .as_ref()
                 .ok_or_else(|| ScanError::Unavailable("moderation media fetcher missing".into()))?;
+            if let Some(guard) = guard {
+                guard.check().await?;
+            }
             let media = fetcher.fetch(hint, request.media_mime.as_deref()).await?;
+            if let Some(guard) = guard {
+                guard.check().await?;
+            }
             if media.bytes.len() > 32 * 1024 * 1024 {
                 return Err(invalid("moderation media is too large"));
             }
@@ -79,7 +109,18 @@ impl OpenAiModerationProvider {
                     .video
                     .as_ref()
                     .ok_or_else(|| ScanError::Unavailable("video extractor missing".into()))?;
-                let extracted = video.extract(&media.bytes).await?;
+                let decode_started = Instant::now();
+                let extraction = video.extract(&media.bytes).await;
+                let (duration, frames) = extraction
+                    .as_ref()
+                    .map(|value| (value.duration_ms, value.frames.len() as u64))
+                    .unwrap_or_default();
+                self.client.metrics().record_video_decode(
+                    duration,
+                    frames,
+                    decode_started.elapsed().as_millis() as u64,
+                );
+                let extracted = extraction?;
                 if extracted.frames.is_empty() || extracted.frames.len() > 8 {
                     return Err(invalid("invalid extracted frame count"));
                 }
@@ -91,7 +132,7 @@ impl OpenAiModerationProvider {
                     }
                     let result = self
                         .client
-                        .moderate(ModerationInput::Image(&frame.bytes), deadline)
+                        .moderate_guarded(ModerationInput::Image(&frame.bytes), deadline, guard)
                         .await?;
                     match &mut combined {
                         Some(assessment) => crate::ModerationAssessment::merge(assessment, result)?,
@@ -112,7 +153,7 @@ impl OpenAiModerationProvider {
             let jpeg = normalize_image(&media.bytes)?;
             let result = self
                 .client
-                .moderate(ModerationInput::Image(&jpeg), deadline)
+                .moderate_guarded(ModerationInput::Image(&jpeg), deadline, guard)
                 .await?;
             return Ok(result.into_result(ScanInputKind::Image, 1, None));
         }
@@ -127,7 +168,7 @@ impl OpenAiModerationProvider {
         }
         let result = self
             .client
-            .moderate(ModerationInput::Text(text), deadline)
+            .moderate_guarded(ModerationInput::Text(text), deadline, guard)
             .await?;
         Ok(result.into_result(ScanInputKind::Text, 0, None))
     }
@@ -135,6 +176,12 @@ impl OpenAiModerationProvider {
 
 #[async_trait]
 impl SafetyProvider for OpenAiModerationProvider {
+    fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        Some(self.client.metrics())
+    }
+    fn supports_content_reuse(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         PROVIDER_NAME
     }
@@ -152,14 +199,15 @@ impl SafetyProvider for OpenAiModerationProvider {
         )
     }
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
-        let _queue = self
-            .queue
-            .try_acquire()
-            .map_err(|_| ScanError::Unavailable("moderation scan queue full".into()))?;
-        let deadline = Instant::now() + self.client.config().scan_timeout;
-        timeout_at(deadline, self.scan_inner(request, deadline))
-            .await
-            .map_err(|_| ScanError::Timeout("moderation scan deadline exceeded".into()))?
+        self.scan_run(request, None).await
+    }
+
+    async fn scan_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        guard: &dyn kukuri_cn_safety::provider::ScanReferenceGuard,
+    ) -> Result<ProviderScanResult, ScanError> {
+        self.scan_run(request, Some(guard)).await
     }
 }
 

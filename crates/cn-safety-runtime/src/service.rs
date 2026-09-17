@@ -14,6 +14,9 @@ use kukuri_cn_safety::{
 };
 
 use crate::artifacts::risk_target_for;
+use crate::content_cache::{
+    ContentScanCoordinator, ContentScanStore, MemoryContentScanStore, content_scan_key,
+};
 use crate::reuse::{
     PersistedSignal, ReuseDecision, ReuseInputs, ScanDisposition, StoredVerdictRecord,
     VerdictPersistMeta, decide, verdict_changed,
@@ -165,6 +168,9 @@ pub fn content_advisories_for(
 /// [`MemorySafetyArtifactStore`]。
 #[async_trait]
 pub trait SafetyArtifactStore: Send + Sync {
+    fn content_store(&self) -> Option<Arc<dyn ContentScanStore>> {
+        None
+    }
     async fn persist_event(&self, event: &SignedModerationEvent) -> Result<()>;
 
     /// risk signal を保存する。
@@ -228,6 +234,7 @@ struct MemorySignal {
 
 #[derive(Debug, Default)]
 pub struct MemorySafetyArtifactStore {
+    content: Arc<MemoryContentScanStore>,
     events: Mutex<Vec<SignedModerationEvent>>,
     signals: Mutex<Vec<MemorySignal>>,
     signal_subject_authors: Mutex<Vec<(RiskSignalTarget, String, String)>>,
@@ -352,6 +359,9 @@ fn subject_kind_key(subject_kind: SubjectKind) -> String {
 
 #[async_trait]
 impl SafetyArtifactStore for MemorySafetyArtifactStore {
+    fn content_store(&self) -> Option<Arc<dyn ContentScanStore>> {
+        Some(self.content.clone())
+    }
     async fn persist_event(&self, event: &SignedModerationEvent) -> Result<()> {
         self.events
             .lock()
@@ -507,6 +517,7 @@ pub struct SafetyScanOutcome {
 }
 
 pub struct SafetyScanService {
+    content: Option<ContentScanCoordinator>,
     orchestrator: Arc<SafetyOrchestrator>,
     signer: Option<Arc<dyn ModerationEventSigner + Send + Sync>>,
     store: Arc<dyn SafetyArtifactStore>,
@@ -539,6 +550,10 @@ impl SafetyScanService {
         &self.issuer_node_id
     }
 
+    pub fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        self.orchestrator.moderation_metrics()
+    }
+
     /// 構築時に確定した scan 構成の fingerprint（#1050）。
     pub fn scan_config_fingerprint(&self) -> &str {
         self.orchestrator.scan_config_fingerprint()
@@ -563,7 +578,7 @@ impl SafetyScanService {
         &self,
         request: &ProviderScanRequest,
     ) -> Result<SafetyScanOutcome> {
-        self.scan_and_record_inner(request, None, None).await
+        self.scan_and_record_inner(request, None, None, None).await
     }
 
     pub async fn scan_and_record_for_author(
@@ -574,7 +589,7 @@ impl SafetyScanService {
         if subject_author.trim().is_empty() {
             bail!("scan subject author must not be empty");
         }
-        self.scan_and_record_inner(request, Some(subject_author), None)
+        self.scan_and_record_inner(request, Some(subject_author), None, None)
             .await
     }
 
@@ -582,8 +597,8 @@ impl SafetyScanService {
     /// （#1050）。
     ///
     /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
-    /// blob = blob hash）。再利用時は artifact を生成せず、`verdict_id` に保存済み行の id を
-    /// 返す。非 allow の再利用で `subject_author` があれば著者関連付けだけ行う。
+    /// blob = blob hash）。同subjectの再利用では保存済みverdictのidを返し、必要な著者関連付けを行う。
+    /// 別subjectの共通内容cache hitではproviderを呼ばず、自subjectのartifactを生成する（#1060）。
     pub async fn scan_or_reuse(
         &self,
         request: &ProviderScanRequest,
@@ -596,8 +611,27 @@ impl SafetyScanService {
         if source_fingerprint.trim().is_empty() {
             bail!("scan source fingerprint must not be empty");
         }
-        self.scan_and_record_inner(request, subject_author, Some(source_fingerprint))
+        self.scan_and_record_inner(request, subject_author, Some(source_fingerprint), None)
             .await
+    }
+
+    pub async fn scan_or_reuse_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        subject_author: &str,
+        source_fingerprint: &str,
+        guard: &dyn crate::ScanReferenceGuard,
+    ) -> Result<SafetyScanOutcome> {
+        if subject_author.trim().is_empty() || source_fingerprint.trim().is_empty() {
+            bail!("scan author and source fingerprint must be present");
+        }
+        self.scan_and_record_inner(
+            request,
+            Some(subject_author),
+            Some(source_fingerprint),
+            Some(guard),
+        )
+        .await
     }
 
     async fn scan_and_record_inner(
@@ -605,7 +639,9 @@ impl SafetyScanService {
         request: &ProviderScanRequest,
         subject_author: Option<&str>,
         source_fingerprint: Option<&str>,
+        guard: Option<&dyn crate::ScanReferenceGuard>,
     ) -> Result<SafetyScanOutcome> {
+        crate::reference_guard::check(guard).await?;
         let subject = match (request.subject_kind, request.subject_id.as_deref()) {
             (Some(kind), Some(subject_id)) if !subject_id.trim().is_empty() => {
                 Some((kind, subject_id))
@@ -630,6 +666,7 @@ impl SafetyScanService {
             if let (ReuseDecision::Reuse, Some(stored)) =
                 (decide(stored.as_ref(), &inputs), &stored)
             {
+                crate::reference_guard::check(guard).await?;
                 // risk signal を持つ verdict（非 allow、またはラベル付き allow）の再利用では、
                 // 共有 subject の 2 人目以降の著者も trust 入力へ関連付ける（#1050 TR-9 / #1054）。
                 if (!stored.verdict.is_indexable() || stored.verdict.is_labeled_allow())
@@ -657,30 +694,50 @@ impl SafetyScanService {
             }
         }
 
-        let report = self.orchestrator.scan_subject(request).await;
+        let key = source_fingerprint
+            .filter(|_| self.orchestrator.supports_content_reuse())
+            .and_then(|_| {
+                content_scan_key(
+                    request,
+                    &self.issuer_node_id,
+                    self.scan_config_fingerprint(),
+                )
+            });
+        let (report, content_reused) = match (&self.content, key) {
+            (Some(content), Some(key)) => {
+                match content.scan(key, request, &self.orchestrator, guard).await {
+                    Ok(result) => result,
+                    Err(_) => (
+                        self.orchestrator.failed_report(
+                            request,
+                            &kukuri_cn_safety::ScanError::Unavailable(
+                                "shared content scan could not complete".into(),
+                            ),
+                        ),
+                        false,
+                    ),
+                }
+            }
+            _ => (
+                self.orchestrator.scan_subject_guarded(request, guard).await,
+                false,
+            ),
+        };
         // risk signal を verdict より先に永続化する。ラベル付き allow の content advisory は
         // signal id（appeal の入口）を持つため、verdict 行へ書く前に id が要る（ADR 0028 §8.6）。
-        let persisted_signal = match report.risk_signal.as_ref() {
-            Some(signal) => Some(
-                self.store
-                    .persist_signal(&self.issuer_node_id, signal, subject_author)
-                    .await
-                    .context("failed to persist safety risk signal")?,
-            ),
-            None => None,
-        };
+        crate::reference_guard::check(guard).await?;
+        let recorded = crate::recording::record_signals(
+            self.store.as_ref(),
+            &report,
+            request,
+            &self.issuer_node_id,
+            subject_author,
+            guard,
+        )
+        .await?;
         let (verdict_id, advisories) = match subject {
             Some((kind, subject_id)) => {
-                let advisories = match persisted_signal.as_ref() {
-                    Some(signal) => content_advisories_for(
-                        &report.verdict,
-                        kind,
-                        subject_id,
-                        &self.issuer_node_id,
-                        &signal.id,
-                    ),
-                    None => Vec::new(),
-                };
+                let advisories = recorded.advisories;
                 let meta = VerdictPersistMeta {
                     source_fingerprint: source_fingerprint.map(str::to_string),
                     scan_config_fingerprint: Some(
@@ -689,6 +746,7 @@ impl SafetyScanService {
                     derived_tags: report.derived_tags.clone(),
                     advisories: advisories.clone(),
                 };
+                crate::reference_guard::check(guard).await?;
                 let verdict_id = self
                     .store
                     .persist_verdict(kind, subject_id, &report.verdict, &meta)
@@ -700,12 +758,11 @@ impl SafetyScanService {
         };
         // signed moderation event は「新しい判定」の記録。signal を既存行へ集約し verdict も
         // 変わらない再 scan では発行しない（#1050 AC-2）。
-        let should_emit_event = persisted_signal
-            .as_ref()
-            .is_some_and(|signal| signal.newly_created)
+        let should_emit_event = recorded.any_new
             || verdict_changed(stored.as_ref().map(|s| &s.verdict), &report.verdict);
         let signed_event = match (report.moderation_event.as_ref(), self.signer.as_ref()) {
             (Some(body), Some(signer)) if should_emit_event => {
+                crate::reference_guard::check(guard).await?;
                 let event = issue_signed_event(body.clone(), signer.as_ref());
                 self.store
                     .persist_event(&event)
@@ -718,9 +775,13 @@ impl SafetyScanService {
         Ok(SafetyScanOutcome {
             report,
             signed_event,
-            persisted_signal_id: persisted_signal.map(|signal| signal.id),
+            persisted_signal_id: recorded.primary.map(|signal| signal.id),
             verdict_id,
-            disposition: ScanDisposition::Fresh,
+            disposition: if content_reused {
+                ScanDisposition::Reused
+            } else {
+                ScanDisposition::Fresh
+            },
             advisories,
         })
     }
@@ -784,7 +845,9 @@ impl SafetyScanServiceBuilder {
                 bail!("safety scan service cannot both sign moderation events and disable emission")
             }
         };
+        let content = self.store.content_store().map(ContentScanCoordinator::new);
         Ok(SafetyScanService {
+            content,
             orchestrator: self.orchestrator,
             signer,
             store: self.store,

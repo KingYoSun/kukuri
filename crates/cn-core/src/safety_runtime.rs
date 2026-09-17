@@ -38,6 +38,11 @@ impl PgSafetyArtifactStore {
 
 #[async_trait]
 impl SafetyArtifactStore for PgSafetyArtifactStore {
+    fn content_store(
+        &self,
+    ) -> Option<Arc<dyn kukuri_cn_safety_runtime::content_cache::ContentScanStore>> {
+        Some(Arc::new(crate::PgContentScanStore::new(self.pool.clone())))
+    }
     async fn persist_event(&self, event: &SignedModerationEvent) -> Result<()> {
         persist_signed_moderation_event(&self.pool, event)
             .await
@@ -111,6 +116,23 @@ pub fn resolve_safety_providers(
     providers: &SafetyRuntimeProvidersConfig,
     media_fetcher: Option<Arc<dyn MediaFetcher>>,
 ) -> Result<Vec<Arc<dyn SafetyProvider>>> {
+    resolve_safety_providers_inner(providers, media_fetcher, None)
+}
+
+/// Production construction: OpenAI requests must use the node's persistent shared budget.
+pub fn resolve_safety_providers_with_pool(
+    providers: &SafetyRuntimeProvidersConfig,
+    media_fetcher: Option<Arc<dyn MediaFetcher>>,
+    pool: &PgPool,
+) -> Result<Vec<Arc<dyn SafetyProvider>>> {
+    resolve_safety_providers_inner(providers, media_fetcher, Some(pool))
+}
+
+fn resolve_safety_providers_inner(
+    providers: &SafetyRuntimeProvidersConfig,
+    media_fetcher: Option<Arc<dyn MediaFetcher>>,
+    pool: Option<&PgPool>,
+) -> Result<Vec<Arc<dyn SafetyProvider>>> {
     let slots: [(&'static str, Option<&SafetyRuntimeProviderEntry>); 3] = [
         ("known_csam", providers.known_csam.as_ref()),
         ("general", providers.general.as_ref()),
@@ -119,7 +141,7 @@ pub fn resolve_safety_providers(
     slots
         .into_iter()
         .filter_map(|(slot, entry)| entry.map(|entry| (slot, entry)))
-        .map(|(slot, entry)| resolve_provider(slot, entry, media_fetcher.as_ref()))
+        .map(|(slot, entry)| resolve_provider(slot, entry, media_fetcher.as_ref(), pool))
         .collect()
 }
 
@@ -127,9 +149,10 @@ fn resolve_provider(
     slot: &'static str,
     entry: &SafetyRuntimeProviderEntry,
     media_fetcher: Option<&Arc<dyn MediaFetcher>>,
+    pool: Option<&PgPool>,
 ) -> Result<Arc<dyn SafetyProvider>> {
     // feature 構成によっては未使用になる（mock は fetcher を要しない）。
-    let _ = media_fetcher;
+    let _ = (media_fetcher, pool);
     let normalized = entry.provider.trim().replace('_', "-");
     match normalized.as_str() {
         #[cfg(feature = "safety-mock-provider")]
@@ -138,6 +161,8 @@ fn resolve_provider(
         kukuri_cn_safety_arachnid::PROVIDER_NAME => arachnid_shield_provider(slot, media_fetcher),
         #[cfg(feature = "safety-vlm-provider")]
         kukuri_cn_safety_vlm::PROVIDER_NAME => vlm_provider(slot, media_fetcher),
+        #[cfg(feature = "safety-openai-provider")]
+        kukuri_cn_safety_openai::PROVIDER_NAME => openai_provider(slot, media_fetcher, pool),
         other => {
             // 候補は build に実在する provider だけを挙げる（production binary のエラーが
             // 選択不能な mock を案内しないように。#614）。
@@ -149,6 +174,8 @@ fn resolve_provider(
             supported.push(format!("`{}`", kukuri_cn_safety_arachnid::PROVIDER_NAME));
             #[cfg(feature = "safety-vlm-provider")]
             supported.push(format!("`{}`", kukuri_cn_safety_vlm::PROVIDER_NAME));
+            #[cfg(feature = "safety-openai-provider")]
+            supported.push(format!("`{}`", kukuri_cn_safety_openai::PROVIDER_NAME));
             let supported = if supported.is_empty() {
                 "none (no safety provider feature is enabled in this build)".to_string()
             } else {
@@ -160,6 +187,39 @@ fn resolve_provider(
             )
         }
     }
+}
+
+#[cfg(feature = "safety-openai-provider")]
+fn openai_provider(
+    slot: &str,
+    fetcher: Option<&Arc<dyn MediaFetcher>>,
+    pool: Option<&PgPool>,
+) -> Result<Arc<dyn SafetyProvider>> {
+    use kukuri_cn_safety_openai::{
+        ModerationClient, ModerationConfig, ModerationCredentials, OpenAiModerationProvider,
+    };
+    use kukuri_cn_safety_video::{FfmpegVideoExtractor, VideoExtractConfig};
+    if slot != "general" {
+        bail!(
+            "openai-moderation supports only the general slot; it is not a known-match or unknown-CSAM detector"
+        );
+    }
+    let pool = pool.context("openai-moderation requires the persistent shared budget")?;
+    let config = ModerationConfig::from_env().context("invalid OpenAI moderation configuration")?;
+    let credentials =
+        ModerationCredentials::from_env().context("missing OpenAI moderation credential")?;
+    let client = ModerationClient::new(
+        config,
+        credentials,
+        Arc::new(crate::PgModerationBudget::new(pool.clone())),
+    )?;
+    let mut provider = OpenAiModerationProvider::new(Arc::new(client));
+    if let Some(fetcher) = fetcher {
+        provider = provider.with_media_fetcher(fetcher.clone());
+    }
+    let extractor = FfmpegVideoExtractor::new(VideoExtractConfig::from_env()?)
+        .context("video decoder is not ready for OpenAI moderation")?;
+    Ok(Arc::new(provider.with_video_extractor(Arc::new(extractor))))
 }
 
 #[cfg(feature = "safety-vlm-provider")]

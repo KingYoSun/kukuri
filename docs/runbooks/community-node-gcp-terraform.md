@@ -2,6 +2,8 @@
 
 最終更新日: 2026-08-07
 
+`openai-moderation` の非秘密設定は `deploy.moderation`、キーは既存の `deploy.vlm_api_key_secret_id` から注入する。詳細は[専用providerの運用](community-node-openai-moderation.md)を参照。
+
 ## 目的
 
 - community node（`cn-user-api` + `cn-iroh-relay` + Postgres + Valkey）を GCP に
@@ -517,6 +519,10 @@ terraform -chdir=infra/terraform/envs/ha validate
 
 ### CI 用 GCP / GitHub セットアップ（人手）
 
+リポジトリ移転時はproviderの `attribute-condition` とCI service accountの
+`roles/iam.workloadIdentityUser` の `attribute.repository/<owner>/<repo>` を同じ現repositoryへ更新する。
+GitHub APIのrepository IDで同一repositoryの移転を確認し、旧名の許可は残さない。
+
 ```bash
 # Workload Identity Federation（GitHub OIDC）
 gcloud iam workload-identity-pools create github --location=global
@@ -524,13 +530,13 @@ gcloud iam workload-identity-pools providers create-oidc github \
   --location=global --workload-identity-pool=github \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
-  --attribute-condition="assertion.repository=='KingYoSun/kukuri'"
+  --attribute-condition="assertion.repository=='kukuri-app/kukuri'"
 
 # provider が既に作成済みの場合は create-oidc の代わりに update-oidc を使う:
 # gcloud iam workload-identity-pools providers update-oidc github \
 #   --location=global --workload-identity-pool=github \
 #   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
-#   --attribute-condition="assertion.repository=='KingYoSun/kukuri'"
+#   --attribute-condition="assertion.repository=='kukuri-app/kukuri'"
 
 # CI 用 service account（plan に必要な read/metadata 権限を付与）
 gcloud iam service-accounts create kukuri-tf-ci

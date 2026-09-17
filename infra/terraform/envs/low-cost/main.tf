@@ -108,7 +108,9 @@ module "vm" {
   media_fetch_max_bytes                 = var.media_fetch_max_bytes
   media_fetch_timeout_secs              = var.media_fetch_timeout_secs
 
-  vlm_api_base_url     = var.vlm_api_base_url
+  vlm_api_base_url = var.vlm_api_base_url
+
+  moderation           = var.moderation
   vlm_model            = var.vlm_model
   vlm_response_format  = var.vlm_response_format
   vlm_api_timeout_secs = var.vlm_api_timeout_secs

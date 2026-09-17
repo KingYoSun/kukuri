@@ -30,9 +30,24 @@ const VLM_PROBE_TEXT: &str = "kukuri readiness probe: benign connectivity check"
 
 /// 疎通確認 1 回の結果。detail に秘匿情報を含めない契約。
 #[derive(Clone, Debug)]
-struct ProbeOutcome {
-    pass: bool,
-    detail: String,
+pub(super) struct ProbeOutcome {
+    pub(super) pass: bool,
+    pub(super) detail: String,
+}
+
+fn reusable_probe(
+    record: &ReadinessProbeRecord,
+    slot: &str,
+    provider: &str,
+    configuration: Option<&str>,
+    now: chrono::DateTime<Utc>,
+    ttl: Duration,
+) -> bool {
+    record.provider_slot == slot
+        && record.provider == provider
+        && record.configuration_fingerprint.as_deref() == configuration
+        && now >= record.checked_at
+        && now - record.checked_at <= ttl
 }
 
 /// Project Arachnid Shield への疎通確認（合成 PDQ hash の送信）。
@@ -189,11 +204,24 @@ pub(super) async fn run(
     let mut slot_results: Vec<(String, String, ProbeOutcome)> = Vec::new();
 
     for (slot, provider) in &slots {
+        let prepared_openai = (provider == "openai-moderation")
+            .then(|| super::readiness_openai::PreparedProbe::new(pool, slot));
+        let configuration_fingerprint = prepared_openai
+            .as_ref()
+            .and_then(|result| result.as_ref().ok())
+            .map(|probe| probe.fingerprint.clone());
+        let configuration_valid = prepared_openai.as_ref().is_none_or(|result| result.is_ok());
         // 期限内の保存結果があれば再利用する。
         if let Some(record) = cached.iter().find(|record| {
-            record.provider_slot == *slot
-                && record.provider == *provider
-                && now - record.checked_at <= ttl
+            configuration_valid
+                && reusable_probe(
+                    record,
+                    slot,
+                    provider,
+                    configuration_fingerprint.as_deref(),
+                    now,
+                    ttl,
+                )
         }) {
             slot_results.push((
                 (*slot).to_string(),
@@ -210,7 +238,10 @@ pub(super) async fn run(
             continue;
         }
 
-        let outcome = if let Some(outcome) = fresh_by_provider.get(provider) {
+        let outcome = if let Some(outcome) = fresh_by_provider
+            .get(provider)
+            .filter(|_| configuration_valid)
+        {
             outcome.clone()
         } else {
             let outcome = match provider.as_str() {
@@ -224,6 +255,15 @@ pub(super) async fn run(
                         Err(error) => ProbeOutcome {
                             pass: false,
                             detail: format!("設定不備: {error}"),
+                        },
+                    }
+                }
+                "openai-moderation" => {
+                    match prepared_openai.as_ref().expect("OpenAI probe prepared") {
+                        Ok(probe) => probe.run().await,
+                        Err(_) => ProbeOutcome {
+                            pass: false,
+                            detail: "OpenAI/動画decoderの設定・依存を確認してください".into(),
                         },
                     }
                 }
@@ -251,6 +291,7 @@ pub(super) async fn run(
         upsert_readiness_probe(
             pool,
             &ReadinessProbeRecord {
+                configuration_fingerprint,
                 provider_slot: (*slot).to_string(),
                 provider: provider.clone(),
                 pass: outcome.pass,
@@ -376,6 +417,40 @@ mod tests {
     use kukuri_cn_safety_vlm::{VlmCredentials, VlmResponseFormat};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn readiness_reuse_requires_current_configuration_and_time() {
+        let now = Utc::now();
+        let record = ReadinessProbeRecord {
+            configuration_fingerprint: Some("provider-and-decoder-v1".into()),
+            provider_slot: "general".into(),
+            provider: "openai-moderation".into(),
+            pass: true,
+            detail: "benign probe".into(),
+            checked_at: now,
+        };
+        let check = |config, time| {
+            reusable_probe(
+                &record,
+                "general",
+                "openai-moderation",
+                config,
+                time,
+                Duration::minutes(15),
+            )
+        };
+        assert!(check(Some("provider-and-decoder-v1"), now));
+        assert!(!check(Some("provider-and-decoder-v2"), now));
+        assert!(!check(None, now));
+        assert!(!check(
+            Some("provider-and-decoder-v1"),
+            now - Duration::seconds(1)
+        ));
+        assert!(!check(
+            Some("provider-and-decoder-v1"),
+            now + Duration::minutes(16)
+        ));
+    }
 
     fn shield_client(base_url: &str, timeout_secs: u64) -> ShieldClient {
         let config = ShieldProviderConfig {

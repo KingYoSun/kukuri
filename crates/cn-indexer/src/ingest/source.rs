@@ -161,7 +161,7 @@ impl<'a> SourceResolver<'a> {
                     .as_ref()
                     .context("blob service is not configured for blob text")?;
                 let fetched = blob_service
-                    .fetch_blob_ephemeral(hash)
+                    .fetch_blob_ephemeral_bounded(hash, MAX_INDEXABLE_POST_BODY_BYTES)
                     .await
                     .context("failed to fetch blob text body")?
                     .context("blob text body is not retrievable")?;

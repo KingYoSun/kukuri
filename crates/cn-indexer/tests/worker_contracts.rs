@@ -30,7 +30,10 @@ use kukuri_cn_safety_runtime::{
     MemorySafetyArtifactStore, SafetyOrchestrator, SafetyScanService,
     Secp256k1ModerationEventSigner,
 };
-use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope, timeline_sort_key};
+use kukuri_core::{
+    ChannelId, KukuriKeys, ObjectVisibility, PayloadRef, ReplicaId, TopicId,
+    build_post_envelope_with_payload_in_channel, timeline_sort_key,
+};
 use kukuri_docs_sync::{
     DocFetchPolicy, DocOp, DocQuery, DocRecord, DocsSync, MemoryDocsSync, stable_key,
 };
@@ -110,8 +113,34 @@ async fn persist_post(
     topic: &TopicId,
     body: &str,
 ) -> String {
+    persist_post_in_channel(docs, replica, topic, body, None).await
+}
+
+async fn persist_post_in_channel(
+    docs: &dyn DocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+    channel: Option<&str>,
+) -> String {
     let keys = KukuriKeys::generate();
-    let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
+    let channel_id = channel.map(ChannelId::new);
+    let envelope = build_post_envelope_with_payload_in_channel(
+        &keys,
+        topic,
+        PayloadRef::InlineText { text: body.into() },
+        vec![],
+        vec![],
+        None,
+        if channel.is_some() {
+            ObjectVisibility::Private
+        } else {
+            ObjectVisibility::Public
+        },
+        channel_id.as_ref(),
+        Vec::new(),
+    )
+    .expect("envelope");
     let object = envelope
         .to_post_object()
         .expect("post object")
@@ -317,7 +346,14 @@ async fn revoked_channel_secret_deindexes_private_channel() -> Result<()> {
     // （本番ではワーカーの restore_scopes が登録する。ここでは投稿を先に置くため）。
     docs.register_private_replica_secret(&replica, TEST_NAMESPACE_SECRET)
         .await?;
-    let object_id = persist_post(docs.as_ref(), &replica, &topic, "private post").await;
+    let object_id = persist_post_in_channel(
+        docs.as_ref(),
+        &replica,
+        &topic,
+        "private post",
+        Some("secret-room"),
+    )
+    .await;
 
     let state = Arc::new(IndexerRuntimeState::default());
     let projection = Arc::new(MemoryIndexProjection::default());

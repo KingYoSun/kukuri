@@ -4,6 +4,7 @@ FROM rust:${RUST_VERSION}-bookworm AS builder
 WORKDIR /workspace
 
 ARG TARGET_PACKAGE
+ARG CARGO_BUILD_JOBS=2
 
 COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 COPY xtask ./xtask
@@ -18,6 +19,12 @@ ARG TARGET_BIN
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
+    && if [ "$TARGET_BIN" = "cn-indexer" ] || [ "$TARGET_BIN" = "cn-cli" ]; then \
+         apt-get install -y --no-install-recommends ffmpeg \
+         && mkdir -p /usr/local/share/kukuri \
+         && ffmpeg -version > /usr/local/share/kukuri/decoder-build-id \
+         && ffprobe -version >> /usr/local/share/kukuri/decoder-build-id; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 RUN test -n "$TARGET_BIN"

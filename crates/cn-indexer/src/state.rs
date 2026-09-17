@@ -15,6 +15,8 @@ use crate::ingest::IngestSummary;
 /// 観測状態の写し。`GET /v1/status` はこの形をそのまま JSON で返す。
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct IndexerStateSnapshot {
+    #[serde(default)]
+    pub moderation: kukuri_cn_safety::metrics::ModerationMetricsSnapshot,
     /// ワーカーが動いているか。
     pub worker_running: bool,
     /// 取り込みが有効か（安全性プロバイダ未設定なら false のまま常駐する）。
@@ -76,6 +78,7 @@ pub struct IndexerStateSnapshot {
 /// 共有の観測状態。ワーカー・取り込みパイプライン・メディア取得器が更新する。
 #[derive(Debug, Default)]
 pub struct IndexerRuntimeState {
+    moderation: RwLock<Option<std::sync::Arc<kukuri_cn_safety::metrics::ModerationMetrics>>>,
     worker_running: AtomicBool,
     ingest_enabled: AtomicBool,
     opened_scopes: AtomicU64,
@@ -102,6 +105,12 @@ pub struct IndexerRuntimeState {
 }
 
 impl IndexerRuntimeState {
+    pub fn set_moderation_metrics(
+        &self,
+        metrics: Option<std::sync::Arc<kukuri_cn_safety::metrics::ModerationMetrics>>,
+    ) {
+        *self.moderation.write().expect("moderation metrics lock") = metrics;
+    }
     pub fn set_worker_running(&self, running: bool) {
         self.worker_running.store(running, Ordering::Relaxed);
     }
@@ -224,6 +233,13 @@ impl IndexerRuntimeState {
                 None => (None, None),
             };
         IndexerStateSnapshot {
+            moderation: self
+                .moderation
+                .read()
+                .expect("moderation metrics lock")
+                .as_ref()
+                .map(|metrics| metrics.snapshot())
+                .unwrap_or_default(),
             worker_running: self.worker_running.load(Ordering::Relaxed),
             ingest_enabled: self.ingest_enabled.load(Ordering::Relaxed),
             opened_scopes: self.opened_scopes.load(Ordering::Relaxed),

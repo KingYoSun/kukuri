@@ -34,13 +34,14 @@ use tracing::{debug, warn};
 use kukuri_blob_service::BlobService;
 use kukuri_cn_core::{IndexEntryStore, IndexScopeKind, NewIndexEntry};
 use kukuri_cn_safety::ReasonCode;
-use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
+use kukuri_cn_safety::provider::{ProviderScanRequest, ScanReferenceGuard, SubjectKind};
 use kukuri_cn_safety_runtime::{SafetyScanOutcome, SafetyScanService, ScanDisposition};
 use kukuri_core::{KukuriEnvelope, ObjectStatus, ReplicaId, verify_post_withdrawal};
 use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, SharedReplicaKeyFamily};
 
 use crate::projection::{IndexProjection, IndexedEntry};
 
+mod reference_guard;
 mod source;
 use source::{PostObjectView, SourceResolver};
 
@@ -57,7 +58,7 @@ pub struct IngestSummary {
     pub deindexed: usize,
     /// provider を呼んで判定した scan 数（post text + media blob。#1050）。
     pub scans_fresh: usize,
-    /// 保存済み verdict を再利用して provider を呼ばなかった scan 数（#1050）。
+    /// 保存済みsubject判定または共通内容判定を再利用してproviderを呼ばなかったscan数。
     pub scans_reused: usize,
 }
 
@@ -223,7 +224,8 @@ impl IngestPipeline {
     /// 外部プロバイダ利用不可）を記録する（#1050）。
     ///
     /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
-    /// blob = blob hash）。再利用時は provider を呼ばず artifact も作らない。
+    /// blob = blob hash）。再利用時はproviderを呼ばない。共通内容cacheから別subjectへ
+    /// 再利用する場合は、そのsubjectのartifactを新たに生成する。
     ///
     /// media blob の未複製・ピア不在も verdict 上は `ProviderUnavailable` になるが、外部 safety
     /// provider 障害ではない。scan 中に media fetch の利用不可カウンタが増えた場合は、専用の
@@ -234,6 +236,7 @@ impl IngestPipeline {
         subject_author: &str,
         source_fingerprint: &str,
         stats: &mut ScanStats,
+        guard: &dyn ScanReferenceGuard,
     ) -> Result<SafetyScanOutcome> {
         let media_fetch_unavailable_before = self
             .metrics
@@ -241,7 +244,7 @@ impl IngestPipeline {
             .map(|metrics| metrics.media_fetch_unavailable_count());
         let outcome = match self
             .safety
-            .scan_or_reuse(request, Some(subject_author), source_fingerprint)
+            .scan_or_reuse_guarded(request, subject_author, source_fingerprint, guard)
             .await
         {
             Ok(outcome) => outcome,
@@ -285,6 +288,9 @@ impl IngestPipeline {
         replica_id: &ReplicaId,
     ) -> Result<IngestSummary> {
         // scope の replica を open してから走査する（未 open だと sync 対象にならない）。
+        if !self.retain_supported_scope(scope_kind, scope_id).await? {
+            return Ok(IngestSummary::default());
+        }
         self.docs_sync.open_replica(replica_id).await?;
 
         // post object の state entry を prefix 走査する（`objects/<id>/state`）。
@@ -339,6 +345,9 @@ impl IngestPipeline {
                 return self.ingest_scope(scope_kind, scope_id, replica_id).await;
             }
         };
+        if !self.retain_supported_scope(scope_kind, scope_id).await? {
+            return Ok(IngestSummary::default());
+        }
         self.docs_sync.open_replica(replica_id).await?;
 
         let mut records: Vec<DocRecord> = Vec::new();
@@ -455,6 +464,9 @@ impl IngestPipeline {
                 Ok(IngestOutcome::Deindexed) => summary.deindexed += 1,
                 Ok(IngestOutcome::Ignored) => {}
                 Err(error) => {
+                    if let Some(id) = post_id_from_state_key(&record.key) {
+                        self.deindex_object(scope_kind, scope_id, id).await?;
+                    }
                     // 単一 entry の失敗で scope 全体を止めない。fail-closed（投影しない）側に倒す。
                     warn!(
                         replica_id = %replica_id.as_str(),
@@ -478,13 +490,16 @@ impl IngestPipeline {
         context: &ScopeContext,
         stats: &mut ScanStats,
     ) -> Result<IngestOutcome> {
-        let object: PostObjectView = match serde_json::from_slice(&record.value) {
-            Ok(object) => object,
-            Err(error) => {
-                debug!(key = %record.key, error = %error, "record is not a post object; ignoring");
-                return Ok(IngestOutcome::Ignored);
-            }
-        };
+        // Other key domains are not posts. A corrupt value under a real post identity,
+        // however, must reach the error path to remove a previously indexed row.
+        if post_id_from_state_key(&record.key).is_none() {
+            return Ok(IngestOutcome::Ignored);
+        }
+        let object: PostObjectView =
+            serde_json::from_slice(&record.value).context("invalid post object state")?;
+        if record.key != format!("objects/{}/state", object.object_id) {
+            bail!("post object identity does not match its key");
+        }
 
         if context
             .withdrawn_object_ids
@@ -518,6 +533,17 @@ impl IngestPipeline {
             return Ok(IngestOutcome::Deindexed);
         }
 
+        let guard = reference_guard::ReferenceGuard {
+            pipeline: self,
+            scope_kind,
+            scope_id,
+            replica: replica_id,
+            object: &object,
+            record,
+            envelope: context.envelopes.get(&object.object_id),
+            media_targets: std::sync::Mutex::new(None),
+        };
+        guard.check().await?;
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
         let source = SourceResolver::new(self.docs_sync.as_ref(), self.blob_service.as_deref());
         let text = match source
@@ -545,7 +571,13 @@ impl IngestPipeline {
         let request = ProviderScanRequest::for_subject(SubjectKind::Post, object.object_id.clone())
             .with_text(text.clone());
         let outcome = self
-            .scan_or_reuse_with_metrics(&request, &object.author, &record.content_hash, stats)
+            .scan_or_reuse_with_metrics(
+                &request,
+                &object.author,
+                &record.content_hash,
+                stats,
+                &guard,
+            )
             .await?;
         let report = &outcome.report;
 
@@ -584,6 +616,10 @@ impl IngestPipeline {
                 return Ok(IngestOutcome::SkippedNonAllow);
             }
         };
+        *guard
+            .media_targets
+            .lock()
+            .expect("media reference guard mutex") = Some(media_targets.clone());
         let mut derived_tags: Vec<String> = report.derived_tags.clone();
         // content advisory は本文 text と各 blob の和集合（ADR 0028 §8.3）。blob 単位の要素は
         // `subject_kind = blob_cid` のまま post 行へ同梱し、client の hash 単位取得ゲートに使う。
@@ -597,7 +633,7 @@ impl IngestPipeline {
             }
             // blob は不変なので hash 自体が内容 fingerprint。
             let media_outcome = self
-                .scan_or_reuse_with_metrics(&request, &object.author, &target.hash, stats)
+                .scan_or_reuse_with_metrics(&request, &object.author, &target.hash, stats, &guard)
                 .await?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
@@ -624,6 +660,7 @@ impl IngestPipeline {
         }
         // post の verdict 行に和集合を確定させる（値が同じなら store 側で no-op）。query 境界は
         // この行から `content_advisories` を導出する（ADR 0025 §7.1）。
+        guard.check().await?;
         self.safety
             .persist_advisories(SubjectKind::Post, object.object_id.as_str(), &advisories)
             .await?;
@@ -638,6 +675,7 @@ impl IngestPipeline {
                 object.object_id
             );
         };
+        guard.check().await?;
         self.entries
             .upsert_entry(&NewIndexEntry {
                 scope_kind,
@@ -661,12 +699,13 @@ impl IngestPipeline {
             scope_kind,
             scope_id: scope_id.to_string(),
             object_id: object.object_id.clone(),
-            author_pubkey: object.author,
+            author_pubkey: object.author.clone(),
             text: text_with_tags(&text, &derived_tags),
             created_at: object.created_at,
             source_replica_id: replica_id.as_str().to_string(),
             content_advisories: Vec::new(),
         };
+        guard.check().await?;
         self.projection.upsert_entry(&entry).await?;
         if outcome.disposition == ScanDisposition::Fresh
             && let Some(metrics) = &self.metrics
@@ -675,6 +714,15 @@ impl IngestPipeline {
             metrics.record_index_lag(chrono::Utc::now().timestamp() - object.created_at);
         }
         Ok(IngestOutcome::Indexed)
+    }
+
+    async fn retain_supported_scope(&self, kind: IndexScopeKind, id: &str) -> Result<bool> {
+        if self.entries.is_scope_supported(kind, id).await? {
+            return Ok(true);
+        }
+        self.entries.remove_scope(kind, id).await?;
+        self.projection.remove_scope(kind, id).await?;
+        Ok(false)
     }
 
     /// object を index 真実源 → 投影の順で両方から消す。
@@ -702,6 +750,12 @@ enum IngestOutcome {
     SkippedNonAllow,
     Deindexed,
     Ignored,
+}
+
+fn post_id_from_state_key(key: &str) -> Option<&str> {
+    key.strip_prefix("objects/")?
+        .strip_suffix("/state")
+        .filter(|id| id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 /// 本文 text に derived 検索タグを相乗りさせた投影用 text を組み立てる。

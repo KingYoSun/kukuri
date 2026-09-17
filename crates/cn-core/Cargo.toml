@@ -17,6 +17,7 @@ safety-arachnid-provider = ["dep:kukuri-cn-safety-arachnid"]
 # provider 実装名 `openai-compatible-vlm`（#420）を general / unknown_csam slot で解決できる
 # ようにする。reqwest 依存を持ち込むため optional にする（arachnid と同じ流儀）。
 safety-vlm-provider = ["dep:kukuri-cn-safety-vlm"]
+safety-openai-provider = ["dep:kukuri-cn-safety-openai", "dep:kukuri-cn-safety-video"]
 
 [dependencies]
 anyhow.workspace = true
@@ -43,6 +44,8 @@ kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-safety-vlm = { path = "../cn-safety-vlm", optional = true }
+kukuri-cn-safety-openai = { path = "../cn-safety-openai", optional = true }
+kukuri-cn-safety-video = { path = "../cn-safety-video", optional = true }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
@@ -56,6 +59,7 @@ kukuri-cn-core = { path = ".", features = [
     "safety-mock-provider",
     "safety-arachnid-provider",
     "safety-vlm-provider",
+    "safety-openai-provider",
 ] }
 
 [lints]

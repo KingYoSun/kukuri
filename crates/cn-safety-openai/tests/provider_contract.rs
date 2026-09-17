@@ -328,6 +328,55 @@ async fn separately_constructed_clients_share_budget_and_do_not_send_on_exhausti
 }
 
 struct VideoFetcher;
+
+struct CurrentReference(Arc<std::sync::atomic::AtomicBool>);
+#[async_trait]
+impl kukuri_cn_safety::provider::ScanReferenceGuard for CurrentReference {
+    async fn check(&self) -> Result<(), ScanError> {
+        if self.0.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            Err(ScanError::Unavailable("reference revoked".into()))
+        }
+    }
+}
+
+#[tokio::test]
+async fn revocation_stops_remaining_frames_and_retries() {
+    for retry in [false, true] {
+        let server = MockServer::start().await;
+        let current = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let invalidated = current.clone();
+        Mock::given(method("POST"))
+            .respond_with(move |_: &wiremock::Request| {
+                invalidated.store(false, Ordering::SeqCst);
+                if retry {
+                    ResponseTemplate::new(429).insert_header("retry-after", "0")
+                } else {
+                    ResponseTemplate::new(200).set_body_json(response(true, &[]))
+                }
+            })
+            .expect(1)
+            .mount(&server)
+            .await;
+        let p = provider(
+            config(&server.uri()),
+            Arc::new(MemoryModerationBudget::default()),
+        )
+        .with_media_fetcher(Arc::new(VideoFetcher))
+        .with_video_extractor(Arc::new(Frames));
+        let request = if retry {
+            text()
+        } else {
+            ProviderScanRequest::for_subject(SubjectKind::Blob, "video").with_media_hint("video")
+        };
+        assert!(
+            p.scan_guarded(&request, &CurrentReference(current))
+                .await
+                .is_err()
+        );
+    }
+}
 #[async_trait]
 impl MediaFetcher for VideoFetcher {
     async fn fetch(&self, _: &str, _: Option<&str>) -> Result<FetchedMedia, ScanError> {
