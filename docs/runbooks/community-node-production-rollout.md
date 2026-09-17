@@ -1,6 +1,6 @@
 # Community Node Production Rollout / Live Verification
 
-最終更新日: 2026-08-07
+最終更新日: 2026-09-17
 
 専用 `openai-moderation` を使用する配備は、[動画・OpenAI Moderationの運用](community-node-openai-moderation.md) の設定、tmpfs、合成readiness probe、構成世代更新も適用する。
 
@@ -260,9 +260,32 @@ done
 
 ### 5.2 readiness
 
+readinessは手動でも `kukuri-readiness.service` 経由で実行する。`docker-compose run` だけで実行すると
+serviceの起動記録が残らず、timerの5分間隔の再判定と実行結果の追跡から外れる。
+
 ```bash
 sudo systemctl start kukuri-readiness.service
 sudo journalctl -u kukuri-readiness.service -n 100 --no-pager
+sudo systemctl list-timers kukuri-readiness.timer --all
+```
+
+`list-timers` の `NEXT` が時刻になっていることを確認する。`-` の場合はtimerが次回実行を持たず、
+activationの有効期限（既定15分）後にindex / trustが閉じる。startup再実行直後はtimer起動の2分後に
+初回が予定される（#1097）。それ以外で `-` なら `sudo systemctl start kukuri-readiness.service` を
+実行し、`NEXT` が決まったことを記録する。
+
+provider設定・キー・decoderの変更後など、保存済みprobeを使わずに再判定する場合（`--force-probe`）は、
+serviceに引数を渡せないため次の2段階で行う。force-probeの実行が合格すると新しいprobe結果が保存され、
+続くserviceの実行はそれを再利用する（15分以内）。force-probeが不合格なら旧activationはrevokeされ、
+続くserviceも不合格のまま閉じる。
+
+```bash
+cd /var/lib/kukuri/community-node
+sudo /var/lib/toolbox/kukuri/bin/docker-compose run --rm cn-readiness \
+  readiness --config /etc/kukuri/operator-config.yaml --force-probe
+sudo systemctl start kukuri-readiness.service
+sudo journalctl -u kukuri-readiness.service -n 100 --no-pager
+sudo systemctl list-timers kukuri-readiness.timer --all
 ```
 
 最低条件:

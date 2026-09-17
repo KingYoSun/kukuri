@@ -69,6 +69,11 @@ MP4/H.264、WebM/VP8・VP9、32 MiB・600秒以下・長辺3840/短辺2160以下
    `COMMUNITY_NODE_DEPLOYMENT_REVISION` と既存のDB・indexer・relation設定も必要。
    OpenAIのprobeは同梱した無害なMP4/WebMを実decodeし、合成本文とJPEGを実APIへ送る。
    Arachnidは従来の合成PDQ probeを維持する。全readinessがPASSの場合だけ公開を有効化する。
+   GCP構成では、この実行の直後に `sudo systemctl start kukuri-readiness.service` を実行し、
+   `systemctl list-timers kukuri-readiness.timer` の `NEXT` が時刻になっていることを確認する。
+   `docker-compose run` だけで終えると、timerの記録と次回実行の確認から外れる
+   （手順は [production rollout §5.2](community-node-production-rollout.md#52-readiness)、#1097）。
+   force-probeの失敗結果も15分間は再利用されるため、原因を直した後は再度 `--force-probe` から実行する。
 4. モデル、前処理、decoder build、node署名ID、policyの変更は内容判定キーを変える。
    `latest` の提供内容が更新された場合は `config_version` を増やし、再起動・`--force-probe`・再取り込みを行う。
    secretの値はfingerprintに含めないため、キーrotationも `--force-probe` を行う。

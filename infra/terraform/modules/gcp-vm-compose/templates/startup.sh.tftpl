@@ -276,6 +276,9 @@ UNIT
 # --- systemd timer: public read surface readiness activation（#616 / #612） ---
 # activationの有効期限（既定15分）より短い5分間隔で再判定する。oneshotの失敗時も
 # timerは次回再試行し、CLIが旧activationをrevokeするためunsafeなsurfaceは残らない。
+# 冒頭でunitを削除・再生成するため、serviceの前回起動記録は残らない。OnBootSecは
+# boot後2分を過ぎると再計算されないので、startupを再実行した場合はOnActiveSec（timer
+# 起動からの経過）で初回を決め、以後はOnUnitActiveSecで5分ごとに継続させる（#1097）。
 cat > /etc/systemd/system/kukuri-readiness.service <<UNIT
 [Unit]
 Description=kukuri community node public readiness activation
@@ -291,6 +294,7 @@ cat > /etc/systemd/system/kukuri-readiness.timer <<UNIT
 Description=kukuri community node public readiness activation timer
 [Timer]
 OnBootSec=2min
+OnActiveSec=2min
 OnUnitActiveSec=5min
 RandomizedDelaySec=30
 Persistent=true

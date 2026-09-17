@@ -89,3 +89,30 @@ run "invalid_expected_topic_is_rejected" {
   }
   expect_failures = [var.index_expected_topics]
 }
+
+run "readiness_timer_survives_startup_rerun" {
+  command = plan
+  variables {
+    deploy_indexer_stack = true
+    operator_config_path = "tests/fixtures/test-operator-config.yaml"
+  }
+  assert {
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "OnBootSec=2min\nOnActiveSec=2min\nOnUnitActiveSec=5min\n")
+    error_message = "The regenerated readiness timer must schedule a run after a startup rerun past the boot window (#1097)."
+  }
+  assert {
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "systemctl daemon-reload\n") && strcontains(nonsensitive(module.vm.startup_script), "systemctl enable --now kukuri-readiness.timer\n")
+    error_message = "The readiness timer must be re-enabled by the generated startup script."
+  }
+}
+
+run "readiness_timer_absent_without_operator_config" {
+  command = plan
+  variables {
+    deploy_indexer_stack = true
+  }
+  assert {
+    condition     = !strcontains(nonsensitive(module.vm.startup_script), "systemctl enable --now kukuri-readiness.timer")
+    error_message = "Readiness activation must not be scheduled without an operator config."
+  }
+}
