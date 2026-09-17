@@ -1,6 +1,9 @@
 [test-groups]
+# harness の scenario は 1 本ずつ動かす（複数の runtime が同じ fixture を使うため）。
 harness-serial = { max-threads = 1 }
-iroh-integration-serial = { max-threads = 1 }
+# 実 iroh runtime を起動する統合 test。#273 で 1 本ずつに絞ったが、#1121 の反復計測で
+# 4 本並行でも失敗しないことを確認して引き上げた。flake が出たら値を下げる。
+iroh-integration-serial = { max-threads = 4 }
 
 [[profile.default.overrides]]
 filter = "package(kukuri-harness)"

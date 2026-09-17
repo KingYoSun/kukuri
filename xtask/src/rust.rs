@@ -65,22 +65,16 @@ pub(crate) fn rust_test_with_nextest(cn_packages: &[String]) -> Result<()> {
     let stack_env = rust_test_stack_envs();
     let stack_env_refs = env_refs(&stack_env);
 
+    // #1121: harness も同じ nextest 実行に含める。直列実行は `.config/nextest.toml` の
+    // `harness-serial` group が担うため、別実行にすると feature 解決が変わって
+    // test build をやり直すだけだった。
     let mut nextest_args = vec![
         "nextest".to_string(),
         "run".to_string(),
         "--workspace".to_string(),
     ];
-    let mut excluded = cn_packages.to_vec();
-    excluded.push(SERIAL_RUST_PACKAGE.to_string());
-    nextest_args.extend(cargo_exclude_args(&excluded));
+    nextest_args.extend(cargo_exclude_args(cn_packages));
     run_with_env("cargo", nextest_args, &root_dir(), &stack_env_refs)?;
-
-    run_with_env(
-        "cargo",
-        ["nextest", "run", "-p", SERIAL_RUST_PACKAGE, "-j", "1"],
-        &root_dir(),
-        &stack_env_refs,
-    )?;
 
     let mut doc_args = vec![
         "test".to_string(),

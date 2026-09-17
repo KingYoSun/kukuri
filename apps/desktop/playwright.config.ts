@@ -13,6 +13,10 @@ const VISUAL_SPEC = '**/visual.spec.ts';
 export default defineConfig({
   testDir: './tests/playwright',
   fullyParallel: true,
+  // #1121: 既定は CPU 数の半分で、4 vCPU の CI runner では 2 worker になっていた。
+  // browser test は大半がブラウザの応答待ちのため、CI では vCPU 数と同じ 4 本にする。
+  // ローカルは既定のまま。
+  workers: process.env.CI ? 4 : undefined,
   reporter: 'list',
   // baseline は Linux CI 生成に一本化する（@font-face 非同梱でシステムフォント依存のため
   // Windows 開発機との pixel 一致は構造的に不可能）。CI 以外では比較を skip し、視覚 spec は
