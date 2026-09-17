@@ -95,11 +95,15 @@ test('an advisory-labeled result is gated and explains the issuing node', async 
   );
   runSearch();
 
-  expect(await screen.findByTestId('media-adult-gated-advisory-post')).toBeInTheDocument();
+  const placeholder = await screen.findByTestId('media-adult-gated-advisory-post');
   expect(screen.queryByTestId('media-preview-advisory-post')).not.toBeInTheDocument();
+  // #1108: 一覧には枠と短いラベルだけを出し、説明は詳細 dialog に置く。
+  expect(placeholder).toHaveAccessibleName('Adult image: click for details');
+  expect(screen.queryByTestId('post-advisory-gated-advisory-post')).not.toBeInTheDocument();
+  fireEvent.click(placeholder);
 
-  const advisory = await screen.findByTestId('post-advisory-gated-advisory-post');
-  expect(advisory).toHaveTextContent('Community Node estimate');
+  expect(await screen.findByRole('dialog', { name: 'Community Node estimate' })).toBeInTheDocument();
+  const advisory = screen.getByTestId('post-advisory-gated-advisory-post');
   // 断定せず推定であることを示す。
   expect(advisory).toHaveTextContent('neither a label from the person who posted it');
   expect(advisory).toHaveTextContent('Possible sexual content');
@@ -131,6 +135,7 @@ test('the advisory placeholder starts an appeal carrying the risk signal', async
   );
   runSearch();
 
+  fireEvent.click(await screen.findByTestId('media-adult-gated-appeal-post'));
   fireEvent.click(await screen.findByTestId('post-advisory-appeal-appeal-post'));
 
   const submit = await screen.findByRole('button', { name: 'Submit appeal' });
@@ -179,6 +184,7 @@ test('an unavailable manifest still explains the advisory using the node host', 
   );
   runSearch();
 
+  fireEvent.click(await screen.findByTestId('media-adult-gated-advisory-no-manifest'));
   const advisory = await screen.findByTestId('post-advisory-gated-advisory-no-manifest');
   expect(advisory).toHaveTextContent('index-a.example');
 });
@@ -198,7 +204,7 @@ test('advisory-gated posts are withheld from media prefetch until display is ena
 
   await waitFor(() => expect(api.resolveCommunityIndexPosts).toHaveBeenCalledTimes(1));
   await waitFor(() =>
-    expect(screen.getByTestId('post-advisory-gated-advisory-prefetch')).toBeInTheDocument()
+    expect(screen.getByTestId('media-adult-gated-advisory-prefetch')).toBeInTheDocument()
   );
   expect(
     (onResolvedPostsChange.mock.calls.at(-1)?.[0] as PostView[] | undefined) ?? []

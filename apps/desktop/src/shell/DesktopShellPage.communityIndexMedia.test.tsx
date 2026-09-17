@@ -185,10 +185,9 @@ test('advisory-labeled Explore results stay gated and never request their media'
 
   const explore = await openExploreResults(user, api);
 
-  expect(await within(explore).findByTestId(`media-adult-gated-${OBJECT_ID}`)).toBeInTheDocument();
-  expect(
-    await within(explore).findByTestId(`post-advisory-gated-${OBJECT_ID}`)
-  ).toBeInTheDocument();
+  // #1108 AC-3: 詳細 dialog を開いても bytes を要求しない。
+  await user.click(await within(explore).findByTestId(`media-adult-gated-${OBJECT_ID}`));
+  expect(await screen.findByTestId(`post-advisory-gated-${OBJECT_ID}`)).toBeInTheDocument();
   expect(within(explore).queryByText('explore image caption')).not.toBeInTheDocument();
   await waitFor(() => {
     expect(getBlobMediaPayload.mock.calls.filter(([hash]) => hash === IMAGE_HASH)).toHaveLength(0);

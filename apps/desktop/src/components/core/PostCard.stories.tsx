@@ -1,4 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+
+import type { SubmitCommunityNodeReportResult } from '@/lib/api';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
@@ -76,10 +79,15 @@ const meta = {
         onOpenAuthor={() => undefined}
         onOpenThread={() => undefined}
         onReply={() => undefined}
+        onSubmitReport={
+          args.reportable
+            ? () => new Promise<SubmitCommunityNodeReportResult>(() => undefined)
+            : undefined
+        }
       />
     </div>
   ),
-} satisfies Meta<{ view: PostCardView }>;
+} satisfies Meta<{ view: PostCardView; reportable?: boolean }>;
 
 export default meta;
 
@@ -139,38 +147,64 @@ export const ImageReady: Story = {
 
 // #1055: Community Node の content advisory による代替表示。断定せず推定であることと、
 // 発行元 / 分類 / 確信度 / 根拠を示し、異議申し立てへの導線を持つ(ADR 0046 §6.3)。
+// #1108: 一覧には枠と短いラベルだけを出し、説明は枠を開いた詳細 dialog に置く。
+const storyAdvisory = {
+  issuerNodeId: 'd'.repeat(64),
+  nodeBaseUrl: 'https://index-a.example',
+  nodeName: 'index-a.example',
+  category: 'nsfw',
+  label: 'adult',
+  confidence: 84,
+  basis: 'classifier_score',
+  signalId: 'signal-1',
+  subjectKind: 'blob_cid',
+  subjectId: 'a'.repeat(64),
+} as const;
+
+function advisoryGatedView(kind: 'image' | 'video' | null): PostCardView {
+  return createView({
+    adultContentGated: true,
+    gatedBy: 'advisory',
+    contentAdvisory: kind
+      ? storyAdvisory
+      : { ...storyAdvisory, subjectKind: 'post_id', subjectId: 'post-1' },
+    media: {
+      objectId: 'post-1',
+      kind,
+      extraAttachmentCount: 0,
+      state: kind ? 'gated' : 'ready',
+      gatedBy: kind ? 'advisory' : undefined,
+      metaMime: kind === 'video' ? 'video/mp4' : kind ? 'image/png' : null,
+      metaBytesLabel: kind ? '2.0 KB' : null,
+      imagePreviewSrc: null,
+      imageGalleryItems: [],
+      videoPosterPreviewSrc: null,
+      videoPlaybackSrc: null,
+      videoUnsupportedOnClient: false,
+    },
+  });
+}
+
 export const AdvisoryGated: Story = {
-  args: {
-    view: createView({
-      adultContentGated: true,
-      gatedBy: 'advisory',
-      contentAdvisory: {
-        issuerNodeId: 'd'.repeat(64),
-        nodeBaseUrl: 'https://index-a.example',
-        nodeName: 'index-a.example',
-        category: 'nsfw',
-        label: 'adult',
-        confidence: 84,
-        basis: 'classifier_score',
-        signalId: 'signal-1',
-        subjectKind: 'blob_cid',
-        subjectId: 'a'.repeat(64),
-      },
-      media: {
-        objectId: 'image-post',
-        kind: 'image',
-        extraAttachmentCount: 0,
-        state: 'gated',
-        gatedBy: 'advisory',
-        metaMime: 'image/png',
-        metaBytesLabel: '2.0 KB',
-        imagePreviewSrc: null,
-        imageGalleryItems: [],
-        videoPosterPreviewSrc: null,
-        videoPlaybackSrc: null,
-        videoUnsupportedOnClient: false,
-      },
-    }),
+  args: { view: advisoryGatedView('image'), reportable: true },
+};
+
+export const AdvisoryGatedVideo: Story = {
+  args: { view: advisoryGatedView('video'), reportable: true },
+};
+
+// メディア枠を持たない投稿は、本文欄に詳細を開く操作だけを出す。
+export const AdvisoryGatedTextOnly: Story = {
+  args: { view: advisoryGatedView(null), reportable: true },
+};
+
+export const AdvisoryDetailsOpen: Story = {
+  args: { view: advisoryGatedView('image'), reportable: true },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByTestId('media-adult-gated-post-1'));
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole('dialog');
+    await expect(within(dialog).getByTestId('post-advisory-gated-post-1')).toBeInTheDocument();
+    await expect(within(dialog).getByTestId('post-advisory-appeal-post-1')).toBeInTheDocument();
   },
 };
 

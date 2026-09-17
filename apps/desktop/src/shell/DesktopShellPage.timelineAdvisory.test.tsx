@@ -72,7 +72,9 @@ beforeEach(() => {
 });
 
 // AC-3 / AC-4 / INVAR-2: advisory 付き投稿は代替表示になり、表示設定 OFF の間 bytes を要求しない。
+// #1108 AC-3: 詳細 dialog を開いても bytes を要求しない。
 test('advisory-labeled timeline posts stay gated and never request their media', async () => {
+  const user = userEvent.setup();
   const api = createTimelineApi(timelinePost());
   const lookup = vi
     .spyOn(api, 'lookupCommunityNodeContentAdvisories')
@@ -83,11 +85,16 @@ test('advisory-labeled timeline posts stay gated and never request their media',
   render(<App api={api} />);
 
   const column = getActiveColumn('Timeline');
-  expect(
-    await within(column).findByTestId('media-adult-gated-timeline-image-post')
-  ).toBeInTheDocument();
-  expect(within(column).getByTestId('post-advisory-gated-timeline-image-post')).toBeInTheDocument();
-  expect(within(column).getByTestId('post-advisory-appeal-timeline-image-post')).toBeInTheDocument();
+  const placeholder = await within(column).findByTestId('media-adult-gated-timeline-image-post');
+  expect(within(column).queryByTestId('post-advisory-gated-timeline-image-post')).not.toBeInTheDocument();
+  expect(screen.queryByText('timeline image caption')).not.toBeInTheDocument();
+  expect(blobRequests({ getBlobMediaPayload })).toHaveLength(0);
+
+  await user.click(placeholder);
+  const dialog = await screen.findByTestId('post-advisory-dialog-timeline-image-post');
+  expect(within(dialog).getByTestId('post-advisory-gated-timeline-image-post')).toBeInTheDocument();
+  expect(within(dialog).getByTestId('post-advisory-appeal-timeline-image-post')).toBeInTheDocument();
+  expect(within(dialog).queryByRole('img')).not.toBeInTheDocument();
   expect(screen.queryByText('timeline image caption')).not.toBeInTheDocument();
   expect(blobRequests({ getBlobMediaPayload })).toHaveLength(0);
 
@@ -182,9 +189,13 @@ test('an advisory on a reply preview parent gates the enclosing card', async () 
 
   render(<App api={api} />);
 
-  expect(
-    await within(getActiveColumn('Timeline')).findByTestId('post-advisory-gated-advisory-reply-host')
-  ).toBeInTheDocument();
+  // #1108 AC-4: メディア枠が無い投稿は、本文欄に詳細を開く操作だけを出す。
+  const trigger = await within(getActiveColumn('Timeline')).findByTestId(
+    'post-advisory-details-trigger-advisory-reply-host'
+  );
+  expect(screen.queryByTestId('post-advisory-gated-advisory-reply-host')).not.toBeInTheDocument();
+  await userEvent.setup().click(trigger);
+  expect(await screen.findByTestId('post-advisory-gated-advisory-reply-host')).toBeInTheDocument();
   expect(screen.queryByText('safe-looking reply body')).not.toBeInTheDocument();
   expect(screen.queryByText('advisory reply preview body')).not.toBeInTheDocument();
 });
@@ -199,10 +210,10 @@ test('the appeal action opens the report dialog for the issuing signal', async (
 
   render(<App api={api} />);
 
-  const appeal = await within(getActiveColumn('Timeline')).findByTestId(
-    'post-advisory-appeal-timeline-image-post'
+  await user.click(
+    await within(getActiveColumn('Timeline')).findByTestId('media-adult-gated-timeline-image-post')
   );
-  await user.click(appeal);
+  await user.click(await screen.findByTestId('post-advisory-appeal-timeline-image-post'));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 

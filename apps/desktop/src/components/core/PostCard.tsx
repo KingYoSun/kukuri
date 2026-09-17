@@ -15,7 +15,8 @@ import type {
   SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import { planAppealReportRouting, planReportRouting } from '@/lib/api/reportRouting';
-import { PostGatedContent } from './PostAdvisoryNotice';
+import { PostAdvisoryDetailsDialog, PostGatedContent } from './PostAdvisoryNotice';
+import { usePostAdvisoryDetails } from './usePostAdvisoryDetails';
 import { useReportManifests } from './useReportManifests';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
@@ -159,6 +160,7 @@ export function PostCard({
   // #1055: Community Node の content advisory に対する異議申し立て。通報と同じ dialog を
   // appeal mode で使い、対象 risk signal を発行した node だけを送信先候補にする。
   const [reportAppeal, setReportAppeal] = useState<ReportAppealContext | null>(null);
+  const advisoryDetails = usePostAdvisoryDetails();
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(view.media.currentImageIndex ?? 0);
   const [reactionMenuPosition, setReactionMenuPosition] = useState<ContextActionMenuPosition | null>(
@@ -244,11 +246,12 @@ export function PostCard({
     [reportAppeal, reportProvenance, reportManifests]
   );
   const showReportAction = Boolean(onSubmitReport) && (!readOnly || view.allowReadOnlyReport === true);
+  const gatedAdvisory = view.adultContentGated ? (view.contentAdvisory ?? null) : null;
+  const hasGatedMediaFrame = !isWithdrawn && Boolean(view.media.kind) && view.media.state === 'gated';
 
   /// #1055: content advisory への異議申し立てを、通報と同じ dialog で開く。
   /// 対象は添付そのものへの判定なら media、投稿への判定なら post(#707 と同じ subject 規則)。
-  const openAdvisoryAppeal = (advisory: ContentAdvisoryView | null | undefined) => {
-    if (!advisory) return;
+  const openAdvisoryAppeal = (advisory: ContentAdvisoryView) => {
     setReportSubject(
       advisory.subjectKind === 'blob_cid'
         ? { kind: 'media', id: advisory.subjectId, label: view.authorLabel }
@@ -485,23 +488,13 @@ export function PostCard({
           // #858: 成人向けとして申告された投稿は、表示設定 OFF の間は本文も代替表示にする。
           // #1055: 判定元が Community Node の推定のときは、断定せず発行元・根拠を示し、
           // 異議申し立てへの導線を添える(ADR 0046 §6.3)。
+          // #1108: その説明は詳細 dialog に置き、一覧には開く操作だけを出す。
           <PostGatedContent
             objectId={post.object_id}
             gatedBy={view.gatedBy}
             bodyText={view.gatedBodyText}
-            advisory={view.contentAdvisory}
-            appealAction={
-              showReportAction && onSubmitReport ? (
-                <Button
-                  variant='secondary'
-                  type='button'
-                  data-testid={`post-advisory-appeal-${post.object_id}`}
-                  onClick={() => openAdvisoryAppeal(view.contentAdvisory)}
-                >
-                  {t('advisory.appeal')}
-                </Button>
-              ) : undefined
-            }
+            advisory={gatedAdvisory}
+            onOpenDetails={gatedAdvisory && !hasGatedMediaFrame ? advisoryDetails.openDetails : undefined}
           />
         ) : isUnavailableText ? (
           view.showUnavailableDiagnostics ? (
@@ -608,6 +601,7 @@ export function PostCard({
         <PostMedia
           media={view.media}
           showUnavailableDiagnostic={view.showUnavailableDiagnostics}
+          onOpenGatedDetails={gatedAdvisory ? advisoryDetails.openDetails : undefined}
           onOpenImage={(index) => {
             setMediaViewerIndex(index);
             setMediaViewerOpen(true);
@@ -951,9 +945,19 @@ export function PostCard({
           setReactionMenuPosition(null);
         }}
       />
+      {gatedAdvisory ? (
+        <PostAdvisoryDetailsDialog
+          details={advisoryDetails}
+          objectId={post.object_id}
+          gatedBy={view.gatedBy}
+          advisory={gatedAdvisory}
+          onAppeal={showReportAction && onSubmitReport ? () => openAdvisoryAppeal(gatedAdvisory) : undefined}
+        />
+      ) : null}
       {showReportAction && onSubmitReport ? (
         <ReportRoutingDialog
           open={reportDialogOpen}
+          onCloseAutoFocus={advisoryDetails.onReportCloseAutoFocus}
           onOpenChange={(open) => {
             setReportDialogOpen(open);
             // 通常の通報へ戻すため、閉じるときに appeal 文脈を捨てる(#1055)。

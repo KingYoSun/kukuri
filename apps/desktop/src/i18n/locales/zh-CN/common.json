@@ -132,7 +132,8 @@
     "repostedBy": "{{author}} 已转发",
     "withdrawnPost": "此帖子已被发帖用户撤回。",
     "adultContentHidden": "该帖子被发布者标记为成人内容。在设置中启用成人内容显示后即可查看。",
-    "advisoryContentHidden": "您配置的 Community Node 推测该帖子可能包含成人内容。在设置中启用成人内容显示后即可查看。"
+    "advisoryContentHidden": "您配置的 Community Node 推测该帖子可能包含成人内容。在设置中启用成人内容显示后即可查看。",
+    "advisoryDetailsPost": "成人帖子：点击查看详情"
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"
@@ -202,6 +203,8 @@
     "videoPosterAlt": "视频预览",
     "adultGated": "发布者标记为成人内容的媒体。在设置中启用显示后才会加载。",
     "advisoryGated": "Community Node 推测该媒体可能包含成人内容。在设置中启用显示后即可加载。",
+    "advisoryDetailsImage": "成人图片：点击查看详情",
+    "advisoryDetailsVideo": "成人视频：点击查看详情",
     "sharedMediaGated": "相同的媒体在其他帖子中被视为成人内容。在设置中启用显示后才会加载。",
     "advisoryPending": "正在确认 Community Node 的推测"
   },

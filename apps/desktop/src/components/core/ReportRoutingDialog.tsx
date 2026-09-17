@@ -65,6 +65,8 @@ export type ReportRoutingDialogProps = {
   appeal?: ReportAppealContext | null;
   /// 受付後の再取得など、成功応答を確認してから行う処理。
   onSubmitted?: (result: SubmitCommunityNodeReportResult) => void | Promise<void>;
+  /// 閉じた後の focus 移動。別の dialog から開いた場合に、呼出元が元の操作へ戻す(#1108)。
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
 function nodeHost(url: string): string {
@@ -91,6 +93,7 @@ export function ReportRoutingDialog({
   resolveError,
   appeal = null,
   onSubmitted,
+  onCloseAutoFocus,
 }: ReportRoutingDialogProps) {
   const { t } = useTranslation(['shell', 'common', 'profile']);
   const externalLink = useExternalLinkOpener();
@@ -187,6 +190,7 @@ export function ReportRoutingDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className='report-routing-dialog'
+        onCloseAutoFocus={onCloseAutoFocus}
         closeLabel={appeal ? t('profile:communityNodeAdvisory.appeal.close') : undefined}
       >
         <DialogHeader>
