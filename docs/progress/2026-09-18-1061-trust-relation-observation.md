@@ -59,9 +59,16 @@
 | 条件 | 実装 | 検証 |
 | --- | --- | --- |
 | AC-1 / INVAR-1 / INV-1 / TR-1 | `trust_observation_support.rs`: 提供状態と送信待ちを `<db>.trust-observations.json`（account ごと）に保存。mute / block 操作の後に CN × 対象 × 種別で最新 1 件へ集約して積み、scheduler の 1 tick で session が Ready のときだけ送る。有効化は任意文書の版照合 → `POST /v1/consents`（slug 指定）→ ローカル記録 →（選んだ場合）既存分の署名。一括同意からは任意文書を除く | `observation_not_sent_without_sharing_consent`、`existing_mutes_are_sent_only_when_opted_in`、`general_consent_acceptance_excludes_sharing_document`、`not_offered_node_cannot_be_enabled` |
-| AC-5 / TR-2 / TR-3 | 送信失敗・403（同意切れ）・404（未公開）・400 の分類。403 / 404 では送信待ちを破棄して削除を要求し、送信済みの観測も CN に残さない（差分再監査の B-2）。無効化・同意取消・CN 削除で送信待ちを破棄して削除を要求し、完了まで新しい観測を送らない。401 は 1 回だけ再認証 | `outbox_coalesces_and_resumes_after_restart`、`revocation_pending_blocks_new_posts`、`sharing_consent_required_stops_sending_until_reenabled`、`reauth_once_on_401`、`local_mute_succeeds_when_cn_unreachable`、`consent_withdrawal_and_node_removal_request_observation_deletion` |
+| AC-5 / TR-2 / TR-3 | 送信失敗・403（同意切れ）・404（未公開）・400 の分類。403 / 404 では送信待ちを破棄して削除を要求し、送信済みの観測も CN に残さない。無効化・同意取消・CN 削除で送信待ちを破棄して削除を要求し、完了まで新しい観測を送らない。401 は 1 回だけ再認証 | `outbox_coalesces_and_resumes_after_restart`、`revocation_pending_blocks_new_posts`、`sharing_consent_required_revokes_and_stops_sending_until_reenabled`、`reauth_once_on_401`、`local_mute_succeeds_when_cn_unreachable`、`consent_withdrawal_and_node_removal_request_observation_deletion` |
 | AC-1（UI・IPC） | Tauri / CLI の 3 command（取得・有効化・無効化）と parity、TS 型、設定画面の `CommunityNodeObservationSharingField`（文書本文と「既存分も送る」チェック、再同意・削除要求中の案内） | `CommunityNodePanel.observationSharing.test.tsx`、CLI の `command_parity` |
 | 外部送信表示 | 送信契機に「ブロック・ミュートの提供」を補記し、データフロー突合表に行を追加（版は PR3 でまとめて上げる。2026-09-18 のユーザー判断） | Tauri の法務 bundle テスト |
+
+## PR2 の残課題（独立監査の non-blocker）
+
+- `reconsent_does_not_send_observations_that_no_longer_match_local_state` は、提供が止まる全経路で送信待ちを
+  破棄するようになったため、有効化時の突き合わせ（`pending` の retain）自体は到達しない多重防御になっている。
+  将来どれかの経路が破棄をやめても気づけるよう、状態を直接作って突き合わせだけを検証する test を足す余地がある。
+- 再同意の案内文は、止まった時点で CN 側の記録を削除したことに触れていない。
 
 ## 検証記録
 
