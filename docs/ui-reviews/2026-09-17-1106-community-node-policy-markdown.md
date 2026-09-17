@@ -3,7 +3,7 @@
 - Status: current
 - Supersedes: None
 - Superseded by: None
-- PR: 本 record を追加した PR（Issue #1106 を参照）
+- PR: [#1115](https://github.com/kukuri-app/kukuri/pull/1115)
 - Issue / Scope revision: [#1106](https://github.com/kukuri-app/kukuri/issues/1106)、2026-09-17
 - Preview: 下表の before / after 画像（`assets/1106/`）
 - 対象 surface / 利用者 / 目的: コミュニティノードの規約 Dialog（設定・見つける・初回案内・Dome hosting から開く共通 Dialog）。ノードへ初めて同意する人と、規約更新で再同意する人が対象。各文書を読みやすい形で確認でき、文書が多くても Dialog が長くなりすぎないようにする。
