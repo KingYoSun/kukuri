@@ -61,10 +61,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Fixture package failed' }
   }
   $create = Join-Path $PSScriptRoot 'create-preview-assets.ps1'
-  & $create -Tag 'v0.1.8-preview.2' -Repository 'KingYoSun/kukuri' -Version $version `
+  & $create -Tag 'v0.1.8-preview.2' -Repository 'kukuri-app/kukuri' -Version $version `
     -InputDir $inputDir -OutputDir $outputDir -IncludeLinux -SourceCommit $source
   & python (Join-Path $PSScriptRoot 'release_assets.py') validate-output --input $outputDir `
-    --tag 'v0.1.8-preview.2' --repository 'KingYoSun/kukuri' --version $version --source $source
+    --tag 'v0.1.8-preview.2' --repository 'kukuri-app/kukuri' --version $version --source $source
   if ($LASTEXITCODE -ne 0) { throw 'Final output verification failed' }
   $manifest = Get-Content -Raw (Join-Path $outputDir 'latest-preview.json') | ConvertFrom-Json
   if (@($manifest.platforms.PSObject.Properties).Count -ne 3) { throw 'All three updater platforms are required' }
@@ -82,7 +82,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $inputDir 'linux-x86_64/kukuri_0.1.8_amd64.AppImage'), 'changed', $utf8)
   $rejected = $false
   try {
-    & $create -Tag 'v0.1.8-preview.2' -Repository 'KingYoSun/kukuri' -Version $version `
+    & $create -Tag 'v0.1.8-preview.2' -Repository 'kukuri-app/kukuri' -Version $version `
       -InputDir $inputDir -OutputDir $outputDir -IncludeLinux -SourceCommit $source
   } catch { $rejected = $true }
   if (-not $rejected -or [IO.File]::ReadAllText((Join-Path $outputDir 'latest-preview.json')) -ne $before) {

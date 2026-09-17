@@ -104,7 +104,7 @@ upload失敗時は同一runの`kukuri-release-assets`を保持する。`publish_
 承認済み候補をdownloadして再開する例（version／SHA／repositoryは対象へ置換）:
 
 ```bash
-python scripts/release/publish_preview.py --input <same-run-assets> --tag v0.1.8-preview.2 --repository KingYoSun/kukuri --source <full-SHA> --draft true
+python scripts/release/publish_preview.py --input <same-run-assets> --tag v0.1.8-preview.2 --repository kukuri-app/kukuri --source <full-SHA> --draft true
 ```
 
 公開承認後に同じcommandの`--draft false`で公開する。`GH_TOKEN`は環境変数で供給し、引数や記録へ値を書かない。公開前に同一候補の実署名検証成功が必要。build／smoke／署名／完全性の失敗を手動公開で迂回しない。
@@ -116,10 +116,12 @@ python scripts/release/publish_preview.py --input <same-run-assets> --tag v0.1.8
 ```
 
 ```bash
-python scripts/release/verify_public_preview.py --input <same-run-assets> --tag v0.1.8-preview.2 --repository KingYoSun/kukuri --source <full-SHA>
+python scripts/release/verify_public_preview.py --input <same-run-assets> --tag v0.1.8-preview.2 --repository kukuri-app/kukuri --source <full-SHA>
 ```
 
-安定URLは`https://github.com/KingYoSun/kukuri/releases/latest/download/latest-preview.json`。一時redirect URLを設定へ保存しない。CDN未反映なら同じ公開候補への読み取り検証を再実行し、assetを上書きして直さない。大きなnative source archiveは公開前のGitHub upload digestで全件照合済みとし、公開後に同じdownloadを重複しない。
+安定URLは`https://github.com/kukuri-app/kukuri/releases/latest/download/latest-preview.json`。一時redirect URLを設定へ保存しない。CDN未反映なら同じ公開候補への読み取り検証を再実行し、assetを上書きして直さない。大きなnative source archiveは公開前のGitHub upload digestで全件照合済みとし、公開後に同じdownloadを重複しない。
+
+repositoryは2026-09-16に`KingYoSun/kukuri`から`kukuri-app/kukuri`へ移管した（#1083）。v0.2.4-preview.1以前のclientは旧ownerの安定URLを保持し、GitHubのowner redirectで同じmanifestを取得する。この経路を塞がないため、旧owner名のrepositoryやforkを作成しない。v0.2.4-preview.1以前のmanifestはasset URLが旧ownerなので、そのtagを`test-published-updater-signature.ps1`で再検証するときは`-Repository KingYoSun/kukuri`を明示する。
 
 ## 既存動作の採用と利用者データ
 

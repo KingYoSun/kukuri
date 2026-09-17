@@ -24,7 +24,7 @@ class ReleaseTests(unittest.TestCase):
             del value["deb_updater_file"]
             metadata.write_text(json.dumps(value))
             with self.assertRaisesRegex(ValueError, "Deb"):
-                release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
+                release.assembly_plan(root, TAG, "kukuri-app/kukuri", VERSION, SOURCE)
 
     def test_untrusted_or_injected_release_input_has_no_output(self):
         import subprocess
@@ -98,7 +98,7 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work:
             root = pathlib.Path(work)
             self.fixture(root)
-            plan = release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
+            plan = release.assembly_plan(root, TAG, "kukuri-app/kukuri", VERSION, SOURCE)
             self.assertEqual(set(plan["platforms"]), {"windows-x86_64", "linux-x86_64", "linux-x86_64-deb"})
             self.assertEqual(plan["source_commit"], SOURCE)
             self.assertEqual(plan["platforms"]["linux-x86_64"]["signature"], "signature")
@@ -135,7 +135,7 @@ class ReleaseTests(unittest.TestCase):
                     value["files"] = [release.file_record(directory, row["name"]) for row in value["files"]]
                     metadata.write_text(json.dumps(value))
                 with self.assertRaises(ValueError):
-                    release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
+                    release.assembly_plan(root, TAG, "kukuri-app/kukuri", VERSION, SOURCE)
 
     def test_missing_tampered_foreign_source_or_test_key_is_rejected_before_output(self):
         for defect in ("missing", "tampered", "foreign", "test-key", "key-mismatch", "duplicate", "missing-source"):
@@ -165,7 +165,7 @@ class ReleaseTests(unittest.TestCase):
                 elif defect == "missing-source":
                     (directory / f"kukuri_{VERSION}_linux-native-sources.tar.gz").unlink()
                 with self.assertRaises(ValueError):
-                    release.assembly_plan(root, TAG, "KingYoSun/kukuri", VERSION, SOURCE)
+                    release.assembly_plan(root, TAG, "kukuri-app/kukuri", VERSION, SOURCE)
 
     def test_invalid_tag_and_unsafe_asset_paths_are_rejected(self):
         with tempfile.TemporaryDirectory() as work:
@@ -173,7 +173,7 @@ class ReleaseTests(unittest.TestCase):
             self.fixture(root)
             for tag in ("v0.1.9-preview.1", "v0.1.8", "v0.1.8-preview.1$(echo bad)"):
                 with self.assertRaises(ValueError):
-                    release.assembly_plan(root, tag, "KingYoSun/kukuri", VERSION, SOURCE)
+                    release.assembly_plan(root, tag, "kukuri-app/kukuri", VERSION, SOURCE)
             for name in ("../outside", "/absolute", "name with spaces", "file\\path"):
                 with self.assertRaises(ValueError): release.file_record(root, name)
 

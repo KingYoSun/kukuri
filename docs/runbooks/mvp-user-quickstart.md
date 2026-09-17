@@ -3,12 +3,12 @@
 ## 対象
 
 - Builder Previewを試すデスクトップ利用者向け
-- Windows NSIS、Linux x86_64 AppImage／Debを[最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)で同時公開済み（[v0.2.4-preview.1](https://github.com/KingYoSun/kukuri/releases/tag/v0.2.4-preview.1)以降、各Previewリリースは同一sourceから5本体を公開する）
+- Windows NSIS、Linux x86_64 AppImage／Debを[最新のGitHub Release](https://github.com/kukuri-app/kukuri/releases/latest)で同時公開済み（[v0.2.4-preview.1](https://github.com/kukuri-app/kukuri/releases/tag/v0.2.4-preview.1)以降、各Previewリリースは同一sourceから5本体を公開する）
 - Linuxは[AppImage手順](linux-appimage-smoke.md)または[Debの導入・署名付き更新・削除手順](linux-deb.md)を参照。CLI x86_64／aarch64も同Releaseで配布し、[専用手順](linux-cli.md)を参照
 
 ## 3分で試す
 
-1. [最新のGitHub Release](https://github.com/KingYoSun/kukuri/releases/latest)から自分の環境向けのWindowsインストーラーまたはLinux AppImage／Debを取得し、上記の形式別手順に従って起動する。
+1. [最新のGitHub Release](https://github.com/kukuri-app/kukuri/releases/latest)から自分の環境向けのWindowsインストーラーまたはLinux AppImage／Debを取得し、上記の形式別手順に従って起動する。
 2. appの規約確認を終えたら「コミュニティノードとは？」を読み、「規約を確認する」で一覧先頭のノード（配布時の候補はkukuri.app）の規約へ進む。文書を確認して「同意する」を押すと、接続準備が始まる。「あとで」を選んだ場合も、見つけるまたはコミュニティノード設定から規約確認へ戻れる。保存済みの空一覧には候補を再追加しない。
 3. 2番目のプロフィールカラムを開き、「プロフィールを編集」から表示名、ユーザー名、自己紹介、必要なら画像を設定する。
 4. 先頭のタイムラインカラムへ戻り、最初から用意されたトピックのどれかを開く。
@@ -78,6 +78,6 @@ npx pnpm@10.16.1 tauri:dev
 ## データの安全性
 
 - 「設定 → リリース」には、最新リリース、このクイックスタート、リリース手順書、第三者ライセンス表示、既定のコミュニティノードの開示情報へのリンクがある。
-- ブラウザーで開くリンク: [リリース](https://github.com/KingYoSun/kukuri/releases/latest)、[利用規約](https://api.kukuri.app/terms)、[プライバシー](https://api.kukuri.app/privacy)、[外部送信](https://api.kukuri.app/external-transmission)、[通報方針](https://api.kukuri.app/abuse-policy)、[データ保持](https://api.kukuri.app/data-retention)。
+- ブラウザーで開くリンク: [リリース](https://github.com/kukuri-app/kukuri/releases/latest)、[利用規約](https://api.kukuri.app/terms)、[プライバシー](https://api.kukuri.app/privacy)、[外部送信](https://api.kukuri.app/external-transmission)、[通報方針](https://api.kukuri.app/abuse-policy)、[データ保持](https://api.kukuri.app/data-retention)。
 - プレビュー更新の動作確認では、アカウントを識別する鍵、プロフィール、フォロー関係、自分の投稿、端末内データベース、Irohのデータ、コミュニティノード設定、プライベートチャンネルの閲覧権限、通知一覧が保持されることを確認する。
 - アンインストールまたはリセットの前に、移行対象の全アカウントについて端末バックアップを作成し、別の安全な場所へ保管する。

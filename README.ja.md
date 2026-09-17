@@ -11,7 +11,7 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 > [!IMPORTANT]
 > 現在の kukuri は、テスター向けの **Builder Preview** です。一般公開の安定版ではありません。
 
-**[最新の Windows／Linux プレビューをダウンロード](https://github.com/KingYoSun/kukuri/releases/latest)**
+**[最新の Windows／Linux プレビューをダウンロード](https://github.com/kukuri-app/kukuri/releases/latest)**
 
 | 環境 | 現在の対応状況 |
 | --- | --- |
@@ -97,8 +97,8 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 
 ## フィードバックとコミュニティ
 
-- 再現可能な不具合やリグレッションは [GitHub Issues](https://github.com/KingYoSun/kukuri/issues) へ報告してください。
-- 質問、製品アイデア、UX 提案、大きな変更の事前相談には [GitHub Discussions](https://github.com/KingYoSun/kukuri/discussions) を利用してください。
+- 再現可能な不具合やリグレッションは [GitHub Issues](https://github.com/kukuri-app/kukuri/issues) へ報告してください。
+- 質問、製品アイデア、UX 提案、大きな変更の事前相談には [GitHub Discussions](https://github.com/kukuri-app/kukuri/discussions) を利用してください。
 - アプリ内の「フィードバックを送る」ボタンは、受け付けを有効にしたコミュニティノードへテスターフィードバックを送ります。
 - 接続、更新機能、復旧の問題には、`設定 → 開発者` で開発者モードを有効にしてから `設定 → リリース` で取得した秘匿情報除去済みレポートを添付してください。
 - Community Node 運用者からのデプロイ、情報開示、モデレーション、分散通報に関するフィードバックも、同じ GitHub の窓口で受け付けます。
@@ -121,7 +121,7 @@ kukuri は、興味のある話題から人やコミュニティにつながる�
 - Docker は Community Node の統合テストとローカル Community Node 構成を使う場合のみ必要です
 
 ```bash
-git clone https://github.com/KingYoSun/kukuri.git
+git clone https://github.com/kukuri-app/kukuri.git
 cd kukuri
 
 npx pnpm@10.16.1 install --dir apps/desktop

@@ -21,7 +21,7 @@ class PublishTests(unittest.TestCase):
             with patch.object(publisher, "validate_output", return_value=[] if changed_tag else None) as validate:
                 if not changed_tag: validate.side_effect = ValueError("incomplete")
                 with self.assertRaises(ValueError):
-                    publisher.publish(pathlib.Path("unused"), "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, False, api)
+                    publisher.publish(pathlib.Path("unused"), "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, False, api)
             self.assertNotIn("POST", calls)
             self.assertNotIn("PATCH", calls)
 
@@ -46,12 +46,12 @@ class PublishTests(unittest.TestCase):
                 with patch.object(publisher, "validate_output", return_value=["asset"]):
                     if fail_upload:
                         with self.assertRaises(RuntimeError):
-                            publisher.publish(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, False, api)
+                            publisher.publish(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, False, api)
                     else:
-                        publisher.publish(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, False, api)
+                        publisher.publish(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, False, api)
                 patches = [call for call in calls if call[1] == "PATCH"]
                 self.assertEqual(len(patches), 0 if fail_upload else 1)
-                if patches: self.assertEqual(patches[0][0], "repos/KingYoSun/kukuri/releases/123")
+                if patches: self.assertEqual(patches[0][0], "repos/kukuri-app/kukuri/releases/123")
                 self.assertTrue(next(call[2] for call in calls if call[1] == "POST")["draft"])
                 self.assertFalse(next(call[2] for call in calls if call[1] == "POST")["prerelease"])
                 if patches: self.assertEqual(patches[0][2]["make_latest"], "true")
@@ -70,12 +70,12 @@ class PublishTests(unittest.TestCase):
                 return existing if "/releases/tags/" in path else {"sha": "a" * 40}
 
             with patch.object(publisher, "validate_output", return_value=["asset"]):
-                publisher.publish(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, True, api)
+                publisher.publish(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, True, api)
                 self.assertNotIn("POST", calls)
                 self.assertNotIn("PATCH", calls)
                 existing["assets"][0]["digest"] = "sha256:" + "b" * 64
                 with self.assertRaises(ValueError):
-                    publisher.publish(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, False, api)
+                    publisher.publish(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, False, api)
                 self.assertNotIn("PATCH", calls)
 
     def test_existing_empty_draft_with_other_notes_is_not_modified(self):
@@ -93,7 +93,7 @@ class PublishTests(unittest.TestCase):
 
             with patch.object(publisher, "validate_output", return_value=["asset"]):
                 with self.assertRaises(ValueError):
-                    publisher.publish(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, False, api)
+                    publisher.publish(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, False, api)
             self.assertEqual(writes, [])
 
 

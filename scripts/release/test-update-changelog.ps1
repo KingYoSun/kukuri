@@ -49,7 +49,7 @@ try {
 
     & $scriptPath `
       -Tag "v0.1.1-preview.1" `
-      -Repository "KingYoSun/kukuri" `
+      -Repository "kukuri-app/kukuri" `
       -PreviousTag "v0.1.0-preview.1" `
       -ChangelogPath $changelogPath `
       -SectionOutputPath $sectionPath `
@@ -65,11 +65,11 @@ try {
         throw "Missing group heading: $group"
       }
     }
-    if ($section -notmatch '\[#340\]\(https://github\.com/KingYoSun/kukuri/pull/340\)') {
+    if ($section -notmatch '\[#340\]\(https://github\.com/kukuri-app/kukuri/pull/340\)') {
       throw "PR #340 link missing or malformed"
     }
-    if ($section -notmatch '\[#307\]\(https://github\.com/KingYoSun/kukuri/pull/307\)' -or
-        $section -notmatch '\[#337\]\(https://github\.com/KingYoSun/kukuri/pull/337\)') {
+    if ($section -notmatch '\[#307\]\(https://github\.com/kukuri-app/kukuri/pull/307\)' -or
+        $section -notmatch '\[#337\]\(https://github\.com/kukuri-app/kukuri/pull/337\)') {
       throw "Nested PR links (#307, #337) not both rendered"
     }
     if ($section -match '#100') {
@@ -82,7 +82,7 @@ try {
     # Idempotency: re-running must not duplicate the section.
     & $scriptPath `
       -Tag "v0.1.1-preview.1" `
-      -Repository "KingYoSun/kukuri" `
+      -Repository "kukuri-app/kukuri" `
       -PreviousTag "v0.1.0-preview.1" `
       -ChangelogPath $changelogPath `
       -SectionOutputPath $sectionPath `
@@ -100,7 +100,7 @@ try {
     # Auto-detect of the previous tag should produce the same commit set.
     & $scriptPath `
       -Tag "v0.1.1-preview.1" `
-      -Repository "KingYoSun/kukuri" `
+      -Repository "kukuri-app/kukuri" `
       -ChangelogPath $changelogPath `
       -SectionOutputPath $sectionPath `
       -Date "2026-06-15" | Out-Null

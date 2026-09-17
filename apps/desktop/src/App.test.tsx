@@ -76,7 +76,7 @@ test('settings drawer can open the release section', async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Latest release/ })).toHaveAttribute(
     'href',
-    'https://github.com/KingYoSun/kukuri/releases/latest'
+    'https://github.com/kukuri-app/kukuri/releases/latest'
   );
   expect(screen.getByRole('link', { name: /Privacy policy/ })).toHaveAttribute(
     'href',

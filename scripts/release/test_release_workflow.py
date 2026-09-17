@@ -1,4 +1,5 @@
 """Check the actual workflow DAG and secret/source boundaries; no GitHub writes."""
+import json
 import pathlib
 import shlex
 import subprocess
@@ -76,6 +77,15 @@ class WorkflowTests(unittest.TestCase):
         cli = workflow("kukuri-cli-package.yml")
         self.assertEqual(cli["jobs"]["cli-package"]["strategy"]["matrix"]["arch"], ["x86_64", "aarch64"])
         self.assertNotIn("secrets", cli["on"].get("workflow_call", {}))
+
+    def test_updater_endpoint_is_the_canonical_repository_stable_url(self):
+        # 2026-09-16 移管後の正本。旧 owner の URL は GitHub redirect に依存するため設定へ保存しない。
+        config = json.loads((ROOT / "apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+        updater = config["plugins"]["updater"]
+        self.assertEqual(updater["endpoints"],
+                         ["https://github.com/kukuri-app/kukuri/releases/latest/download/latest-preview.json"])
+        self.assertTrue(updater["pubkey"].startswith("dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4QzVBN0U3NEIyOEQyM0YK"),
+                        "the updater public key must not change with the repository move")
 
 
 if __name__ == "__main__":

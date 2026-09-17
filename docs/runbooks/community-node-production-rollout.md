@@ -28,7 +28,7 @@ domain、actor、image digest は汎用既定値ではない。Terraform の初�
 export KUKURI_GCP_PROJECT="YOUR_PROJECT"
 export KUKURI_GCP_ZONE="asia-northeast1-a"
 export KUKURI_VM="kukuri-cn-vm"
-export KUKURI_REPO="KingYoSun/kukuri"
+export KUKURI_REPO="kukuri-app/kukuri"
 export KUKURI_MAIN_SHA="<40-character-main-sha>"
 export KUKURI_SHA_TAG="sha-$(printf '%s' "$KUKURI_MAIN_SHA" | cut -c1-12)"
 ```
@@ -39,7 +39,7 @@ PowerShell:
 $env:KUKURI_GCP_PROJECT = 'YOUR_PROJECT'
 $env:KUKURI_GCP_ZONE = 'asia-northeast1-a'
 $env:KUKURI_VM = 'kukuri-cn-vm'
-$env:KUKURI_REPO = 'KingYoSun/kukuri'
+$env:KUKURI_REPO = 'kukuri-app/kukuri'
 $env:KUKURI_MAIN_SHA = '<40-character-main-sha>'
 $env:KUKURI_SHA_TAG = 'sha-' + $env:KUKURI_MAIN_SHA.Substring(0, 12)
 ```
@@ -72,11 +72,11 @@ repositoryにrequired checkが設定されていない場合、`gh pr merge --au
 
 ```bash
 for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
-  ref="ghcr.io/kingyosun/${image}:${KUKURI_SHA_TAG}"
+  ref="ghcr.io/kukuri-app/${image}:${KUKURI_SHA_TAG}"
   digest="$(docker buildx imagetools inspect "$ref" --format '{{println .Manifest.Digest}}')"
   test -n "$digest"
-  docker manifest inspect "ghcr.io/kingyosun/${image}@${digest}" >/dev/null
-  printf '%s@%s\n' "ghcr.io/kingyosun/${image}" "$digest"
+  docker manifest inspect "ghcr.io/kukuri-app/${image}@${digest}" >/dev/null
+  printf '%s@%s\n' "ghcr.io/kukuri-app/${image}" "$digest"
 done
 ```
 

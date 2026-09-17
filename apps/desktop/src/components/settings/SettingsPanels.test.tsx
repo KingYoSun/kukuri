@@ -831,7 +831,7 @@ test('developer panel links to the diagnostic report and shows the log viewer on
   expect(screen.queryByText(/does not include a log viewer/i)).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Troubleshooting guide/ })).toHaveAttribute(
     'href',
-    'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md'
+    'https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md'
   );
   await user.click(screen.getByRole('button', { name: 'Refresh logs' }));
   expect(onRefresh).toHaveBeenCalledTimes(1);

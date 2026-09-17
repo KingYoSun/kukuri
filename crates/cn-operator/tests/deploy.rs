@@ -311,7 +311,7 @@ fn generate_tfvars_trims_deploy_strings() {
                 \x20 acme_email: \"  ops@example-kukuri.net  \"\n\
                 \x20 jwt_secret_id: \"  kukuri-cn-jwt-secret  \"\n\
                 \x20 postgres_password_secret_id: \"  kukuri-cn-postgres-password  \"\n\
-                \x20 cn_user_api_image: \"  ghcr.io/kingyosun/kukuri-cn-user-api:latest  \"\n\
+                \x20 cn_user_api_image: \"  ghcr.io/kukuri-app/kukuri-cn-user-api:latest  \"\n\
                 \x20 machine_type: \"  e2-small  \"\n\
                 \x20 blob_cache_path: \"  /var/lib/kukuri/blob-cache  \"\n";
     let resolved = load_and_validate(yaml).unwrap();
@@ -524,7 +524,7 @@ fn indexer_stack_defaults_to_disabled_with_images() {
     let tfvars = generate_tfvars(&resolved).unwrap();
     assert!(tfvars.contains("deploy_indexer_stack              = false"));
     assert!(tfvars.contains(
-        "cn_indexer_image                  = \"ghcr.io/kingyosun/kukuri-cn-indexer:latest\""
+        "cn_indexer_image                  = \"ghcr.io/kukuri-app/kukuri-cn-indexer:latest\""
     ));
     assert!(tfvars.contains("arcadedb_image                    = \"arcadedata/arcadedb:26.8.1\""));
     assert!(tfvars.contains("relation_analyze_interval_minutes = 60"));

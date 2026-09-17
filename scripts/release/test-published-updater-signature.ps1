@@ -3,7 +3,7 @@ param(
     [ValidatePattern('^v\d+\.\d+\.\d+-preview\.\d+$')]
     [string]$Tag,
     [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
-    [string]$Repository = 'KingYoSun/kukuri',
+    [string]$Repository = 'kukuri-app/kukuri',
     [ValidateSet('windows-x86_64', 'linux-x86_64', 'linux-x86_64-deb')]
     [string[]]$Platforms = @('windows-x86_64'),
     [string]$InputDir,

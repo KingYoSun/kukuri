@@ -11,7 +11,7 @@ kukuri is a topic-first P2P social app. Find a topic you care about, join a publ
 > [!IMPORTANT]
 > kukuri is currently a **Builder Preview for testers**, not a stable general release.
 
-**[Download the latest Windows / Linux Preview](https://github.com/KingYoSun/kukuri/releases/latest)**
+**[Download the latest Windows / Linux Preview](https://github.com/kukuri-app/kukuri/releases/latest)**
 
 | Platform | Current support |
 | --- | --- |
@@ -97,8 +97,8 @@ These are directions, not a promise that every capability is available in the cu
 
 ## Feedback and Community
 
-- Report reproducible bugs and regressions in [GitHub Issues](https://github.com/KingYoSun/kukuri/issues).
-- Use [GitHub Discussions](https://github.com/KingYoSun/kukuri/discussions) for questions, product ideas, UX proposals, and early discussion of larger changes.
+- Report reproducible bugs and regressions in [GitHub Issues](https://github.com/kukuri-app/kukuri/issues).
+- Use [GitHub Discussions](https://github.com/kukuri-app/kukuri/discussions) for questions, product ideas, UX proposals, and early discussion of larger changes.
 - The in-app "Send feedback" button delivers tester feedback to a Community Node that opts into receiving it.
 - For connectivity, updater, and recovery problems, enable developer mode in `Settings -> Developer` and include the sanitized report from `Settings -> Release`.
 - Community Node operators are welcome to report deployment, disclosure, moderation, and distributed-reporting feedback through the same GitHub entry points.
@@ -121,7 +121,7 @@ Prerequisites:
 - Docker only for Community Node integration tests and local Community Node stacks
 
 ```bash
-git clone https://github.com/KingYoSun/kukuri.git
+git clone https://github.com/kukuri-app/kukuri.git
 cd kukuri
 
 npx pnpm@10.16.1 install --dir apps/desktop

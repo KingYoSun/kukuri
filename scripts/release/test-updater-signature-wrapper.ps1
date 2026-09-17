@@ -24,7 +24,7 @@ try {
         [IO.File]::WriteAllText((Join-Path $work $name), $target)
         $hash = (Get-FileHash (Join-Path $work $name)).Hash.ToLowerInvariant()
         $sums += "$hash  $name"
-        $manifest.platforms[$target] = @{ signature = 'embedded'; url = "https://github.com/KingYoSun/kukuri/releases/download/v0.1.8-preview.2/$name" }
+        $manifest.platforms[$target] = @{ signature = 'embedded'; url = "https://github.com/kukuri-app/kukuri/releases/download/v0.1.8-preview.2/$name" }
     }
     [IO.File]::WriteAllLines((Join-Path $work 'SHA256SUMS.txt'), $sums)
     function Write-Fixture {
@@ -54,7 +54,7 @@ try {
     Expect-Rejection 'did not pass exactly one test' 1
     $global:KukuriWrapperFixture.passed = 1
     $originalUrl = $manifest.platforms.'windows-x86_64'.url
-    foreach ($url in @($originalUrl.Replace('KingYoSun/kukuri', 'other/repo'), "$originalUrl`?foreign=1", "$originalUrl#fragment")) {
+    foreach ($url in @($originalUrl.Replace('kukuri-app/kukuri', 'other/repo'), "$originalUrl`?foreign=1", "$originalUrl#fragment")) {
         $manifest.platforms.'windows-x86_64'.url = $url
         Write-Fixture
         Expect-Rejection 'must belong to the selected release' 0
