@@ -134,7 +134,7 @@ WP-H8（CSS 改名・整理）の安全網として、主要 14 サーフェス�
   - CLI 例: `gh workflow run kukuri-visual-baseline.yml --ref <branch>` → 完了後 `gh run download <run-id> -n kukuri-desktop-visual-baseline -D <tmp>`。
   - artifact をダウンロードできない環境（egress 制限のある remote session 等）では、dispatch 時に input `commit_to_branch=true` を指定すると workflow が対象ブランチへ baseline を commit / push する。`GITHUB_TOKEN` による push は他の workflow を起動しないため、その後に別の commit を push して CI を流す。
 - optional（ローカルで Linux baseline を再生成したい場合）: Playwright 公式 Docker イメージ `mcr.microsoft.com/playwright:v1.62.1-jammy`（`pnpm-lock.yaml` の `@playwright/test` バージョンと一致させる）内で `pnpm test:e2e:visual --update-snapshots` を実行する。
-- `@playwright/test`（同梱 Chromium）更新や ubuntu-latest ランナーイメージ更新でフォント/AA が変わると baseline が一斉に割れることがある。その場合は deps 更新 PR に baseline 再生成を同梱する。
+- `@playwright/test`（同梱 Chromium）更新や runner イメージ更新でフォント/AA が変わると baseline が一斉に割れることがある。その場合は deps 更新 PR に baseline 再生成を同梱する。baseline 生成（`kukuri-visual-baseline.yml`）と比較（`kukuri-fast.yml` の `linux-desktop-browser`）は同じ Namespace runner profile（`namespace-profile-kukuri`、#1073）で動かし、profile を変えるときは両方を同じ PR で変える。
 - baseline の置き場は `apps/desktop/tests/playwright/__screenshots__/`（`.gitignore` 済みの `test-results/` とは別。混同しない）。
 
 ## community-node compose
@@ -337,6 +337,10 @@ export KUKURI_DISCOVERY_SEEDS=<node_id または node_id@host:port をカンマ�
 - `KUKURI_ADVERTISE_HOST` を設定すると `Your Ticket` はその host を使う。
 - `KUKURI_INSTANCE` を設定すると app data dir が分離される。
 - `KUKURI_APP_DATA_DIR` を設定すると app data dir を丸ごと上書きできる。
+- 既定の app data dir は build の種別で分かれる（#1105）。配布版（release build）は OS の app data dir（Windows は `%APPDATA%\app.kukuri.desktop`）、`tauri:dev` や `cargo build` の開発ビルド（debug build）はその兄弟の `app.kukuri.desktop.dev` を使う。開発ビルドは配布版の同意記録・アカウント・DB・OS 通知設定を読み書きしない。`KUKURI_INSTANCE` はこの build 別の dir の下に作られ、`KUKURI_APP_DATA_DIR` は build の種別に関係なく指定した dir をそのまま使う。
+- 開発ビルドの `KUKURI_APP_DATA_DIR` に配布版の dir を指定しない。同意判定は build の種別を見ないため、開発中の版への同意が配布版の同意として扱われる（記録の `build_profile` は `development` になる）。
+- #1105 より前の開発ビルドが配布版の dir に残した同意記録やアカウントは移動・削除しない。記録には `build_profile` が無く、配布版の記録と区別できない。開発ビルドの `.dev` dir は初回起動時に空の状態から始まる。
+- WebView の保存領域（theme / 言語などの localStorage）は identifier 単位のため、配布版と開発ビルドで共有される。
 - `KUKURI_DISABLE_KEYRING=1` を設定すると OS keyring を使わず、app data dir 内の `*.identity-key` fallback file を使う。
 - `KUKURI_DISCOVERY_MODE` / `KUKURI_DISCOVERY_SEEDS` を設定すると discovery panel は read-only になり、env が local file より優先される。
 

@@ -8,9 +8,9 @@ use kukuri_cli::protocol::{
     exit_code_for,
 };
 use kukuri_desktop_runtime::{
-    AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AppConsentDocumentRecord,
-    AppConsentStore, ProfileError, ProfileLease, app_consent_satisfied, current_unix_seconds,
-    load_app_consent_store, resolve_cli_profile, save_app_consent_store,
+    AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AppBuildProfile,
+    AppConsentDocumentRecord, AppConsentStore, ProfileError, ProfileLease, app_consent_satisfied,
+    current_unix_seconds, load_app_consent_store, resolve_cli_profile, save_app_consent_store,
 };
 
 #[cfg(target_os = "linux")]
@@ -224,6 +224,7 @@ fn accept_consents(path: &Path, args: ConsentAcceptArgs) -> Result<(), CliError>
     }
     let accepted_at = current_unix_seconds();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
+    let build_profile = Some(AppBuildProfile::current().as_str().to_string());
     let store = AppConsentStore {
         records: APP_LEGAL_DOCUMENTS
             .iter()
@@ -233,6 +234,7 @@ fn accept_consents(path: &Path, args: ConsentAcceptArgs) -> Result<(), CliError>
                 accepted_at,
                 language: language.to_string(),
                 app_version: app_version.clone(),
+                build_profile: build_profile.clone(),
             })
             .collect(),
         age_attestations: vec![AgeAttestationRecord {
@@ -240,6 +242,7 @@ fn accept_consents(path: &Path, args: ConsentAcceptArgs) -> Result<(), CliError>
             attested_at: accepted_at,
             language: language.to_string(),
             app_version,
+            build_profile,
         }],
     };
     save_app_consent_store(path, &store)

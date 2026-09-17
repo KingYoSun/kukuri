@@ -403,6 +403,12 @@ self-host VLM は次のどちらか一方の境界に固定し、runbook・netwo
   last ingest age、backoff、外部 safety provider failure、media fetch unavailable累計、
   relation最終成功時刻を custom metrics へ送る。ピア不在・未複製によるmedia取得不能は
   `media_fetch_unavailable_total` で観測するが、外部provider障害のpaging対象には含めない。
+- `relation_last_success_age_seconds` は関係解析の最終成功からの経過秒数。解析の失敗は、次の成功まで
+  `1000000000` を送る。systemd の実行記録が無い期間（解析の実行中、boot 後、startup による unit 再生成後、
+  timer の停止後）は、`/var/lib/kukuri/community-node/.monitor-relation-analyze` に残した最後の成功、
+  boot 後の初回予定（16 分後）、有効な timer の起動のうち、最も新しい時刻から数える。そのため、初回の
+  解析前には警報を出さず、timer が止まった場合は最後の成功から閾値（間隔 × 3）を超えた時点で警報を出す
+  （#1102）。
 - Terraform は各 custom metric descriptor と alert policy を作成する。通知を実配送するには、
   `monitoring_notification_channels` に既存 channel の resource name を設定して apply する。
 - 確認: `systemctl status kukuri-monitor.timer`、`systemctl start kukuri-monitor.service`、

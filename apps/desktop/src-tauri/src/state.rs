@@ -4,7 +4,8 @@ use std::{
 };
 
 use kukuri_desktop_runtime::{
-    ClientHost, DesktopRuntime, resolve_app_data_dir_from_env, resolve_db_path_from_env,
+    AppBuildProfile, ClientHost, DesktopRuntime, default_app_data_dir,
+    resolve_app_data_dir_from_env, resolve_db_path_from_env,
 };
 pub(crate) use kukuri_desktop_runtime::{
     ClientStartupError as StartupError,
@@ -182,12 +183,21 @@ fn error_message(error: anyhow::Error) -> String {
     format!("{error:#}")
 }
 
-pub(crate) fn resolve_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app_handle
+/// build の種別ごとの既定 app data dir。開発ビルドは配布版と別の dir を使う(#1105)。
+/// `KUKURI_APP_DATA_DIR` / `KUKURI_INSTANCE` はこの dir を基準に解決する。
+pub(crate) fn base_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let platform_app_data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
-    resolve_app_data_dir_from_env(&app_data_dir).map_err(error_message)
+    Ok(default_app_data_dir(
+        &platform_app_data_dir,
+        AppBuildProfile::current(),
+    ))
+}
+
+pub(crate) fn resolve_app_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    resolve_app_data_dir_from_env(&base_app_data_dir(app_handle)?).map_err(error_message)
 }
 
 /// アプリ同意など端末レベルのファイルの命名基準となる flat db path。
@@ -195,11 +205,7 @@ pub(crate) fn resolve_app_data_dir(app_handle: &tauri::AppHandle) -> Result<Path
 /// 状態(同意・年齢申告)はアカウントに紐づけないため、従来どおり
 /// `<app_data>/kukuri.db` を基準にした兄弟ファイル名を使い続ける。
 pub(crate) fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("failed to resolve app data dir: {error}"))?;
-    resolve_db_path_from_env(&app_data_dir).map_err(error_message)
+    resolve_db_path_from_env(&base_app_data_dir(app_handle)?).map_err(error_message)
 }
 
 pub(crate) async fn build_desktop_state(
@@ -347,6 +353,7 @@ mod tests {
             accepted_at,
             language: "ja".to_string(),
             app_version: "0.1.8".to_string(),
+            build_profile: None,
         }
     }
 
@@ -356,6 +363,7 @@ mod tests {
             attested_at,
             language: "ja".to_string(),
             app_version: "0.1.8".to_string(),
+            build_profile: None,
         }
     }
 
