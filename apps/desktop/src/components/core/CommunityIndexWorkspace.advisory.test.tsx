@@ -261,7 +261,7 @@ test('a post-level advisory publishes the gated attachment hashes of the resolve
     expect(onAdvisoryGatedMediaHashesChange).toHaveBeenLastCalledWith([INDEX_IMAGE_HASH])
   );
   const publishedPosts = onResolvedPostsChange.mock.calls.flatMap(
-    ([posts]: [PostView[]]) => posts
+    (call) => call[0] as PostView[]
   );
   expect(publishedPosts.map((post) => post.object_id)).not.toContain('post-advisory-post');
 });

@@ -139,11 +139,12 @@ export function useDesktopShellDataEffects({
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
   const mediaFetchInputRef = useRef(new Map<string, AttachmentView>());
-  // #1107: 取得中の hash と、その取得を識別する番号。effect の再実行では取得結果を捨てない
-  // (捨てると取得済みの記録だけが残り、再取得されずスケルトンのまま残る)。ゲートで取得を
-  // 無効にしたときは記録を消し、完了した結果を表示に使わない。
-  const mediaFetchInFlightRef = useRef(new Map<string, number>());
+  // #1107: effect の再実行では取得結果を捨てない(捨てると入力の記録だけが残り、再取得されず
+  // スケルトンのまま残る)。hash ごとの最新の取得番号と、ゲートで取得を無効にした回数を持ち、
+  // ゲート前に始まった取得の結果は表示に使わない。
+  const mediaFetchLatestRef = useRef(new Map<string, number>());
   const mediaFetchSequenceRef = useRef(0);
+  const mediaGateEpochRef = useRef(new Map<string, number>());
   const gatedMediaHashesRef = useRef<ReadonlySet<string>>(new Set());
   const mediaFetchMountedRef = useRef(true);
   useEffect(() => {
@@ -181,7 +182,7 @@ export function useDesktopShellDataEffects({
       return;
     }
     for (const hash of gatedAdultMediaHashes) {
-      mediaFetchInFlightRef.current.delete(hash);
+      mediaGateEpochRef.current.set(hash, (mediaGateEpochRef.current.get(hash) ?? 0) + 1);
       const url = remoteObjectUrlRef.current.get(hash);
       if (url) {
         URL.revokeObjectURL(url);
@@ -568,27 +569,22 @@ export function useDesktopShellDataEffects({
       if (typeof mediaObjectUrls[attachment.hash] === 'string') {
         continue;
       }
-      if (mediaFetchInFlightRef.current.has(attachment.hash)) {
-        continue;
-      }
       if (mediaFetchInputRef.current.get(attachment.hash) === attachment) {
         continue;
       }
       mediaFetchInputRef.current.set(attachment.hash, attachment);
       const fetchId = ++mediaFetchSequenceRef.current;
-      mediaFetchInFlightRef.current.set(attachment.hash, fetchId);
-      // 完了時にこの取得の結果を使ってよいか。無効化されていれば記録を消さずに捨てる。
-      const settleFetch = () => {
-        const current = mediaFetchInFlightRef.current.get(attachment.hash) === fetchId;
-        if (current) {
-          mediaFetchInFlightRef.current.delete(attachment.hash);
-        }
-        return (
-          current &&
-          mediaFetchMountedRef.current &&
-          !gatedMediaHashesRef.current.has(attachment.hash)
-        );
-      };
+      mediaFetchLatestRef.current.set(attachment.hash, fetchId);
+      const gateEpoch = mediaGateEpochRef.current.get(attachment.hash) ?? 0;
+      // 完了した結果を使ってよいか。取得後に一度でもゲートされた hash の bytes は使わない。
+      // 取得できた bytes は、後から始まった再試行より先に届いても使う(先着を採用する)。
+      const resultUsable = () =>
+        mediaFetchMountedRef.current &&
+        (mediaGateEpochRef.current.get(attachment.hash) ?? 0) === gateEpoch &&
+        !gatedMediaHashesRef.current.has(attachment.hash);
+      // 取得不可の記録は、後続の再試行が無い場合だけ残す。
+      const failureUsable = () =>
+        resultUsable() && mediaFetchLatestRef.current.get(attachment.hash) === fetchId;
 
       const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
       mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
@@ -603,11 +599,14 @@ export function useDesktopShellDataEffects({
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
-          if (!settleFetch()) {
+          if (!resultUsable()) {
             return;
           }
           const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (!nextUrl) {
+            if (!failureUsable()) {
+              return;
+            }
             logMediaDebug('warn', 'remote media fetch missing', {
               attempt: nextAttempt,
               hash: attachment.hash,
@@ -646,7 +645,7 @@ export function useDesktopShellDataEffects({
           });
         })
         .catch((fetchError: unknown) => {
-          if (!settleFetch()) {
+          if (!failureUsable()) {
             return;
           }
           logMediaDebug('warn', 'remote media fetch error', {

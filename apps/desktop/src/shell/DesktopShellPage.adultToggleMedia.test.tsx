@@ -161,6 +161,7 @@ test('turning adult display off gates a blob shared by advisory and plain posts 
 }, TEST_TIMEOUT_MS);
 
 // AC-1 / AC-4: 照会完了で複数の通常画像の取得が同時に始まり、一方の完了で他方の結果を捨てない。
+// 再試行は応答しないため、最初の取得結果を捨てるとスケルトンのまま残る。
 test('plain image posts all leave the skeleton when their fetches complete out of order', async () => {
   installObjectUrlMocks();
   const fastHash = 'e'.repeat(64);
@@ -174,9 +175,14 @@ test('plain image posts all leave the skeleton when their fetches complete out o
     },
   });
   mockLookup(api, []);
+  let slowRequests = 0;
   const getBlobMediaPayload = vi.fn(
     async (hash: string, mime: string): Promise<BlobMediaPayload | null> => {
       if (hash === slowHash) {
+        slowRequests += 1;
+        if (slowRequests > 1) {
+          return new Promise<null>(() => {});
+        }
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
       return { bytes_base64: 'ZmFrZS1pbWFnZQ==', mime };
@@ -194,7 +200,6 @@ test('plain image posts all leave the skeleton when their fetches complete out o
     },
     WAIT
   );
-  expect(requestsFor(getBlobMediaPayload, slowHash)).toBe(1);
 }, TEST_TIMEOUT_MS);
 
 // INVAR-1 / AC-3: 取得中に OFF でゲート対象になった blob は、取得完了後も表示に使わない。
@@ -208,11 +213,14 @@ test('a fetch that completes after its blob became gated is discarded', async ()
   });
   await api.setAdultContentDisplayEnabled(true);
   mockLookup(api, [postAdvisory('late-advisory-post')]);
-  let releaseFetch: (() => void) | null = null;
+  const pendingReleases: Array<() => void> = [];
+  const releaseAll = () => {
+    for (const release of pendingReleases.splice(0)) release();
+  };
   const getBlobMediaPayload = vi.fn(
     async (hash: string, mime: string): Promise<BlobMediaPayload | null> => {
       await new Promise<void>((resolve) => {
-        releaseFetch = resolve;
+        pendingReleases.push(resolve);
       });
       return { bytes_base64: 'ZmFrZS1pbWFnZQ==', mime };
     }
@@ -223,25 +231,32 @@ test('a fetch that completes after its blob became gated is discarded', async ()
 
   const column = getActiveColumn('Timeline');
   await waitFor(() => {
-    expect(requestsFor(getBlobMediaPayload, SHARED_HASH)).toBe(1);
+    expect(requestsFor(getBlobMediaPayload, SHARED_HASH)).toBeGreaterThan(0);
   }, WAIT);
   await openSettingsSection(user, 'safety');
-  await user.click(screen.getByTestId('adult-content-display-toggle'));
+  const toggle = screen.getByTestId('adult-content-display-toggle');
+  await user.click(toggle);
   expect(
     await within(column).findByTestId('media-adult-gated-late-advisory-post', {}, WAIT)
   ).toBeInTheDocument();
+  const requestsWhileGated = requestsFor(getBlobMediaPayload, SHARED_HASH);
 
-  const release = releaseFetch as (() => void) | null;
-  release?.();
+  // ゲート前に始まった取得が OFF の間に完了しても、表示にも object URL にも使わない。
+  const createObjectUrl = vi.mocked(URL.createObjectURL);
+  const objectUrlsBeforeRelease = createObjectUrl.mock.calls.length;
+  releaseAll();
   await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(createObjectUrl.mock.calls.length).toBe(objectUrlsBeforeRelease);
+  expect(requestsFor(getBlobMediaPayload, SHARED_HASH)).toBe(requestsWhileGated);
 
   // ON へ戻したとき、破棄済みの結果ではなく新しい取得で表示する。
-  await user.click(screen.getByTestId('adult-content-display-toggle'));
+  await user.click(toggle);
   await waitFor(() => {
-    expect(requestsFor(getBlobMediaPayload, SHARED_HASH)).toBe(2);
+    expect(requestsFor(getBlobMediaPayload, SHARED_HASH)).toBeGreaterThan(requestsWhileGated);
   }, WAIT);
+  await new Promise((resolve) => setTimeout(resolve, 300));
   expect(within(column).queryByTestId('media-preview-late-advisory-post')).not.toBeInTheDocument();
-  (releaseFetch as (() => void) | null)?.();
+  releaseAll();
   expect(
     await within(column).findByTestId('media-preview-late-advisory-post', {}, WAIT)
   ).toBeInTheDocument();
