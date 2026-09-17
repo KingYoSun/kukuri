@@ -65,11 +65,11 @@ try {
         throw "Missing group heading: $group"
       }
     }
-    if ($section -notmatch '\[#340\]\(https://github.com/kukuri-app/kukuri/pull/340\)') {
+    if ($section -notmatch '\[#340\]\(https://github\.com/kukuri-app/kukuri/pull/340\)') {
       throw "PR #340 link missing or malformed"
     }
-    if ($section -notmatch '\[#307\]\(https://github.com/kukuri-app/kukuri/pull/307\)' -or
-        $section -notmatch '\[#337\]\(https://github.com/kukuri-app/kukuri/pull/337\)') {
+    if ($section -notmatch '\[#307\]\(https://github\.com/kukuri-app/kukuri/pull/307\)' -or
+        $section -notmatch '\[#337\]\(https://github\.com/kukuri-app/kukuri/pull/337\)') {
       throw "Nested PR links (#307, #337) not both rendered"
     }
     if ($section -match '#100') {

@@ -81,7 +81,7 @@ try {
   if ($notes -notmatch '## Changes') {
     throw "Release notes are missing the Changes section"
   }
-  if ($notes -notmatch '\[#340\]\(https://github.com/kukuri-app/kukuri/pull/340\)') {
+  if ($notes -notmatch '\[#340\]\(https://github\.com/kukuri-app/kukuri/pull/340\)') {
     throw "Release notes did not embed the changelog PR link"
   }
   if ($notes -notmatch '## Included') {
