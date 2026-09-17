@@ -51,6 +51,9 @@ fn basis_entry(
 
 /// 入力（#406 供給契約）から根拠つき trust read view を組み立てる。
 ///
+/// 戻り値の `trust` は閲覧者に依存しない trust 絶対値 T（ADR 0026 §8.1）。利用者向けの S は
+/// [`crate::apply_viewer_relation`] で合算する。
+///
 /// - 絶対成分: `inputs.absolute` の生寄与の総和（decay なし・relation 重みなし）を ±1 にクランプ。
 /// - 相対成分: `inputs.relative` の寄与 × 半減期減衰 × relation 重み（`[0,1]` に丸め）の総和を
 ///   ±1 にクランプ。
@@ -104,5 +107,7 @@ pub fn build_trust_read(
         w_abs_applied: composed.w_abs_applied,
         computed_at: now.to_rfc3339(),
         basis,
+        // 閲覧者別の合算（S）と評価 metadata は `apply_viewer_relation` が付ける。
+        evaluation: None,
     }
 }

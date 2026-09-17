@@ -159,6 +159,55 @@ pub async fn assert_cluster_roundtrip(store: &dyn RelationStore, prefix: &str) -
     Ok(())
 }
 
+/// `proximity_scores` は `pairwise_proximity` と同じ score を返し、edge の無い candidate を含めない
+/// （relation 値 R の重み。ADR 0026 §8.2）。
+pub async fn assert_proximity_scores(store: &dyn RelationStore, prefix: &str) -> Result<()> {
+    let viewer = pk(prefix, "score-viewer");
+    let near = pk(prefix, "score-near");
+    let far = pk(prefix, "score-far");
+    let unrelated = pk(prefix, "score-unrelated");
+    store
+        .upsert_edge(
+            &viewer,
+            &near,
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 9.0),
+        )
+        .await?;
+    store
+        .upsert_edge(
+            &far,
+            &viewer,
+            &EdgeFeatures::new().with(FEATURE_SHARED_TOPICS, 0.25),
+        )
+        .await?;
+    let scores = store
+        .proximity_scores(&viewer, &[near.clone(), far.clone(), unrelated.clone()])
+        .await?;
+    ensure!(
+        !scores.contains_key(&unrelated),
+        "candidate without an edge must be omitted: {scores:?}"
+    );
+    for candidate in [&near, &far] {
+        let expected = store
+            .pairwise_proximity(&viewer, candidate)
+            .await?
+            .map(|proximity| proximity.score);
+        ensure!(
+            scores.get(candidate).copied() == expected,
+            "proximity_scores must match pairwise_proximity for {candidate}: {scores:?}"
+        );
+    }
+    ensure!(
+        scores[&near] > scores[&far],
+        "closer candidate must have a higher score: {scores:?}"
+    );
+    ensure!(
+        store.proximity_scores(&viewer, &[]).await?.is_empty(),
+        "empty candidates must return an empty map"
+    );
+    Ok(())
+}
+
 /// 全 contract を一括実行する（各実装のテストはこれを呼ぶ）。
 pub async fn assert_relation_store_contracts(
     store: &dyn RelationStore,
@@ -169,5 +218,6 @@ pub async fn assert_relation_store_contracts(
     assert_symmetric_lookup(store, prefix).await?;
     assert_neighbors_ranked(store, prefix).await?;
     assert_cluster_roundtrip(store, prefix).await?;
+    assert_proximity_scores(store, prefix).await?;
     Ok(())
 }

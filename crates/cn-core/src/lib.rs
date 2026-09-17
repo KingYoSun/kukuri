@@ -50,6 +50,7 @@ mod tester_feedback;
 mod tests;
 mod transmission_preventions;
 mod trust_inputs;
+mod trust_observations;
 
 pub use admission::{
     AdmissionConfig, AdmissionMode, AdmissionRejection, AllowlistEntry, BannedEntry,
@@ -192,3 +193,11 @@ pub use transmission_preventions::{
     is_transmission_prevented_for_any, release_transmission_prevention,
 };
 pub use trust_inputs::{list_trust_risk_inputs, trust_risk_inputs_from};
+pub use trust_observations::{
+    ACTIVE_TRUST_OBSERVATION_RETENTION_DAYS, RELATION_OBSERVATIONS_PER_TARGET_LIMIT,
+    REVOKED_TRUST_OBSERVATION_RETENTION_DAYS, StoreTrustObservationsOutcome,
+    TRUST_OBSERVATION_MAX_CLOCK_SKEW_SECONDS, TrustObservationSharingStatus,
+    cleanup_trust_observations, latest_successful_relation_snapshot_id,
+    list_active_relation_observations, revoke_trust_observation_sharing, store_trust_observations,
+    trust_observation_revisions, trust_observation_sharing_status,
+};

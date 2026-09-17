@@ -208,6 +208,22 @@ async fn trust_read_is_not_found_when_not_configured() -> Result<()> {
         assert_eq!(body["code"], "TRUST_READ_NOT_CONFIGURED", "{path}");
     }
 
+    // #1061: 一括評価と観測の提供・取消も、機能未構成の node では公開しない。
+    for request in [
+        client
+            .post(format!("{}/v1/trust/evaluations", server.base_url))
+            .json(&serde_json::json!({ "targets": [target] })),
+        client
+            .post(format!("{}/v1/trust/observations", server.base_url))
+            .json(&serde_json::json!({ "envelopes": [] })),
+        client.delete(format!("{}/v1/trust/observations", server.base_url)),
+    ] {
+        let response = request.bearer_auth(token.as_str()).send().await?;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body: serde_json::Value = response.json().await?;
+        assert_eq!(body["code"], "TRUST_READ_NOT_CONFIGURED");
+    }
+
     // 距離利用停止の面は独立した安定コードで縮退を判別できる(#712)。
     let optout = client
         .get(format!("{}/v1/relation/optout", server.base_url))

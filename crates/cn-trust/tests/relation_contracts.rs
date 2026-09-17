@@ -5,7 +5,7 @@
 
 use kukuri_cn_trust::relation_testing::{
     assert_cluster_roundtrip, assert_neighbors_ranked, assert_pairwise_cluster_proximity,
-    assert_proximity_is_explainable, assert_symmetric_lookup,
+    assert_proximity_is_explainable, assert_proximity_scores, assert_symmetric_lookup,
 };
 use kukuri_cn_trust::{
     EdgeFeatures, FEATURE_FOLLOW_PROJECTION, FEATURE_SHARED_TOPICS, MemoryRelationStore,
@@ -63,4 +63,10 @@ fn follow_projection_feature_is_a_seam_that_composes() {
             .iter()
             .any(|e| e.feature == FEATURE_FOLLOW_PROJECTION)
     );
+}
+
+#[tokio::test]
+async fn relation_proximity_scores_match_pairwise_reads() {
+    let store = MemoryRelationStore::new();
+    assert_proximity_scores(&store, "scores").await.unwrap();
 }

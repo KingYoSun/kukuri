@@ -1144,6 +1144,67 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
             content: gen_capability_risk_and_practices(config),
         },
     ];
+    if config
+        .legal_document(LegalDocumentKind::TrustObservationSharing)
+        .is_some()
+    {
+        files.push(GeneratedFile {
+            filename: LegalDocumentKind::TrustObservationSharing
+                .filename()
+                .to_string(),
+            content: gen_trust_observation_sharing(config),
+        });
+    }
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
     files
+}
+
+/// ブロック / ミュート観測の提供に対する任意同意の本文（ADR 0026 §8.5）。
+fn gen_trust_observation_sharing(config: &ResolvedConfig) -> String {
+    let mut s = header(
+        config,
+        "ブロック・ミュート観測の提供",
+        Some(LegalDocumentKind::TrustObservationSharing),
+    );
+    let _ = writeln!(s, "\n## この文書の位置づけ\n");
+    let _ = writeln!(
+        s,
+        "この文書への同意は任意です。同意しなくても、この community node の他の機能は利用できます。\
+         同意すると、あなたがこの端末で行ったブロック・ミュートの記録をこの node へ提供します。\
+         同意はいつでも取り消せます。\n"
+    );
+    let _ = writeln!(s, "## 提供する情報\n");
+    let _ = writeln!(
+        s,
+        "- あなたの公開鍵と、ブロック・ミュートした相手の公開鍵\n\
+         - 操作の種類（ブロック・ミュート）と状態（有効・解除）\n\
+         - 操作の時刻と、あなたの鍵による署名\n"
+    );
+    let _ = writeln!(
+        s,
+        "投稿本文、メッセージ、端末内のその他の設定は提供しません。\
+         提供するのは、同意した後にこの端末で行った操作と、同意時にあなたが選んだ場合に限り既存のブロック・ミュートです。\n"
+    );
+    let _ = writeln!(s, "## 提供先と利用目的\n");
+    let _ = writeln!(
+        s,
+        "提供先はこの community node だけです。この node は、提供された記録を、\
+         各利用者から見た相手ユーザーの関係評価（relation 値）の調整にだけ使います。\
+         あなたと関係の深い利用者ほど、あなたのブロック・ミュートがその利用者に表示される評価へ強く反映されます。\n"
+    );
+    let _ = writeln!(
+        s,
+        "この node は、提供者の一覧や件数を他の利用者に開示しません。記録を他の node へ共有せず、\
+         ブロック・ミュートを特定の違反の判定として扱いません。\n"
+    );
+    let _ = writeln!(s, "## 保持期間と取消\n");
+    let _ = writeln!(
+        s,
+        "有効な記録は操作時刻から {active} 日、解除された記録は受信から {revoked} 日で評価から除き、削除します。\
+         同意を取り消すと、この node が保持するあなたの記録をすべて削除し、再び同意するまで新しい記録を受け付けません。\n",
+        active = 180,
+        revoked = 30,
+    );
+    s.push_str(&planned_section(config));
+    s
 }

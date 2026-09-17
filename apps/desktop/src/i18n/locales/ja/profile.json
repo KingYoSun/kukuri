@@ -75,9 +75,17 @@
     "trust": {
       "title": "信頼評価情報",
       "continuousNotice": "固定的な危険ラベルを付けず、連続値とその根拠を表示します。",
-      "trust": "総合信頼度",
-      "absolute": "絶対成分",
-      "relative": "相対成分",
+      "trust": "あなたから見た信頼度",
+      "reasonsLabel": "低下の理由",
+      "reasons": {
+        "risk_signals": "リスク判定",
+        "related_users_block_or_mute": "あなたと関係の近い利用者のブロック・ミュート"
+      },
+      "hideRecommended": "このノードの表示基準では、この利用者の投稿は折りたたむ対象です。",
+      "breakdownTitle": "ノード共通の評価の内訳",
+      "breakdownNotice": "内訳は、閲覧者によらずノードが算出した値です。あなたから見た信頼度には、あなたと関係の近い利用者のブロック・ミュートも反映されます。",
+      "absolute": "リスク判定（絶対）",
+      "relative": "リスク判定（相対）",
       "weight": "絶対成分の重み",
       "noBasis": "この信頼評価情報には根拠項目がありません。"
     },

@@ -537,9 +537,41 @@ export type TrustBasisEntry = { signal_id: string, issuer_node_id: string, targe
  */
 operator_adjusted_at?: string | null, raw_contribution: number, decay_factor: number, relation_weight: number, contribution: number, };
 
-export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
+export type TrustEvaluationReason = "risk_signals" | "related_users_block_or_mute";
 
-export type TrustUserReadResponse = { viewer_pubkey: string, target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, };
+export type TrustEvaluation = { 
+/**
+ * 合算・表示 policy の parameter から決まる識別子。
+ */
+policy_version: string, 
+/**
+ * T に寄与する入力の digest。
+ */
+trust_version: string, 
+/**
+ * relation snapshot と対象への観測 revision の組。
+ */
+relation_version: string, computed_at: string, 
+/**
+ * クライアントが結果を再利用してよい期限（RFC3339）。
+ */
+expires_at: string, 
+/**
+ * node-local な表示 policy による非表示推奨（`trust <= hide_threshold`）。
+ */
+hide_recommended: boolean, reasons: Array<TrustEvaluationReason>, };
+
+export type TrustReadView = { target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, 
+/**
+ * 評価の版・期限・表示 policy（#1061）。旧 node の応答では欠落し、クライアントは未評価として扱う。
+ */
+evaluation?: TrustEvaluation | null, };
+
+export type TrustUserReadResponse = { viewer_pubkey: string, target_id: string, absolute: number, relative: number, trust: number, w_abs_applied: number, computed_at: string, basis: Array<TrustBasisEntry>, 
+/**
+ * 評価の版・期限・表示 policy（#1061）。旧 node の応答では欠落し、クライアントは未評価として扱う。
+ */
+evaluation?: TrustEvaluation | null, };
 
 export type ProximityBasisEntry = { feature: string, value: number, weight: number, contribution: number, };
 

@@ -19,6 +19,7 @@ testing = []
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+blake3.workspace = true
 chrono.workspace = true
 serde.workspace = true
 kukuri-cn-safety = { path = "../cn-safety" }

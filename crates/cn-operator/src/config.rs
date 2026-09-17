@@ -63,7 +63,14 @@ pub enum LegalDocumentKind {
     AbusePolicy,
     DataRetention,
     RightsInfringement,
+    /// ブロック / ミュート観測の提供に対する任意同意（ADR 0026 §8.5、#1061）。
+    /// 公開は任意で、`ALL` には含めない。
+    TrustObservationSharing,
 }
+
+/// 観測提供の任意文書に使う固定 slug（`kukuri_cn_protocol::TRUST_OBSERVATION_SHARING_POLICY_SLUG`
+/// と同じ値。client は slug で文書を識別する）。
+pub const TRUST_OBSERVATION_SHARING_SLUG: &str = "trust_observation_sharing";
 
 impl LegalDocumentKind {
     pub const ALL: [Self; 7] = [
@@ -85,6 +92,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "abuse-policy.md",
             Self::DataRetention => "data-retention-policy.md",
             Self::RightsInfringement => "rights-infringement-policy.md",
+            Self::TrustObservationSharing => "trust-observation-sharing.md",
         }
     }
 
@@ -97,6 +105,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "abuse-policy",
             Self::DataRetention => "data-retention",
             Self::RightsInfringement => "rights-infringement-policy",
+            Self::TrustObservationSharing => "trust-observation-sharing",
         }
     }
 
@@ -109,6 +118,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "Community Node Abuse ポリシー",
             Self::DataRetention => "Community Node データ保持ポリシー",
             Self::RightsInfringement => "Community Node 権利侵害申出ポリシー",
+            Self::TrustObservationSharing => "Community Node ブロック・ミュート観測の提供",
         }
     }
 
@@ -121,6 +131,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "Community Node Abuse Policy",
             Self::DataRetention => "Community Node Data Retention Policy",
             Self::RightsInfringement => "Community Node Rights Request Policy",
+            Self::TrustObservationSharing => "Community Node Block and Mute Observation Sharing",
         }
     }
 }
@@ -749,6 +760,20 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
             if translation.title.trim().is_empty() || translation.body_markdown.trim().is_empty() {
                 bail!("legal document `{slug}` の参考訳 title/body_markdown は必須です");
             }
+        }
+    }
+    if let Some(document) = legal
+        .documents
+        .iter()
+        .find(|document| document.kind == LegalDocumentKind::TrustObservationSharing)
+    {
+        if document.required {
+            bail!("trust_observation_sharing は任意同意の文書です。required: false にしてください");
+        }
+        if document.slug.trim() != TRUST_OBSERVATION_SHARING_SLUG {
+            bail!(
+                "trust_observation_sharing の slug は `{TRUST_OBSERVATION_SHARING_SLUG}` にしてください"
+            );
         }
     }
     for kind in LegalDocumentKind::ALL {

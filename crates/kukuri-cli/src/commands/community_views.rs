@@ -100,8 +100,15 @@ pub(super) fn trust() -> Value {
         "raw_contribution": number(), "decay_factor": number(), "relation_weight": number(), "contribution": number()}),
         &[],
     );
-    view(
-        json!({"viewer_pubkey": string(), "target_id": string(), "absolute": number(), "relative": number(), "trust": number(), "w_abs_applied": number(), "computed_at": string(), "basis": array(basis)}),
+    // #1061: `trust` は CN が合算した S。`evaluation` は旧 node の応答では欠落する。
+    let evaluation = view(
+        json!({"policy_version": string(), "trust_version": string(), "relation_version": string(), "computed_at": string(), "expires_at": string(),
+        "hide_recommended": boolean(), "reasons": array(json!({"type": "string", "enum": ["risk_signals", "related_users_block_or_mute"]}))}),
         &[],
+    );
+    view(
+        json!({"viewer_pubkey": string(), "target_id": string(), "absolute": number(), "relative": number(), "trust": number(), "w_abs_applied": number(), "computed_at": string(), "basis": array(basis),
+        "evaluation": evaluation}),
+        &["evaluation"],
     )
 }

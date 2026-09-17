@@ -28,8 +28,8 @@ pub use capability::{Availability, Capability, CapabilityMeta, ExternalDestinati
 pub use capability_risk::CapabilityRiskPractices;
 pub use config::{
     DeployConfig, DeployProfile, LegalConfig, LegalDocumentConfig, LegalDocumentKind,
-    OperatorConfig, ReferenceTranslationConfig, ResolvedConfig, ServerConfig, load_and_validate,
-    parse_config, resolve_and_validate,
+    OperatorConfig, ReferenceTranslationConfig, ResolvedConfig, ServerConfig,
+    TRUST_OBSERVATION_SHARING_SLUG, load_and_validate, parse_config, resolve_and_validate,
 };
 pub use deploy::generate_tfvars;
 pub use docs::{GeneratedFile, generate_all};

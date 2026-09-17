@@ -15,6 +15,7 @@ Proposed
 - `docs/adr/0018-channel-first-sidebar-and-unified-epoch-lifecycle.md`
 - `docs/adr/0021-local-post-bookmark-data-classification.md`
 - `docs/adr/0043-dome-access-presence-spatial-audio.md`（signed block edge の正本。#961 で block を content surface の非表示にも使う）
+- `docs/adr/0026-community-node-trust-relation-foundation.md` §8（#1061。ブロック / ミュート観測の CN 提供と relation 値）
 
 ## Feature Data Classification
 - Feature 名: local author mute + profile social management
@@ -83,3 +84,17 @@ Proposed
 - block による非表示は相手の replica を hydrate して初めて効くため、相手側で反映されるまでに遅延がある。厳密な取得禁止ではない（#961 で妥協として固定）。
 - `Followed` は observed-only list なので UI に不完全性の説明が必要になる。
 - bookmark 一覧も mute filter の対象に入るため、保存済み post であっても muted author なら通常の content surface からは見えなくなる。
+
+## 改訂追補（#1061、2026-09-18）: ブロック / ミュート観測の CN 提供
+- mute の canonical は引き続き current device の `muted_authors` とし、docs sync・gossip・他 device には複製しない。
+  以下の観測提供は canonical の同期ではなく、利用者が選んだ CN へ送る**派生観測**である。
+- 観測提供は CN ごとの選択とし、既定は無効。CN の同意カタログにある任意文書 `trust_observation_sharing`（ADR 0026 §8.5）へ
+  同意したときだけ有効になり、同意を取り消すと無効になる。文書を公開していない CN には提供の選択肢を出さない。
+- 有効化時に「既存のブロック / ミュートも送る」を選べる（既定は選ばない）。選ばなければ、有効化後にこの端末で行った
+  mute / unmute / block / unblock だけを送る。他 device で行い、この端末が hydrate した block は送らない。
+- 送信は端末内の送信待ち（CN × 対象 × 種別で最新の 1 件に集約）から、CN の session が利用可能で同意が有効なときだけ行う。
+  送信に失敗しても mute / block のローカル操作は成立し、送信は後で再試行する。
+- 無効化・同意取消・CN の削除では送信待ちを破棄し、その CN に保存された自分の観測の削除を要求する。削除要求が完了するまで
+  新しい観測を送らない。
+- 観測提供は mute / block の表示上の効果、follow / mutual / friend 判定、DM、Dome の access を変えない。CN の評価による
+  非表示（ADR 0026 §8.4）は mute / block を作成・変更せず、新しい観測も生まない。

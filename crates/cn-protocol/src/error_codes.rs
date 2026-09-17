@@ -32,6 +32,17 @@ pub const TRUST_READ_NOT_CONFIGURED_CODE: &str = "TRUST_READ_NOT_CONFIGURED";
 /// 信頼読み取りの有効化が失効している(404)。
 pub const TRUST_READ_NOT_ACTIVATED_CODE: &str = "TRUST_READ_NOT_ACTIVATED";
 
+/// 観測提供の同意(任意文書 `trust_observation_sharing`)が成立していない(403)。
+pub const TRUST_OBSERVATION_SHARING_CONSENT_REQUIRED_CODE: &str =
+    "TRUST_OBSERVATION_SHARING_CONSENT_REQUIRED";
+
+/// このノードは観測提供の同意文書を公開していない(404)。
+pub const TRUST_OBSERVATION_SHARING_NOT_OFFERED_CODE: &str =
+    "TRUST_OBSERVATION_SHARING_NOT_OFFERED";
+
+/// 観測 envelope が不正(署名・署名者・種別・件数。400)。
+pub const INVALID_TRUST_OBSERVATION_CODE: &str = "INVALID_TRUST_OBSERVATION";
+
 /// 対象の関係観測が存在しない(404)。
 pub const RELATION_NOT_FOUND_CODE: &str = "RELATION_NOT_FOUND";
 
