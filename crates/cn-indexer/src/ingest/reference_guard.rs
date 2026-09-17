@@ -1,5 +1,6 @@
 use super::{
     DocFetchPolicy, DocQuery, DocRecord, IndexScopeKind, IngestPipeline, KukuriEnvelope, ReplicaId,
+    failure::{is_transient, transient},
     source::{MediaScanTarget, PostObjectView, SourceResolver},
     verify_post_withdrawal,
 };
@@ -7,6 +8,7 @@ use anyhow::{Context, Result, ensure};
 use async_trait::async_trait;
 use kukuri_cn_safety::{ScanError, provider::ScanReferenceGuard};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) struct ReferenceGuard<'a> {
     pub pipeline: &'a IngestPipeline,
@@ -17,9 +19,33 @@ pub(super) struct ReferenceGuard<'a> {
     pub record: &'a DocRecord,
     pub envelope: Option<&'a DocRecord>,
     pub media_targets: Mutex<Option<Vec<MediaScanTarget>>>,
+    /// 確定した理由で再確認に失敗したことがあるか（#1090）。scan service 越しに返る失敗は
+    /// 分類の印を失うため、ここに残して呼び出し側の分類に使う。
+    pub definitive_failure: AtomicBool,
 }
 
 impl ReferenceGuard<'_> {
+    /// 参照を再確認する。確定した理由の失敗は記録し、一時的な失敗には印を付けて返す。
+    pub(super) async fn verify(&self) -> Result<()> {
+        let result = self.check_current().await;
+        if let Err(error) = &result
+            && !is_transient(error)
+        {
+            self.definitive_failure.store(true, Ordering::SeqCst);
+        }
+        result
+    }
+
+    /// scan service から返った失敗を分類する。再確認が確定した理由で失敗していなければ、
+    /// 判定記録の読み書きや再確認の照会の障害として一時的な失敗に倒す。
+    pub(super) fn classify_scan_error(&self, error: anyhow::Error) -> anyhow::Error {
+        if self.definitive_failure.load(Ordering::SeqCst) {
+            error
+        } else {
+            transient(error)
+        }
+    }
+
     async fn check_current(&self) -> Result<()> {
         ensure!(
             !self.object.object_id.trim().is_empty()
@@ -31,7 +57,8 @@ impl ReferenceGuard<'_> {
             self.pipeline
                 .entries
                 .is_scope_supported(self.scope_kind, self.scope_id)
-                .await?,
+                .await
+                .map_err(transient)?,
             "scope is no longer supported"
         );
         ensure!(
@@ -39,7 +66,8 @@ impl ReferenceGuard<'_> {
                 .pipeline
                 .entries
                 .is_transmission_prevented(&self.object.object_id)
-                .await?,
+                .await
+                .map_err(transient)?,
             "post is transmission prevented"
         );
         let state = self
@@ -50,7 +78,8 @@ impl ReferenceGuard<'_> {
                 DocQuery::Exact(self.record.key.clone()),
                 DocFetchPolicy::LocalOnly,
             )
-            .await?;
+            .await
+            .map_err(transient)?;
         ensure!(
             state
                 .iter()
@@ -99,7 +128,8 @@ impl ReferenceGuard<'_> {
                     DocQuery::Exact(original.key.clone()),
                     DocFetchPolicy::LocalOnly,
                 )
-                .await?;
+                .await
+                .map_err(transient)?;
             ensure!(
                 current
                     .iter()
@@ -114,7 +144,8 @@ impl ReferenceGuard<'_> {
                     DocQuery::Exact(format!("withdrawals/{}/state", self.object.object_id)),
                     DocFetchPolicy::LocalOnly,
                 )
-                .await?;
+                .await
+                .map_err(transient)?;
             for record in withdrawals {
                 if let Ok(withdrawal) = serde_json::from_slice::<KukuriEnvelope>(&record.value) {
                     ensure!(
@@ -147,7 +178,7 @@ impl ReferenceGuard<'_> {
 #[async_trait]
 impl ScanReferenceGuard for ReferenceGuard<'_> {
     async fn check(&self) -> Result<(), ScanError> {
-        self.check_current()
+        self.verify()
             .await
             .map_err(|_| ScanError::Unavailable("scan reference is no longer valid".into()))
     }

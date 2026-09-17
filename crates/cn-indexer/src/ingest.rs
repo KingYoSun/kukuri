@@ -24,6 +24,9 @@
 //! （`IndexProjection`。ArcadeDB）の順で書く。① が失敗したら ② は書かない（真実源に無い
 //! entry は query 境界の突合で surfacing されないため、投影残留も安全側に倒れる）。
 //! de-index は真実源 → 投影の順で両方から消す。
+//!
+//! 1 件の取り込みの失敗は、確定した理由（de-index する）と一時的な失敗（既存 entry を保持し、
+//! 新たには索引しない）に分ける（#1090。分類は `failure` を参照）。
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -41,8 +44,10 @@ use kukuri_docs_sync::{DocFetchPolicy, DocQuery, DocRecord, DocsSync, SharedRepl
 
 use crate::projection::{IndexProjection, IndexedEntry};
 
+mod failure;
 mod reference_guard;
 mod source;
+use failure::{is_transient, transient};
 use source::{PostObjectView, SourceResolver};
 
 /// 単一 scope（topic / channel）を ingest した結果のサマリ（監査 / テスト用）。
@@ -52,7 +57,8 @@ pub struct IngestSummary {
     pub scanned: usize,
     /// `allow` verdict で投影へ書いた entry 数。
     pub indexed: usize,
-    /// fail-closed（unscanned / scan_failed / 非 allow）で投影しなかった entry 数。
+    /// fail-closed（unscanned / scan_failed / 非 allow / 取り込みの失敗）で投影しなかった entry 数。
+    /// 一時的な失敗では既存 entry を保持する（#1090）。
     pub skipped_non_allow: usize,
     /// tombstone / deleted で de-index した entry 数。
     pub deindexed: usize,
@@ -463,6 +469,17 @@ impl IngestPipeline {
                 Ok(IngestOutcome::SkippedNonAllow) => summary.skipped_non_allow += 1,
                 Ok(IngestOutcome::Deindexed) => summary.deindexed += 1,
                 Ok(IngestOutcome::Ignored) => {}
+                Err(error) if is_transient(&error) => {
+                    // 一時的な失敗では既存 entry を真実源・投影とも保持し、この走査では新たに
+                    // 索引しない（upsert へ到達していない）。次の走査で再評価する（#1090）。
+                    warn!(
+                        replica_id = %replica_id.as_str(),
+                        key = %record.key,
+                        error = %format!("{error:#}"),
+                        "temporarily failed to ingest object record; keeping any existing entry"
+                    );
+                    summary.skipped_non_allow += 1;
+                }
                 Err(error) => {
                     if let Some(id) = post_id_from_state_key(&record.key) {
                         self.deindex_object(scope_kind, scope_id, id).await?;
@@ -471,7 +488,7 @@ impl IngestPipeline {
                     warn!(
                         replica_id = %replica_id.as_str(),
                         key = %record.key,
-                        error = %error,
+                        error = %format!("{error:#}"),
                         "failed to ingest object record; skipping (fail-closed)"
                     );
                     summary.skipped_non_allow += 1;
@@ -526,7 +543,8 @@ impl IngestPipeline {
         if self
             .entries
             .is_transmission_prevented(object.object_id.as_str())
-            .await?
+            .await
+            .map_err(transient)?
         {
             self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
                 .await?;
@@ -542,8 +560,9 @@ impl IngestPipeline {
             record,
             envelope: context.envelopes.get(&object.object_id),
             media_targets: std::sync::Mutex::new(None),
+            definitive_failure: std::sync::atomic::AtomicBool::new(false),
         };
-        guard.check().await?;
+        guard.verify().await?;
         // 本文 text を取り出す。blob 参照は scan 用の一時 fetch のみ（恒久保存しない）。
         let source = SourceResolver::new(self.docs_sync.as_ref(), self.blob_service.as_deref());
         let text = match source
@@ -551,6 +570,7 @@ impl IngestPipeline {
             .await
         {
             Ok(text) => text,
+            Err(error) if is_transient(&error) => return Err(error),
             Err(error) => {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
                     .await?;
@@ -578,7 +598,8 @@ impl IngestPipeline {
                 stats,
                 &guard,
             )
-            .await?;
+            .await
+            .map_err(|error| guard.classify_scan_error(error))?;
         let report = &outcome.report;
 
         if !report.verdict.is_indexable() {
@@ -605,6 +626,7 @@ impl IngestPipeline {
         // 検索タグを収集する。
         let media_targets = match source.media_scan_targets(replica_id, &object).await {
             Ok(targets) => targets,
+            Err(error) if is_transient(&error) => return Err(error),
             Err(error) => {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
                     .await?;
@@ -634,7 +656,8 @@ impl IngestPipeline {
             // blob は不変なので hash 自体が内容 fingerprint。
             let media_outcome = self
                 .scan_or_reuse_with_metrics(&request, &object.author, &target.hash, stats, &guard)
-                .await?;
+                .await
+                .map_err(|error| guard.classify_scan_error(error))?;
             let media_report = &media_outcome.report;
             if !media_report.verdict.is_indexable() {
                 self.deindex_object(scope_kind, scope_id, object.object_id.as_str())
@@ -660,10 +683,11 @@ impl IngestPipeline {
         }
         // post の verdict 行に和集合を確定させる（値が同じなら store 側で no-op）。query 境界は
         // この行から `content_advisories` を導出する（ADR 0025 §7.1）。
-        guard.check().await?;
+        guard.verify().await?;
         self.safety
             .persist_advisories(SubjectKind::Post, object.object_id.as_str(), &advisories)
-            .await?;
+            .await
+            .map_err(transient)?;
 
         // ① index 真実源（Postgres）へ upsert する。verdict record への FK と CHECK 制約
         // （allow のみ / 非 critical のみ）が fail-closed を DB 層でも保証する（#404）。
@@ -675,7 +699,7 @@ impl IngestPipeline {
                 object.object_id
             );
         };
-        guard.check().await?;
+        guard.verify().await?;
         self.entries
             .upsert_entry(&NewIndexEntry {
                 scope_kind,
@@ -689,7 +713,8 @@ impl IngestPipeline {
                 critical: report.verdict.critical,
             })
             .await
-            .context("failed to record index entry in the authoritative store")?;
+            .context("failed to record index entry in the authoritative store")
+            .map_err(transient)?;
 
         // ② 全文検索投影（ArcadeDB）へ upsert する。ここが失敗しても真実源には entry が残るが、
         // 投影に無い entry は検索に出ないだけで安全側（fail-closed）に倒れる。
@@ -705,8 +730,11 @@ impl IngestPipeline {
             source_replica_id: replica_id.as_str().to_string(),
             content_advisories: Vec::new(),
         };
-        guard.check().await?;
-        self.projection.upsert_entry(&entry).await?;
+        guard.verify().await?;
+        self.projection
+            .upsert_entry(&entry)
+            .await
+            .map_err(transient)?;
         if outcome.disposition == ScanDisposition::Fresh
             && let Some(metrics) = &self.metrics
         {
