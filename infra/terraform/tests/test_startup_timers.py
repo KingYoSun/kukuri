@@ -11,7 +11,7 @@ INTERVAL_VARIABLE_FILES = (
     ROOT / 'envs/low-cost/variables.tf',
 )
 CN_CLI_MAIN = REPOSITORY / 'crates/cn-cli/src/main.rs'
-CN_OPERATOR_CONFIG = REPOSITORY / 'crates/cn-operator/src/config.rs'
+CN_OPERATOR_DEPLOY = REPOSITORY / 'crates/cn-operator/src/deploy.rs'
 DIRECTIVE = re.compile(r'%\{ (if (\w+)(?: != "")?|else|endif) ~\}\n?')
 DURATION = re.compile(r'^(\d+)(min|s)?$')
 ACTIVATION_TTL_SECS = 900
@@ -211,7 +211,7 @@ class RelationAnalyzeTimerTests(StartupTimerTestCase):
 
     def test_operator_config_uses_same_interval_bounds(self):
         (lower, upper), = {interval_bounds(path) for path in INTERVAL_VARIABLE_FILES}
-        source = CN_OPERATOR_CONFIG.read_text(encoding='utf-8')
+        source = CN_OPERATOR_DEPLOY.read_text(encoding='utf-8')
         match = re.search(r'const RELATION_ANALYZE_INTERVAL_MINUTES_RANGE: RangeInclusive<u32> = (\d+)\.\.=(\d+);', source)
         self.assertIsNotNone(match, 'cn-operator must define the interval range')
         self.assertEqual((int(match.group(1)), int(match.group(2))), (lower, upper))

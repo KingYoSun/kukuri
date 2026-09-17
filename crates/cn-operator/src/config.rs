@@ -3,7 +3,6 @@
 //! このファイルは CLI と server manifest / 生成文書の単一の入力元である。
 
 use std::collections::BTreeMap;
-use std::ops::RangeInclusive;
 
 use anyhow::{Result, anyhow, bail};
 use chrono::NaiveDate;
@@ -290,12 +289,6 @@ fn default_machine_type() -> String {
 fn default_relation_analyze_interval_minutes() -> u32 {
     60
 }
-
-/// 関係解析の実行間隔（分）の許容範囲。Terraform の変数検証と同じ値にする。
-///
-/// readiness は解析の成功を既定 7200 秒以内に要求する。boot / startup 再実行の直後は初回まで
-/// 最大 16 分かかるため、解析と boot の所要時間に 14 分を残す（#1101）。
-const RELATION_ANALYZE_INTERVAL_MINUTES_RANGE: RangeInclusive<u32> = 1..=90;
 
 fn default_disk_size_gb() -> u32 {
     30
@@ -1013,14 +1006,7 @@ fn validate_indexer_stack(resolved: &ResolvedConfig, deploy: &DeployConfig) -> R
         return Ok(());
     }
 
-    if !RELATION_ANALYZE_INTERVAL_MINUTES_RANGE.contains(&deploy.relation_analyze_interval_minutes)
-    {
-        bail!(
-            "deploy.relation_analyze_interval_minutes は {}〜{} で指定してください（readiness が求める関係解析の成功記録 7200 秒以内を保つため）",
-            RELATION_ANALYZE_INTERVAL_MINUTES_RANGE.start(),
-            RELATION_ANALYZE_INTERVAL_MINUTES_RANGE.end()
-        );
-    }
+    crate::deploy::validate_relation_analyze_interval(deploy.relation_analyze_interval_minutes)?;
 
     let require_secret = |field: &str, value: &Option<String>| -> Result<()> {
         if value
