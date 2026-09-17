@@ -18,6 +18,44 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.5-preview.3] - 2026-09-17
+
+### Features
+
+- 内容判定の共有とOpenAI Moderationの配備を接続 ([#1080](https://github.com/kukuri-app/kukuri/pull/1080))
+- 動画抽出とOpenAI Moderationの基礎を追加 ([#1060](https://github.com/kukuri-app/kukuri/pull/1060), [#1079](https://github.com/kukuri-app/kukuri/pull/1079))
+- タイムライン向け content advisory 一括照会・採用ノード設定・利用規約 version 6 ([#1056](https://github.com/kukuri-app/kukuri/pull/1056), [#1072](https://github.com/kukuri-app/kukuri/pull/1072))
+- 見つけるで content advisory を成人向けゲートへ合成し取得ゲートへ登録する ([#1055](https://github.com/kukuri-app/kukuri/pull/1055), [#1071](https://github.com/kukuri-app/kukuri/pull/1071))
+- nsfw / objectionable を content advisory 付きで index し trust 寄与 0・general_action knob を実装 ([#1054](https://github.com/kukuri-app/kukuri/pull/1054), [#1067](https://github.com/kukuri-app/kukuri/pull/1067))
+
+### Fixes
+
+- Linux package の build 前に libsqlite3-0 を現 APT 候補へ更新する ([#1094](https://github.com/kukuri-app/kukuri/pull/1094), [#1095](https://github.com/kukuri-app/kukuri/pull/1095))
+- 取り込みの一時的な失敗で索引済み投稿を de-index しない ([#1090](https://github.com/kukuri-app/kukuri/pull/1090), [#1092](https://github.com/kukuri-app/kukuri/pull/1092))
+- linux-verify に ffmpeg を入れ Fast の CN 依存と揃える ([#1087](https://github.com/kukuri-app/kukuri/pull/1087), [#1088](https://github.com/kukuri-app/kukuri/pull/1088))
+- 生成 tfvars の moderation 行を段落分けし terraform fmt と一致させる ([#1082](https://github.com/kukuri-app/kukuri/pull/1082), [#1084](https://github.com/kukuri-app/kukuri/pull/1084))
+- 変更通知の key を共有 replica の種別表で分類し索引 key で全体見直しへ倒れないようにする ([#1065](https://github.com/kukuri-app/kukuri/pull/1065), [#1077](https://github.com/kukuri-app/kukuri/pull/1077))
+- Column 内の操作で押した Column を active にし route を同期する ([#1053](https://github.com/kukuri-app/kukuri/pull/1053), [#1076](https://github.com/kukuri-app/kukuri/pull/1076))
+- operator が確定した risk signal を再 scan の集約更新から保護する ([#1058](https://github.com/kukuri-app/kukuri/pull/1058), [#1075](https://github.com/kukuri-app/kukuri/pull/1075))
+- 「見つける」で解決済み投稿の添付画像を表示する ([#1052](https://github.com/kukuri-app/kukuri/pull/1052), [#1070](https://github.com/kukuri-app/kukuri/pull/1070))
+- 保存済み verdict の再利用と risk signal の集約、変更 key 単位の ingest ([#1050](https://github.com/kukuri-app/kukuri/pull/1050), [#1059](https://github.com/kukuri-app/kukuri/pull/1059))
+
+### Other
+
+- DM status refresh 失敗 test の polling 待ちを fake timer 化する ([#1086](https://github.com/kukuri-app/kukuri/pull/1086), [#1089](https://github.com/kukuri-app/kukuri/pull/1089))
+- 移管後の旧 owner 参照を kukuri-app へ更新する ([#1085](https://github.com/kukuri-app/kukuri/pull/1085))
+- prepare v0.2.5-preview.1 release ([#1081](https://github.com/kukuri-app/kukuri/pull/1081))
+- #1063 の main 3 run の CI 計測を記録 ([#1078](https://github.com/kukuri-app/kukuri/pull/1078))
+- windows-fast の Windows package timeout を 45 分にし cache 設定を見直す ([#1063](https://github.com/kukuri-app/kukuri/pull/1063), [#1074](https://github.com/kukuri-app/kukuri/pull/1074))
+- #1054 の本番反映を C5（#1068）へ移管した判断を記録 ([#1069](https://github.com/kukuri-app/kukuri/pull/1069))
+- #1050 の AC-4 本番計測と Close 判定を記録 ([#1066](https://github.com/kukuri-app/kukuri/pull/1066))
+- #1050 の本番反映（T6）記録を追加 ([#1064](https://github.com/kukuri-app/kukuri/pull/1064))
+- nsfw / objectionable を content advisory 付きで index する方針を ADR へ固定 (#1051 C1) ([#1057](https://github.com/kukuri-app/kukuri/pull/1057))
+- metaberse uiux ([#1049](https://github.com/kukuri-app/kukuri/pull/1049))
+- READMEを v0.2.4-preview.1 時点の実装状況へ更新 ([#1048](https://github.com/kukuri-app/kukuri/pull/1048))
+- record v0.2.4-preview.1 release and VM rollout ([#1047](https://github.com/kukuri-app/kukuri/pull/1047))
+- update CHANGELOG for v0.2.4-preview.1 ([#1046](https://github.com/kukuri-app/kukuri/pull/1046))
+
 ## [v0.2.4-preview.1] - 2026-09-15
 
 ### Features
