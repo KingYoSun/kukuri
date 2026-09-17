@@ -10,6 +10,8 @@ env:
   # #1120: CI の dev / test build は行番号だけの debuginfo にし、link 時間と Cache Volume の容量を減らす。
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
+# #1120: cache-tag の `-v2` は、debuginfo を line-tables-only にする前の依存 crate の成果物を含む
+# 旧 volume を捨てるために付けた。依存の build 設定を大きく変えたときは同じ方法で入れ替える。
 jobs:
   linux-app-api-slow:
     runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-app-api-slow
@@ -36,7 +38,7 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-additional-scenarios:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness-v2
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -91,7 +93,7 @@ jobs:
         run: cargo xtask ci-prune-target
 
   linux-rust-static:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-static
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-static-v2
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -143,7 +145,7 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-rust-tests:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-tests
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-rust-tests-v2
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -301,7 +303,7 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-cn:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn-v2
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -342,7 +344,7 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-smoke:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness-v2
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -387,7 +389,7 @@ jobs:
         run: cargo xtask ci-prune-target
 
   linux-community-node:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness-v2
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -435,7 +437,7 @@ jobs:
         run: cargo xtask ci-prune-target
 
   linux-community-node-multi-device:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness-v2
     timeout-minutes: 45
     steps:
       - name: Checkout
