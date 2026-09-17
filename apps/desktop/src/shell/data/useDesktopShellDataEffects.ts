@@ -139,6 +139,20 @@ export function useDesktopShellDataEffects({
   setMediaObjectUrls,
 }: UseDesktopShellDataEffectsArgs) {
   const mediaFetchInputRef = useRef(new Map<string, AttachmentView>());
+  // #1107: effect の再実行では取得結果を捨てない(捨てると入力の記録だけが残り、再取得されず
+  // スケルトンのまま残る)。hash ごとの最新の取得番号と、ゲートで取得を無効にした回数を持ち、
+  // ゲート前に始まった取得の結果は表示に使わない。
+  const mediaFetchLatestRef = useRef(new Map<string, number>());
+  const mediaFetchSequenceRef = useRef(0);
+  const mediaGateEpochRef = useRef(new Map<string, number>());
+  const gatedMediaHashesRef = useRef<ReadonlySet<string>>(new Set());
+  const mediaFetchMountedRef = useRef(true);
+  useEffect(() => {
+    mediaFetchMountedRef.current = true;
+    return () => {
+      mediaFetchMountedRef.current = false;
+    };
+  }, []);
   const setAdultContentEnabled = useDesktopShellFieldSetter('adultContentEnabled');
 
   // #858: 成人向け表現の表示設定(canonical は Rust 側ローカル JSON)を起動時に mirror する。
@@ -161,11 +175,14 @@ export function useDesktopShellDataEffects({
 
   // #858: 表示設定 OFF の間、ゲート対象 hash の表示済み object URL を破棄し、
   // 取得試行の記録も消して以後の取得を停止する(ON へ戻せば再取得される)。
+  // #1107: 取得中の hash も無効にし、完了した bytes を表示に使わない(INVAR-1)。
   useEffect(() => {
+    gatedMediaHashesRef.current = new Set(gatedAdultMediaHashes);
     if (gatedAdultMediaHashes.length === 0) {
       return;
     }
     for (const hash of gatedAdultMediaHashes) {
+      mediaGateEpochRef.current.set(hash, (mediaGateEpochRef.current.get(hash) ?? 0) + 1);
       const url = remoteObjectUrlRef.current.get(hash);
       if (url) {
         URL.revokeObjectURL(url);
@@ -541,7 +558,6 @@ export function useDesktopShellDataEffects({
   ]);
 
   useEffect(() => {
-    let disposed = false;
     const currentHashes = new Set(previewableMediaAttachments.map((attachment) => attachment.hash));
     for (const hash of mediaFetchInputRef.current.keys()) {
       if (!currentHashes.has(hash)) {
@@ -557,6 +573,18 @@ export function useDesktopShellDataEffects({
         continue;
       }
       mediaFetchInputRef.current.set(attachment.hash, attachment);
+      const fetchId = ++mediaFetchSequenceRef.current;
+      mediaFetchLatestRef.current.set(attachment.hash, fetchId);
+      const gateEpoch = mediaGateEpochRef.current.get(attachment.hash) ?? 0;
+      // 完了した結果を使ってよいか。取得後に一度でもゲートされた hash の bytes は使わない。
+      // 取得できた bytes は、後から始まった再試行より先に届いても使う(先着を採用する)。
+      const resultUsable = () =>
+        mediaFetchMountedRef.current &&
+        (mediaGateEpochRef.current.get(attachment.hash) ?? 0) === gateEpoch &&
+        !gatedMediaHashesRef.current.has(attachment.hash);
+      // 取得不可の記録は、後続の再試行が無い場合だけ残す。
+      const failureUsable = () =>
+        resultUsable() && mediaFetchLatestRef.current.get(attachment.hash) === fetchId;
 
       const nextAttempt = (mediaFetchAttemptRef.current.get(attachment.hash) ?? 0) + 1;
       mediaFetchAttemptRef.current.set(attachment.hash, nextAttempt);
@@ -571,14 +599,14 @@ export function useDesktopShellDataEffects({
       void api
         .getBlobMediaPayload(attachment.hash, attachment.mime)
         .then((payload) => {
-          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
-          if (disposed) {
-            if (nextUrl) {
-              URL.revokeObjectURL(nextUrl);
-            }
+          if (!resultUsable()) {
             return;
           }
+          const nextUrl = payload ? createObjectUrlFromPayload(payload) : null;
           if (!nextUrl) {
+            if (!failureUsable()) {
+              return;
+            }
             logMediaDebug('warn', 'remote media fetch missing', {
               attempt: nextAttempt,
               hash: attachment.hash,
@@ -617,7 +645,7 @@ export function useDesktopShellDataEffects({
           });
         })
         .catch((fetchError: unknown) => {
-          if (disposed) {
+          if (!failureUsable()) {
             return;
           }
           logMediaDebug('warn', 'remote media fetch error', {
@@ -635,10 +663,6 @@ export function useDesktopShellDataEffects({
           );
         });
     }
-
-    return () => {
-      disposed = true;
-    };
   }, [
     api,
     mediaFetchAttemptRef,

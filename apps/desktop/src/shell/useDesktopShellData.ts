@@ -17,6 +17,7 @@ import type {
 
 import { removeRecordEntry, setRecordEntry, updateRecordEntry } from '@/shell/stateUpdates';
 import { useConnectivityStatusRefresh } from '@/shell/data/useConnectivityStatusRefresh';
+import { useAdultGatedMediaHashes } from '@/shell/data/useAdultGatedMediaHashes';
 import { useCommunityNodeRecovery } from '@/shell/actions/useCommunityNodeRecovery';
 import { useDesktopShellDataEffects } from '@/shell/data/useDesktopShellDataEffects';
 import {
@@ -40,8 +41,6 @@ import {
   adoptingContentAdvisoryNodes,
   useTimelineContentAdvisoryLookup,
 } from '@/shell/data/useTimelineContentAdvisoryLookup';
-import { resolvePostAdvisory } from '@/shell/contentAdvisories';
-import { isAdultLabeledPost } from '@/shell/media';
 import {
   activeTimelineStorageKey,
   PUBLIC_TIMELINE_SCOPE,
@@ -302,11 +301,26 @@ export function useDesktopShellData({
     adoptingNodes,
   });
 
+  // #858 / #1107: 表示設定 OFF の間にゲート対象となる添付 hash(引用 snapshot 含む)。
+  // 取得対象からの除外、表示済み object URL の破棄、カードの代替表示が同じ集合を使う。
+  const adultGatedPosts = useMemo(
+    () => [...advisoryLookupPosts, ...communityIndexResolvedPosts],
+    [advisoryLookupPosts, communityIndexResolvedPosts]
+  );
+  const gatedAdultMediaHashes = useAdultGatedMediaHashes({
+    adultContentEnabled,
+    posts: adultGatedPosts,
+    timelineContentAdvisories,
+    additionalHashes: advisoryGatedMediaHashes,
+  });
+
   const previewableMediaAttachments = usePreviewableMediaAttachments({
     activeTimeline,
     activePublicTimeline,
+    // #1107: ブックマークや非 active な Column も描画されるため、取得対象に含める。
+    additionalTimelinePosts: advisoryLookupPosts,
     communityIndexResolvedPosts,
-    advisoryGatedMediaHashes,
+    gatedMediaHashes: gatedAdultMediaHashes,
     timelineContentAdvisories,
     timelineAdvisoryLookup,
     profileTimeline,
@@ -321,50 +335,6 @@ export function useDesktopShellData({
     notifications,
     adultContentEnabled,
   });
-
-  // #858: 表示設定 OFF の間にゲート対象となる添付 hash(引用 snapshot 含む)。
-  // effects 側で表示済み object URL の破棄と再取得抑止に使う。
-  const gatedAdultMediaHashes = useMemo(() => {
-    if (adultContentEnabled) {
-      return [] as string[];
-    }
-    const hashes = new Set<string>();
-    for (const post of [
-      ...activeTimeline,
-      ...activePublicTimeline,
-      ...profileTimeline,
-      ...selectedAuthorTimeline,
-      ...thread,
-      ...communityIndexResolvedPosts,
-    ]) {
-      // #1056: 採用 node の advisory が付いた投稿も、表示設定 OFF へ戻したら表示済みを破棄する。
-      if (
-        !isAdultLabeledPost(post) &&
-        !resolvePostAdvisory(post, timelineContentAdvisories, {
-          active: false,
-          settled: {},
-        }).advisory
-      ) {
-        continue;
-      }
-      for (const attachment of post.attachments) {
-        hashes.add(attachment.hash);
-      }
-      for (const attachment of post.repost_of?.attachments ?? []) {
-        hashes.add(attachment.hash);
-      }
-    }
-    return [...hashes];
-  }, [
-    activePublicTimeline,
-    activeTimeline,
-    adultContentEnabled,
-    communityIndexResolvedPosts,
-    profileTimeline,
-    selectedAuthorTimeline,
-    thread,
-    timelineContentAdvisories,
-  ]);
 
   const clearPendingTimeline = useCallback(
     (key: string) => {
@@ -835,6 +805,7 @@ export function useDesktopShellData({
   });
 
   return {
+    gatedAdultMediaHashes,
     loadTopics,
     retryCommunityNode,
     refreshConnectivityStatus,

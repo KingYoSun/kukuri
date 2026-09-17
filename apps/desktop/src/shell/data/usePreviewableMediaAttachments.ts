@@ -33,10 +33,13 @@ type UsePreviewableMediaAttachmentsArgs = {
   /// #1052: 「見つける」Column の解決済み投稿。タイムラインと同じ規則でメディアを
   /// プリフェッチする(未解決 entry は attachments を持たないため対象にならない)。
   communityIndexResolvedPosts: PostView[];
-  /// #1055: Community Node の content advisory でゲート中の添付 blob hash。表示設定 OFF の間は
-  /// どの表示経路から現れてもプリフェッチしない(ADR 0046 §6.2)。advisory は `PostView` に
-  /// 現れないため、投稿単位ではなく hash 単位で止める。
-  advisoryGatedMediaHashes: string[];
+  /// #1107: `activeTimeline` 等に含まれない描画中のタイムライン系投稿(ブックマーク・非 active な
+  /// Column)。取得の規則は他のタイムライン系投稿と同じ。
+  additionalTimelinePosts?: PostView[];
+  /// #1055 / #1107: 表示設定 OFF の間ゲートする添付 blob hash(`useAdultGatedMediaHashes`)。
+  /// どの表示経路・どの投稿から現れてもプリフェッチしない(ADR 0046 §6.2)。同じ blob を
+  /// advisory の無い投稿が参照していても、投稿単位ではなく hash 単位で止める。
+  gatedMediaHashes: string[];
   /// #1056: タイムライン系の一括照会結果と照会中の subject。照会中の投稿の添付は表示設定に
   /// かかわらず取得しない(確定前に取得すると、ゲートや ephemeral 取得の判定より先に bytes が届く)。
   /// advisory が確定した投稿の添付は、表示設定 OFF の間は取得しない。
@@ -57,12 +60,14 @@ type UsePreviewableMediaAttachmentsArgs = {
 
 const EMPTY_ADVISORIES: TimelineContentAdvisoryIndex = {};
 const INACTIVE_LOOKUP: TimelineAdvisoryLookupState = { active: false, settled: {} };
+const EMPTY_POSTS: PostView[] = [];
 
 export function usePreviewableMediaAttachments({
   activeTimeline,
   activePublicTimeline,
+  additionalTimelinePosts = EMPTY_POSTS,
   communityIndexResolvedPosts,
-  advisoryGatedMediaHashes,
+  gatedMediaHashes,
   timelineContentAdvisories = EMPTY_ADVISORIES,
   timelineAdvisoryLookup = INACTIVE_LOOKUP,
   profileTimeline,
@@ -79,7 +84,7 @@ export function usePreviewableMediaAttachments({
 }: UsePreviewableMediaAttachmentsArgs): AttachmentView[] {
   return useMemo(() => {
     const attachments = new Map<string, AttachmentView>();
-    const gatedHashes = new Set(advisoryGatedMediaHashes);
+    const gatedHashes = new Set(gatedMediaHashes);
 
     const tryAddAttachment = (attachment: AttachmentView | null) => {
       if (!attachment) {
@@ -87,7 +92,7 @@ export function usePreviewableMediaAttachments({
       }
       const hash = attachment.hash.trim();
       const mime = attachment.mime.trim();
-      // #1055: advisory でゲート中の hash は取得対象に入れない。
+      // #1055 / #1107: ゲート中の hash は、どの投稿から現れても取得対象に入れない。
       if (gatedHashes.has(hash)) {
         return;
       }
@@ -116,6 +121,7 @@ export function usePreviewableMediaAttachments({
       ...profileTimeline,
       ...selectedAuthorTimeline,
       ...thread,
+      ...additionalTimelinePosts,
       ...communityIndexResolvedPosts,
     ]) {
       if (post.author_picture_asset) {
@@ -212,8 +218,9 @@ export function usePreviewableMediaAttachments({
   }, [
     activePublicTimeline,
     activeTimeline,
+    additionalTimelinePosts,
     adultContentEnabled,
-    advisoryGatedMediaHashes,
+    gatedMediaHashes,
     bookmarkedReactionAssets,
     timelineAdvisoryLookup,
     timelineContentAdvisories,

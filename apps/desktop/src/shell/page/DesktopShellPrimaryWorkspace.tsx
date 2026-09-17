@@ -80,6 +80,7 @@ export type DesktopShellPrimarySurfaceProps = {
     | 'activeTimelineScope'
     | 'bookmarkedTimelinePostViews'
     | 'buildPostCardView'
+    | 'gatedMediaHashes'
     | 'gameDraftViews'
     | 'liveSessionListItems'
     | 'primarySectionItems'
@@ -568,6 +569,7 @@ export function DesktopShellPrimarySurface({
             knownAuthorsByPubkey={knownAuthorsByPubkey}
             mediaObjectUrls={mediaObjectUrls}
             adultContentEnabled={adultContentEnabled}
+            gatedMediaHashes={viewModels.gatedMediaHashes}
             unsupportedVideoManifests={unsupportedVideoManifests}
             locale={locale}
             onResolvedPostsChange={(posts) =>

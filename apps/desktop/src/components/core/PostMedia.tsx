@@ -37,7 +37,11 @@ export function PostMedia({
         <div className='media-gated-placeholder' aria-hidden='true' />
         <p className='topic-diagnostic topic-diagnostic-secondary' role='status'>
           {/* #1055: 判定元が Community Node の推定か、投稿者の自己申告かで文言を分ける。 */}
-          {media.gatedBy === 'advisory' ? t('media.advisoryGated') : t('media.adultGated')}
+          {media.gatedBy === 'advisory'
+            ? t('media.advisoryGated')
+            : media.gatedBy === 'shared_media'
+              ? t('media.sharedMediaGated')
+              : t('media.adultGated')}
         </p>
       </div>
     );

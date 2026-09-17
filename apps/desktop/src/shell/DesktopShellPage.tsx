@@ -210,6 +210,7 @@ export function DesktopShellPage({
     releaseAllDirectMessageDraftPreviews,
     buildImageDraftItem: buildComposerImageDraftItem,
     buildVideoDraftItem: buildComposerVideoDraftItem,
+    gatedAdultMediaHashes,
   } = useDesktopShellData({
     api,
     translate,
@@ -270,7 +271,7 @@ export function DesktopShellPage({
     translate,
     locale,
     theme,
-    profileAvatarPreviewUrl,
+    profileAvatarPreviewUrl, gatedMediaHashes: gatedAdultMediaHashes,
   });
 
   const {

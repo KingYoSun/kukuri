@@ -12,7 +12,8 @@ export type BuildPostMediaViewOptions = {
   /// #858: 表示許可前の成人向けラベル付き投稿。取得済み object URL があっても参照しない。
   adultContentGated: boolean;
   /// #1055: ゲートの判定元。Community Node の advisory 由来なら代替表示の文言を変える。
-  gatedBy?: 'self_label' | 'advisory';
+  /// #1107: `shared_media` は同じ blob が別の投稿でゲートされているため、メディアだけを伏せる。
+  gatedBy?: 'self_label' | 'advisory' | 'shared_media';
   /// #1056: Community Node への advisory 照会が未決。取得済み object URL があっても参照せず、
   /// スケルトン(`pending`)にする。確定後の代替表示(`gated`)とは表示を分ける。
   advisoryPending?: boolean;

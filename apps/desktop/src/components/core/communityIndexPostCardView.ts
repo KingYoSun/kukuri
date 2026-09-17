@@ -22,6 +22,8 @@ type CommunityIndexPostCardViewOptions = {
   resolvedEntry?: CommunityIndexResolvedPostView | null;
   mediaObjectUrls: Record<string, string | null>;
   adultContentEnabled?: boolean;
+  /// #1107: 表示設定 OFF の間ゲートする添付 blob hash(全表示経路で共通)。
+  gatedMediaHashes?: readonly string[];
   /// #1052: 解決済み投稿の添付メディアをタイムラインと同じ規則で組み立てるために使う。
   unsupportedVideoManifests?: Record<string, true>;
   locale?: string | null;
@@ -161,6 +163,12 @@ export function communityIndexPostCardView(
         }
       : null;
 
+  // #1107: 投稿自体は対象外でも、同じ blob が別の投稿でゲートされていればメディアだけを伏せる。
+  const gatedMediaHashes = options.gatedMediaHashes ?? [];
+  const sharedMediaGated =
+    !adultContentGated &&
+    displayPost.attachments.some((attachment) => gatedMediaHashes.includes(attachment.hash));
+
   return {
     post: displayPost,
     actionPost: resolvedPost,
@@ -188,8 +196,8 @@ export function communityIndexPostCardView(
     // #1052: 未解決 entry は attachments が空のままなので、同じ builder でもメディアは
     // 描画されない(推測補完しない)。解決済みだけがタイムラインと同じ表示になる。
     media: buildPostMediaView(displayPost, {
-      adultContentGated,
-      gatedBy,
+      adultContentGated: adultContentGated || sharedMediaGated,
+      gatedBy: sharedMediaGated ? 'shared_media' : gatedBy,
       locale: options.locale ?? i18n.resolvedLanguage ?? null,
       mediaObjectUrls: options.mediaObjectUrls,
       unsupportedVideoManifests: options.unsupportedVideoManifests ?? {},

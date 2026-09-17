@@ -50,7 +50,7 @@ function renderAttachments(
     communityIndexResolvedPosts?: PostView[];
     activeTimeline?: PostView[];
     profileTimeline?: PostView[];
-    advisoryGatedMediaHashes?: string[];
+    gatedMediaHashes?: string[];
     adultContentEnabled?: boolean;
     timelineContentAdvisories?: TimelineContentAdvisoryIndex;
     timelineAdvisoryLookup?: TimelineAdvisoryLookupState;
@@ -60,7 +60,7 @@ function renderAttachments(
     usePreviewableMediaAttachments({
       activeTimeline: overrides.activeTimeline ?? [],
       activePublicTimeline: [],
-      advisoryGatedMediaHashes: overrides.advisoryGatedMediaHashes ?? [],
+      gatedMediaHashes: overrides.gatedMediaHashes ?? [],
       timelineContentAdvisories: overrides.timelineContentAdvisories,
       timelineAdvisoryLookup: overrides.timelineAdvisoryLookup,
       communityIndexResolvedPosts: overrides.communityIndexResolvedPosts ?? [],
@@ -116,7 +116,7 @@ describe('usePreviewableMediaAttachments', () => {
       communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH)],
       profileTimeline: [imagePost('profile-post', INDEX_IMAGE_HASH)],
       activeTimeline: [imagePost('timeline-post', TIMELINE_IMAGE_HASH)],
-      advisoryGatedMediaHashes: [INDEX_IMAGE_HASH],
+      gatedMediaHashes: [INDEX_IMAGE_HASH],
     });
     expect(hashes).not.toContain(INDEX_IMAGE_HASH);
     expect(hashes).toContain(TIMELINE_IMAGE_HASH);
@@ -127,7 +127,7 @@ describe('usePreviewableMediaAttachments', () => {
     expect(
       renderAttachments({
         communityIndexResolvedPosts: [imagePost('index-post', INDEX_IMAGE_HASH)],
-        advisoryGatedMediaHashes: [],
+        gatedMediaHashes: [],
         adultContentEnabled: true,
       })
     ).toContain(INDEX_IMAGE_HASH);
