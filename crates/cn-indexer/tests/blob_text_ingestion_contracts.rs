@@ -131,20 +131,35 @@ async fn persist_blob_text_refs(
     object_id
 }
 
+/// 本文の一時取得の失敗の種類。
+#[derive(Clone, Copy, Debug)]
+enum FetchFailure {
+    /// どのピアからも取得できない（`Ok(None)`）。
+    Missing,
+    /// 取得処理そのものの失敗（`Err`）。
+    Error,
+}
+
 #[derive(Default)]
 struct SwitchableBlobService {
     body: Mutex<Option<Vec<u8>>>,
+    failure: Mutex<Option<FetchFailure>>,
 }
 
 impl SwitchableBlobService {
     fn with_body(body: Vec<u8>) -> Self {
         Self {
             body: Mutex::new(Some(body)),
+            failure: Mutex::new(None),
         }
     }
 
     fn set_body(&self, body: Option<Vec<u8>>) {
         *self.body.lock().expect("blob body mutex") = body;
+    }
+
+    fn set_failure(&self, failure: Option<FetchFailure>) {
+        *self.failure.lock().expect("blob failure mutex") = failure;
     }
 }
 
@@ -155,6 +170,11 @@ impl BlobService for SwitchableBlobService {
         _hash: &kukuri_core::BlobHash,
         max_bytes: u64,
     ) -> Result<Option<Vec<u8>>> {
+        match *self.failure.lock().expect("blob failure mutex") {
+            Some(FetchFailure::Missing) => return Ok(None),
+            Some(FetchFailure::Error) => anyhow::bail!("simulated blob fetch failure"),
+            None => {}
+        }
         let body = self.body.lock().expect("blob body mutex");
         if body
             .as_ref()
@@ -353,8 +373,10 @@ async fn blob_text_validation_failures_are_not_indexed() -> Result<()> {
     Ok(())
 }
 
+/// 本文の一時取得が失敗しても（未取得・取得エラー）索引済み entry は保持し、
+/// 取得できた本文が検証に失敗した場合（確定した理由）は de-index する（#1090）。
 #[tokio::test]
-async fn blob_text_fetch_failure_deindexes_an_existing_entry() -> Result<()> {
+async fn blob_text_fetch_failure_keeps_an_existing_entry_until_validation_fails() -> Result<()> {
     let body = b"Community Index body".to_vec();
     let payload_ref = PayloadRef::BlobText {
         hash: blob_hash(&body),
@@ -381,7 +403,28 @@ async fn blob_text_fetch_failure_deindexes_an_existing_entry() -> Result<()> {
             .await?
     );
 
-    blobs.set_body(None);
+    for failure in [FetchFailure::Missing, FetchFailure::Error] {
+        blobs.set_failure(Some(failure));
+        let retry = pipeline
+            .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
+            .await?;
+        assert_eq!(retry.indexed, 0, "{failure:?}");
+        assert_eq!(retry.deindexed, 0, "{failure:?}");
+        assert!(
+            entries.contains(IndexScopeKind::PublicTopic, "rust", &object_id),
+            "{failure:?}: a transient fetch failure must keep the truth entry"
+        );
+        assert!(
+            projection
+                .contains_object(IndexScopeKind::PublicTopic, "rust", &object_id)
+                .await?,
+            "{failure:?}: a transient fetch failure must keep the projection"
+        );
+    }
+
+    // 取得できた本文が hash と一致しない場合は確定した理由として消す。
+    blobs.set_failure(None);
+    blobs.set_body(Some(b"Community Index evil".to_vec()));
     let retry = pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &replica)
         .await?;

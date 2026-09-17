@@ -2,8 +2,11 @@
 
 use std::collections::HashMap;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use kukuri_blob_service::BlobService;
+use kukuri_iroh_node::remote_fetch::BlobTooLarge;
+
+use super::failure::transient;
 use kukuri_core::{
     AssetRef, KukuriEnvelope, KukuriMediaManifestV1, ObjectStatus, PayloadRef, ReplicaId, blob_hash,
 };
@@ -90,7 +93,9 @@ impl<'a> SourceResolver<'a> {
                 DocFetchPolicy::LocalThenRemote,
             )
             .await
-            .with_context(|| format!("failed to query media manifest `{manifest_id}`"))?;
+            .map_err(|error| {
+                transient(error.context(format!("failed to query media manifest `{manifest_id}`")))
+            })?;
         let Some(record) = records.into_iter().next() else {
             bail!("media manifest `{manifest_id}` is not present in the replica");
         };
@@ -160,11 +165,17 @@ impl<'a> SourceResolver<'a> {
                     .blob_service
                     .as_ref()
                     .context("blob service is not configured for blob text")?;
+                // 取得できないこと（ピア不在・転送失敗）は一時的な失敗。実体が上限を超えることは
+                // 宣言サイズとの不一致なので確定した理由として扱う（#1090）。
                 let fetched = blob_service
                     .fetch_blob_ephemeral_bounded(hash, MAX_INDEXABLE_POST_BODY_BYTES)
                     .await
-                    .context("failed to fetch blob text body")?
-                    .context("blob text body is not retrievable")?;
+                    .map_err(|error| {
+                        let oversized = error.is::<BlobTooLarge>();
+                        let error = error.context("failed to fetch blob text body");
+                        if oversized { error } else { transient(error) }
+                    })?
+                    .ok_or_else(|| transient(anyhow!("blob text body is not retrievable")))?;
                 let actual_bytes = u64::try_from(fetched.len())
                     .context("blob text body size does not fit in u64")?;
                 if actual_bytes != *bytes {

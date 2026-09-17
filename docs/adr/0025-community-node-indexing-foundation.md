@@ -405,3 +405,28 @@ fail-closed indexing 本体（DB 制約 + query 境界）は #404 で実装し�
   `client_post_change_keys_ingest_only_that_object`、`non_indexing_change_keys_do_not_ingest`、
   `ignored_key_families_never_include_what_the_indexer_reads`、
   `shared_replica_writes_use_only_registered_key_families`（app-api）。
+
+### 7.7 取り込みの一時的な失敗と de-index の区別（#1090、2026-09-17）
+
+- 1 件の取り込みの失敗は、確定した理由と一時的な失敗に分ける（cn-indexer `ingest::failure`）。
+  印の無い失敗は確定した理由として扱う。
+
+  | 分類 | 例 | 既存 entry | 新規・未索引の投稿 |
+  | --- | --- | --- | --- |
+  | 確定した理由 | 撤回、削除・tombstone、送信防止、scope 非対応、state / envelope の破損・署名不一致、参照再確認での state・envelope・media 参照の変化、本文の検証失敗（サイズ・hash・UTF-8・上限）、manifest の欠落・検証失敗、非 allow の verdict | 真実源 → 投影の順で de-index | 索引しない |
+  | 一時的な失敗 | replica の照会失敗（参照再確認の `LocalOnly` 照会、manifest 照会）、本文 blob の一時取得失敗・未取得、真実源の読み取り失敗、判定記録・advisory・真実源・投影の書き込み失敗 | 保持（次の走査で再評価） | 索引しない |
+
+- 保持した entry の本文は、索引時に検証した署名済み内容のままである（object id は署名済み envelope に
+  束縛される）。確定した理由は次の走査で従来どおり評価されるため、一時的な失敗と重なった撤回・送信防止の
+  反映の遅れは次の走査までに留まる。query 境界は最新 verdict を join して再確認する（§6.7）。
+- scan service 越しに返る参照再確認の失敗は、再確認が一度でも確定した理由で失敗していれば確定した理由、
+  そうでなければ一時的な失敗として扱う。
+- provider 利用不可などで新たに記録された fail-closed の verdict は「非 allow の verdict」であり、
+  従来どおり de-index する（§7.6 のとおり再利用せず次の pass で再試行する）。
+- contract: `transient_guard_query_failure_keeps_indexed_post_and_holds_new_post`、
+  `state_change_detected_by_any_recheck_deindexes_indexed_post`、
+  `transient_index_store_read_failure_keeps_indexed_post`、
+  `transient_manifest_query_failure_keeps_indexed_media_post`、
+  `missing_manifest_still_deindexes_indexed_media_post`、
+  `blob_text_fetch_failure_keeps_an_existing_entry_until_validation_fails`、
+  cn-e2e `replica_query_failure_keeps_new_posts_out_of_surfaces_until_recovery`。

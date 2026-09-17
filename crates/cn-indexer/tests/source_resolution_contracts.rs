@@ -142,10 +142,21 @@ async fn rejected_blob_bytes_use_only_ephemeral_fetch_and_never_reach_a_provider
             "{invalid}: provider must not see rejected bytes"
         );
         assert!(io.entry_upserts.is_empty() && io.projection_upserts.is_empty());
-        assert_eq!(io.entry_removes, vec![post.id.clone()]);
-        assert_eq!(io.projection_removes, vec![post.id.clone()]);
-        assert!(!f.entries.inner.contains(f.kind, SCOPE, &post.id));
-        assert_eq!(f.projection.count_scope(f.kind, SCOPE).await?, 0);
+        if matches!(invalid, "missing" | "unavailable") {
+            // 取得できないことは一時的な失敗で、索引済み entry を保持する（#1090）。
+            assert!(io.entry_removes.is_empty(), "{invalid}: truth removed");
+            assert!(
+                io.projection_removes.is_empty(),
+                "{invalid}: projection removed"
+            );
+            assert!(f.entries.inner.contains(f.kind, SCOPE, &post.id));
+            assert_eq!(f.projection.count_scope(f.kind, SCOPE).await?, 1);
+        } else {
+            assert_eq!(io.entry_removes, vec![post.id.clone()]);
+            assert_eq!(io.projection_removes, vec![post.id.clone()]);
+            assert!(!f.entries.inner.contains(f.kind, SCOPE, &post.id));
+            assert_eq!(f.projection.count_scope(f.kind, SCOPE).await?, 0);
+        }
     }
     Ok(())
 }
