@@ -132,7 +132,8 @@ jobs:
 
   playwright:
     if: ${{ inputs.lane == 'all' || inputs.lane == 'playwright' }}
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-probe-desktop
+    # #1121: CI 本体の linux-desktop-browser と同じ 8 vCPU で測る。
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-probe-desktop
     timeout-minutes: 240
     strategy:
       fail-fast: false
