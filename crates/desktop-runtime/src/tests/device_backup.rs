@@ -178,6 +178,7 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
     save_community_node_config(
         &source_db,
         &CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: node_base_url.to_string(),
@@ -348,6 +349,7 @@ async fn encrypted_device_backup_restores_one_account_as_one_file() {
             .expect("load restored community node config")
             .expect("restored community node config"),
         CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: node_base_url.to_string(),

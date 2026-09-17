@@ -171,6 +171,7 @@ export function useDesktopShellViewModels({
     timelineAdvisoryLookup: state.timelineAdvisoryLookup,
     communityNodeManifests: state.communityNodeManifests,
     gatedMediaHashes,
+    authorTrustGates: state.authorTrustGates,
   });
 
   const {

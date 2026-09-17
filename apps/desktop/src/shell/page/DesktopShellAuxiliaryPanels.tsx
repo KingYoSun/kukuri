@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
+import { AuthorTrustDisplayExceptionField } from '@/components/core/AuthorTrustDisplayExceptionField';
 import { CommunityNodeAdvisoryPanel } from '@/components/core/CommunityNodeAdvisoryPanel';
 import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
@@ -851,6 +852,19 @@ export function DesktopShellDetailSurfaceStack({
         onSubmitReport={submitReport}
         onCopyReportContact={(value) => void copyTextToClipboard(value)}
         onFetchReportManifest={fetchReportManifest}
+        trustDisplayException={
+          effectiveAuthorPubkey ? (
+            <AuthorTrustDisplayExceptionField
+              authorPubkey={effectiveAuthorPubkey}
+              loadAlwaysVisible={async (pubkey) =>
+                (await api.listAuthorTrustDisplayExceptions()).includes(pubkey)
+              }
+              setAlwaysVisible={async (pubkey, alwaysVisible) =>
+                (await api.setAuthorTrustDisplayException(pubkey, alwaysVisible)).always_visible
+              }
+            />
+          ) : null
+        }
         communityNodeAdvisory={
           <CommunityNodeAdvisoryPanel
             api={api}

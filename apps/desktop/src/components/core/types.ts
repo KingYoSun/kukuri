@@ -1,5 +1,6 @@
 import type * as React from 'react';
 
+import type { AuthorTrustGateView } from '@/shell/authorTrustGates';
 import type {
   AdvisorySubjectKind,
   AuthorSocialView,
@@ -151,6 +152,8 @@ export type PostCardView = {
   replyParentAuthor?: ReferencedAuthorMeta | null;
   suppressReplyPreview?: boolean;
   showUnavailableDiagnostics?: boolean;
+  // #1061: 採用 CN の信頼値による折りたたみ（著者または引用元の著者）。
+  trustGate?: AuthorTrustGateView | null;
   // #858: 成人向けラベル付き投稿で、表示設定 OFF のため本文・メディアを代替表示にする。
   adultContentGated?: boolean;
   // #1055: 代替表示の根拠。両方あるときは投稿者自身の申告(`self_label`)を根拠として示す。

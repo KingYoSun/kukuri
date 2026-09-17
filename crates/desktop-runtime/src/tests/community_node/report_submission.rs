@@ -104,6 +104,7 @@ async fn report_runtime(
     });
     // #703: 通報先は構成済みノードに限るため、モックノードを構成に登録しておく。
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),

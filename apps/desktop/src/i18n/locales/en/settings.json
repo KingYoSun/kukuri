@@ -296,6 +296,14 @@
       "needsReconsent": "Sharing stopped because this node's document changed. Accept it again to resume.",
       "revocationPending": "Waiting for the deletion request to finish. Sharing stays off until it does.",
       "failed": "Could not change the sharing setting. Try again later."
+    },
+    "trustPriority": {
+      "title": "Nodes that collapse posts by trust",
+      "description": "Adopt the trust value from the selected nodes in order, and collapse posts from people they rate low. Nothing is collapsed when none are selected. Values from different nodes are never mixed.",
+      "none": "Nothing is selected, so no post is collapsed by trust.",
+      "rank": "#{{rank}}",
+      "moveUp": "Move {{baseUrl}} up",
+      "moveDown": "Move {{baseUrl}} down"
     }
   },
   "connectivity": {

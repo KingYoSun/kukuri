@@ -296,6 +296,14 @@
       "needsReconsent": "该节点的文档已更新，共享已暂停。再次同意即可恢复。",
       "revocationPending": "正在请求删除记录。完成前不会恢复共享。",
       "failed": "无法更改共享设置。请稍后再试。"
+    },
+    "trustPriority": {
+      "title": "按信任值折叠帖子的节点",
+      "description": "按顺序采用所选节点的信任值，折叠其评分较低的用户的帖子。未选择时不折叠。不会混合不同节点的评估。",
+      "none": "未选择，因此不会按信任值折叠。",
+      "rank": "第 {{rank}} 位",
+      "moveUp": "将 {{baseUrl}} 上移",
+      "moveDown": "将 {{baseUrl}} 下移"
     }
   },
   "connectivity": {

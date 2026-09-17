@@ -1,5 +1,6 @@
 use kukuri_desktop_runtime::{
-    AcceptCommunityNodeConsentsRequest, CommunityNodeConfig,
+    AcceptCommunityNodeConsentsRequest, AuthorTrustGate, AuthorTrustGateRequest,
+    AuthorTrustGateResult, CommunityNodeConfig,
     CommunityNodeContentAdvisoryLookupRequest, CommunityNodeContentAdvisoryLookupResult,
     CommunityNodeIndexQueryRequest,
     CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeManifestFetch,
@@ -7,7 +8,7 @@ use kukuri_desktop_runtime::{
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeUserAdvisoryRequest, CreatePrivateChannelRequest, DiscoveryConfig,
-    EnableCommunityNodeObservationSharingRequest,
+    EnableCommunityNodeObservationSharingRequest, SetAuthorTrustDisplayExceptionRequest,
     ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
     ExportPrivateChannelInviteRequest, FetchCommunityNodePoliciesRequest,
     FreezePrivateChannelRequest,
@@ -409,6 +410,44 @@ pub async fn withdraw_community_node_consents(
     state
         .runtime()
         .withdraw_community_node_consents(request)
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: 表示中の著者について、採用 CN の信頼値による折りたたみ判断を返す。
+#[tauri::command]
+pub async fn evaluate_author_trust_gates(
+    state: tauri::State<'_, DesktopState>,
+    request: AuthorTrustGateRequest,
+) -> Result<AuthorTrustGateResult, CommandError> {
+    state
+        .runtime()
+        .evaluate_author_trust_gates(request)
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: 著者ごとの「常に表示する」例外を設定・解除する。
+#[tauri::command]
+pub async fn set_author_trust_display_exception(
+    state: tauri::State<'_, DesktopState>,
+    request: SetAuthorTrustDisplayExceptionRequest,
+) -> Result<AuthorTrustGate, CommandError> {
+    state
+        .runtime()
+        .set_author_trust_display_exception(request)
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: 「常に表示する」例外の一覧。
+#[tauri::command]
+pub async fn list_author_trust_display_exceptions(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Vec<String>, CommandError> {
+    state
+        .runtime()
+        .list_author_trust_display_exceptions()
         .await
         .map_err(map_error)
 }

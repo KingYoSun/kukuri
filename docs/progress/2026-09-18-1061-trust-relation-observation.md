@@ -12,8 +12,8 @@
 | PR | 範囲 | 状態 |
 | --- | --- | --- |
 | PR1 | ADR 0026 §8 / ADR 0022 追補、観測 envelope、CN の観測受付・取消・保持、T/R の合算と一括評価、wire 追従 | merge 済み（[#1125](https://github.com/kukuri-app/kukuri/pull/1125)、`1599ff5a`） |
-| PR2 | client の提供トグル（任意文書への同意）・送信待ち・取消 | 実装中 |
-| PR3 | CN の採用順位、6 経路と引用元の折りたたみ・再表示・著者例外 | 未着手 |
+| PR2 | client の提供トグル（任意文書への同意）・送信待ち・取消 | merge 済み（[#1129](https://github.com/kukuri-app/kukuri/pull/1129)、`a35604d4`） |
+| PR3 | CN の採用順位、6 経路と引用元の折りたたみ・再表示・著者例外 | 実装中 |
 
 ## 利用者決定（2026-09-17）
 
@@ -69,6 +69,14 @@
   破棄するようになったため、有効化時の突き合わせ（`pending` の retain）自体は到達しない多重防御になっている。
   将来どれかの経路が破棄をやめても気づけるよう、状態を直接作って突き合わせだけを検証する test を足す余地がある。
 - 再同意の案内文は、止まった時点で CN 側の記録を削除したことに触れていない。
+
+## PR3 の対応
+
+| 条件 | 実装 | 検証 |
+| --- | --- | --- |
+| AC-3 / AC-6 / AC-7 / INV-4 / TR-4 / TR-5 / TR-7 | `CommunityNodeConfig.trust_node_priority`（設定済み node に正規化、空なら機能オフ）と `trust_gate_support.rs` の `evaluate_author_trust_gates`。優先順に一括評価を読み、viewer・対象・期限を照合して最初の有効値を採る。失敗・401・期限切れは次の選択済み node へ進み、全滅なら未評価（折りたたまない）。cache は (node, target) 単位で、設定・同意・認証の変更で世代を進めて捨てる | `trust_gates.rs` 7 件（優先順・未選択 0 件・失敗 fallback・viewer/期限の照合・cache と設定変更・restart 復元・social state 不変） |
+| AC-4 / INVAR-1 / INVAR-4 / INV-5 / INV-6 | `resolvePostTrustGate`（著者と引用元）、`AuthorTrustGateNotice`（理由・採用 CN・表示する・作者を開く）、live / game 一覧の同じ案内、作者詳細の「この作者を常に表示する」、設定画面の採用順位 UI | `DesktopShellPage.authorTrustGate.test.tsx` 4 件、`authorTrustGates.test.ts` 3 件、`CommunityNodeTrustPriorityField.test.tsx` 3 件、[ui-review record](../ui-reviews/2026-09-18-1061-author-trust-gate.md) |
+| 法務 | legal bundle を version 7 へ（利用規約 第3条に第 5・6 項、外部送信表示に「信頼評価の照会」、データフロー突合表に行を追加、i18n ミラーと同意 fixture を同期）。2026-09-18 のユーザー判断どおり PR2 分と合わせて 1 回で上げる | Tauri の法務 bundle テスト、`App.test.tsx`、Playwright の同意 fixture |
 
 ## 検証記録
 

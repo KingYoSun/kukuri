@@ -32,7 +32,7 @@
   "documents": {
     "terms": {
       "title": "Terms of Service",
-      "changeSummary": "Version 6 adds that adult material may also be identified using estimates from Community Nodes you configured.",
+      "changeSummary": "Version 7 adds that posts may be collapsed based on the trust evaluation of a community node you selected, and that you can optionally share your blocks and mutes to support that evaluation.",
       "sections": [
         {
           "heading": "What kukuri is",
@@ -167,7 +167,7 @@
     },
     "privacy": {
       "title": "Privacy Policy",
-      "changeSummary": "Version 6 adds that the IDs of posts you view and the identifiers of their attachments may be sent to Community Nodes whose estimates of adult material you use.",
+      "changeSummary": "Version 7 adds what is sent when trust evaluations are requested, and how optionally shared blocks and mutes are handled.",
       "sections": [
         {
           "heading": "Controller and basic approach",

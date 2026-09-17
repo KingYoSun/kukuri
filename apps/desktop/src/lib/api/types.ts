@@ -57,6 +57,9 @@ import type {
   MetaverseRoomEventV1,
   SpatialContextV1,
   MetaverseRoomEventView,
+  AuthorTrustGate,
+  AuthorTrustGateRequest,
+  AuthorTrustGateResult,
   CommunityNodeObservationSharingStatus,
   EnableCommunityNodeObservationSharingRequest,
   NotificationStatusView,
@@ -517,7 +520,11 @@ export interface DesktopApi {
   getDiscoveryConfig(): Promise<DiscoveryConfig>;
   getCommunityNodeConfig(): Promise<CommunityNodeConfig>;
   getCommunityNodeStatuses(): Promise<CommunityNodeNodeStatus[]>;
-  setCommunityNodeConfig(nodes: CommunityNodeConfigInput[]): Promise<CommunityNodeConfig>;
+  // #1061: `trustNodePriority` を渡すと信頼値の採用順位も更新する（未指定なら保存済みを維持）。
+  setCommunityNodeConfig(
+    nodes: CommunityNodeConfigInput[],
+    trustNodePriority?: string[]
+  ): Promise<CommunityNodeConfig>;
   clearCommunityNodeConfig(): Promise<void>;
   authenticateCommunityNode(baseUrl: string): Promise<CommunityNodeNodeStatus>;
   setCommunityNodeInviteCode(
@@ -553,6 +560,13 @@ export interface DesktopApi {
   listCommunityNodeRelationNeighbors(
     request: CommunityNodeRelationNeighborsRequest
   ): Promise<RelationNeighborsResponse>;
+  // #1061: 採用 CN の信頼値による著者の表示判断。
+  evaluateAuthorTrustGates(request: AuthorTrustGateRequest): Promise<AuthorTrustGateResult>;
+  setAuthorTrustDisplayException(
+    authorPubkey: string,
+    alwaysVisible: boolean
+  ): Promise<AuthorTrustGate>;
+  listAuthorTrustDisplayExceptions(): Promise<string[]>;
   // #1061: ブロック / ミュート観測の提供（CN の任意文書への同意）。
   getCommunityNodeObservationSharing(
     baseUrl: string

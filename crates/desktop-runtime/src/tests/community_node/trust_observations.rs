@@ -210,6 +210,7 @@ async fn open_runtime(db_path: &std::path::Path, base_url: &str) -> DesktopRunti
     .await
     .expect("runtime");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.to_string(),
@@ -727,7 +728,10 @@ async fn consent_withdrawal_and_node_removal_request_observation_deletion() {
     harness.enable(false).await;
     harness
         .runtime
-        .set_community_node_config(SetCommunityNodeConfigRequest { nodes: Vec::new() })
+        .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
+            nodes: Vec::new(),
+        })
         .await
         .expect("remove node");
     assert_eq!(harness.state.revocations.load(Ordering::SeqCst), 2);

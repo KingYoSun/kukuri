@@ -58,6 +58,7 @@ async fn dome_runtime_with_routes(
         axum::serve(listener, app).await.expect("mock server");
     });
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),

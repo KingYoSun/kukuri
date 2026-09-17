@@ -649,6 +649,24 @@ export function createProfileTopicChannelActions({
     }
   }
 
+  /// #1061: 信頼値の採用順位だけを保存する（ノード一覧の下書きは変えない）。
+  async function handleSetCommunityNodeTrustPriority(priority: string[]) {
+    try {
+      const nextConfig = await api.setCommunityNodeConfig(
+        communityNodeDraftNodesToConfigInput(communityNodeInput),
+        priority
+      );
+      setCommunityNodeConfig(nextConfig);
+      setCommunityNodeError(null);
+    } catch (saveError) {
+      setCommunityNodeError(
+        saveError instanceof Error
+          ? saveError.message
+          : translate('common:errors.failedToUpdateCommunityNodes')
+      );
+    }
+  }
+
   async function handleClearCommunityNodes() {
     try {
       await api.clearCommunityNodeConfig();
@@ -828,6 +846,7 @@ export function createProfileTopicChannelActions({
     handleImportChannelAccessToken,
     handleSaveDiscoverySeeds,
     handleSaveCommunityNodes,
+    handleSetCommunityNodeTrustPriority,
     handleClearCommunityNodes,
     handleAuthenticateCommunityNode,
     handleSetCommunityNodeInviteCode,

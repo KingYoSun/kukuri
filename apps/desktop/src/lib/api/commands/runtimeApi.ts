@@ -12,6 +12,9 @@ import type {
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  AuthorTrustGate,
+  AuthorTrustGateRequest,
+  AuthorTrustGateResult,
   CommunityNodeObservationSharingStatus,
   EnableCommunityNodeObservationSharingRequest,
   CommunityNodePoliciesResponse,
@@ -831,10 +834,11 @@ export const runtimeApi: DesktopApi = {
   getCommunityNodeStatuses: command('getCommunityNodeStatuses', async () => {
     return invokeDesktop<CommunityNodeNodeStatus[]>('get_community_node_statuses');
   }),
-  setCommunityNodeConfig: command('setCommunityNodeConfig', async (nodes) => {
+  setCommunityNodeConfig: command('setCommunityNodeConfig', async (nodes, trustNodePriority) => {
     return invokeDesktop<CommunityNodeConfig>('set_community_node_config', {
       request: {
         nodes,
+        trust_node_priority: trustNodePriority ?? null,
       } satisfies SetCommunityNodeConfigRequest,
     });
   }),
@@ -923,6 +927,19 @@ export const runtimeApi: DesktopApi = {
     invokeDesktop<RelationNeighborsResponse>('list_community_node_relation_neighbors', {
       request: request satisfies CommunityNodeRelationNeighborsRequest,
     })),
+  evaluateAuthorTrustGates: command('evaluateAuthorTrustGates', (request) =>
+    invokeDesktop<AuthorTrustGateResult>('evaluate_author_trust_gates', {
+      request: request satisfies AuthorTrustGateRequest,
+    })),
+  setAuthorTrustDisplayException: command(
+    'setAuthorTrustDisplayException',
+    (authorPubkey, alwaysVisible) =>
+      invokeDesktop<AuthorTrustGate>('set_author_trust_display_exception', {
+        request: { author_pubkey: authorPubkey, always_visible: alwaysVisible },
+      })
+  ),
+  listAuthorTrustDisplayExceptions: command('listAuthorTrustDisplayExceptions', () =>
+    invokeDesktop<string[]>('list_author_trust_display_exceptions', {})),
   getCommunityNodeObservationSharing: command('getCommunityNodeObservationSharing', (baseUrl) =>
     invokeDesktop<CommunityNodeObservationSharingStatus>('get_community_node_observation_sharing', {
       request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,

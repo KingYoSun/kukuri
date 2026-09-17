@@ -1,6 +1,10 @@
 import type { FormEventHandler } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { AuthorTrustGateNotice } from '@/components/core/AuthorTrustGateNotice';
+import { useAuthorTrustGateReveal } from '@/components/core/useAuthorTrustGateReveal';
+import type { AuthorTrustGate } from '@/lib/api';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -33,6 +37,8 @@ type GameRoomPanelProps = {
   onDraftPhaseChange: (roomId: string, value: string) => void;
   onDraftScoreChange: (roomId: string, participantId: string, value: string) => void;
   onSaveRoom: (roomId: string) => void;
+  /// #1061: 採用 CN の信頼値による主催者の表示判断（著者 pubkey → 判断）。
+  trustGates?: Record<string, AuthorTrustGate>;
 };
 
 export function GameRoomPanel({
@@ -55,8 +61,10 @@ export function GameRoomPanel({
   onDraftPhaseChange,
   onDraftScoreChange,
   onSaveRoom,
+  trustGates,
 }: GameRoomPanelProps) {
   const { t } = useTranslation(['common', 'game']);
+  const { gateFor, reveal } = useAuthorTrustGateReveal(trustGates);
   return (
     <Card className='panel-subsection'>
       <CardHeader>
@@ -108,6 +116,15 @@ export function GameRoomPanel({
 
       <ul className='post-list'>
         {rooms.map((room) => {
+          // #1061: 採用 CN の評価で主催者が非表示推奨なら、部屋を折りたたむ。
+          const trustGate = gateFor(room.host_pubkey);
+          if (trustGate) {
+            return (
+              <li key={room.room_id}>
+                <AuthorTrustGateNotice gate={trustGate} onReveal={() => reveal(trustGate.authorPubkey)} />
+              </li>
+            );
+          }
           const draft = drafts[room.room_id];
           const isOwner = room.host_pubkey === localAuthorPubkey;
           const pending = Boolean(savingByRoomId[room.room_id]);

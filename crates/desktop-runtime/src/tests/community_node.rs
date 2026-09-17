@@ -9,5 +9,6 @@ mod report_submission;
 mod scheduler;
 mod session;
 mod tester_feedback_submission;
+mod trust_gates;
 mod trust_observations;
 mod trust_relation;

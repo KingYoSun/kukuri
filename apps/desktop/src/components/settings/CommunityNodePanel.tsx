@@ -14,6 +14,7 @@ import {
 
 import { CommunityNodeAdvisoryAdoptionField } from './CommunityNodeAdvisoryAdoptionField';
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
+import { CommunityNodeTrustPriorityField } from './CommunityNodeTrustPriorityField';
 import {
   CommunityNodeObservationSharingField,
   type CommunityNodeObservationSharingHandlers,
@@ -45,6 +46,9 @@ type CommunityNodePanelProps = {
   onRefresh: (baseUrl: string) => boolean | void | Promise<boolean | void>;
   onClearToken: (baseUrl: string) => void;
   onSubmitInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
+  /// #1061: 信頼値の採用順位。未指定なら順位の設定を出さない。
+  trustNodePriority?: readonly string[];
+  onTrustNodePriorityChange?: (priority: string[]) => void;
   /// #1061: ブロック / ミュート観測の提供（CN の任意文書への同意）。未指定なら選択肢を出さない。
   observationSharing?: CommunityNodeObservationSharingHandlers;
   onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
@@ -76,6 +80,8 @@ export function CommunityNodePanel({
   onRefresh,
   onClearToken,
   onSubmitInviteCode,
+  trustNodePriority,
+  onTrustNodePriorityChange,
   observationSharing,
   onGetRelationOptout,
   onSetRelationOptout,
@@ -211,6 +217,17 @@ export function CommunityNodePanel({
           {t('settings:communityNode.actions.clearNodes')}
         </Button>
       </SettingsActionRow>
+
+      {trustNodePriority && onTrustNodePriorityChange ? (
+        <CommunityNodeTrustPriorityField
+          configuredBaseUrls={view.nodes
+            .filter((node) => node.saved && node.baseUrl.trim())
+            .map((node) => node.baseUrl)}
+          priority={trustNodePriority}
+          disabled={nodeActionsDisabled}
+          onChange={onTrustNodePriorityChange}
+        />
+      ) : null}
 
       <SettingsEditorField
         label={t('settings:communityNode.indexNode.label')}

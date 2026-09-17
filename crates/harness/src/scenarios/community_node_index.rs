@@ -220,6 +220,7 @@ pub(crate) async fn run_community_node_index_query_client(
     let mut runtime = DesktopRuntime::new(&db_path).await?;
     runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
             nodes: vec![SetCommunityNodeConfigNode {
                 content_advisory_enabled: None,
                 base_url: base_url.clone(),

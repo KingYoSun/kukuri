@@ -1,4 +1,4 @@
-import type { PostView } from '@/lib/api';
+import type { AuthorTrustGate, PostView } from '@/lib/api';
 import {
   INITIAL_TIMELINE_ADVISORY_LOOKUP_STATE,
   type TimelineAdvisoryLookupState,
@@ -26,6 +26,8 @@ export type MediaSliceState = {
   // 取得せずスケルトンにし、advisory の確定後に代替表示か通常表示へ切り替える。
   timelineContentAdvisories: TimelineContentAdvisoryIndex;
   timelineAdvisoryLookup: TimelineAdvisoryLookupState;
+  // #1061: 採用 CN の信頼値による著者の表示判断（著者 pubkey → 判断）。一時状態で永続化しない。
+  authorTrustGates: Record<string, AuthorTrustGate>;
 };
 
 export function createInitialMediaSlice(): MediaSliceState {
@@ -37,5 +39,6 @@ export function createInitialMediaSlice(): MediaSliceState {
     advisoryGatedMediaHashes: [],
     timelineContentAdvisories: {},
     timelineAdvisoryLookup: INITIAL_TIMELINE_ADVISORY_LOOKUP_STATE,
+    authorTrustGates: {},
   };
 }

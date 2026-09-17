@@ -66,6 +66,10 @@ pub(crate) fn normalize_community_node_config(
         );
     }
     Ok(CommunityNodeConfig {
+        trust_node_priority: normalize_trust_node_priority(
+            config.trust_node_priority.as_slice(),
+            deduped.keys().cloned().collect::<Vec<_>>().as_slice(),
+        )?,
         nodes: deduped.into_values().collect(),
     })
 }
@@ -157,7 +161,10 @@ pub(crate) fn community_node_config_with_active_local_consents(
         })
         .cloned()
         .collect();
-    CommunityNodeConfig { nodes }
+    CommunityNodeConfig {
+        nodes,
+        trust_node_priority: Vec::new(),
+    }
 }
 
 pub(crate) fn seed_peer_from_community_node(seed_peer: &CommunityNodeSeedPeer) -> Option<SeedPeer> {
@@ -225,6 +232,7 @@ mod tests {
     #[test]
     fn community_node_seed_peers_keep_addr_hints_when_relay_urls_exist() {
         let config = CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://community.example.com".to_string(),
@@ -259,6 +267,7 @@ mod tests {
     #[test]
     fn community_node_seed_peers_keep_addr_hints_without_relay_urls() {
         let config = CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://community.example.com".to_string(),

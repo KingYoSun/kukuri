@@ -58,6 +58,7 @@ type DesktopShellSettingsDrawerProps = {
   handleImportPeer: () => Promise<void>;
   handleSaveDiscoverySeeds: () => Promise<void>;
   handleSaveCommunityNodes: () => Promise<void>;
+  handleSetCommunityNodeTrustPriority: (priority: string[]) => Promise<void>;
   handleClearCommunityNodes: () => Promise<void>;
   handleAuthenticateCommunityNode: (baseUrl: string) => Promise<void>;
   handleSetCommunityNodeInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
@@ -92,6 +93,7 @@ export function DesktopShellSettingsDrawer({
   handleImportPeer,
   handleSaveDiscoverySeeds,
   handleSaveCommunityNodes,
+  handleSetCommunityNodeTrustPriority,
   handleClearCommunityNodes,
   handleAuthenticateCommunityNode,
   handleSetCommunityNodeInviteCode,
@@ -313,6 +315,10 @@ export function DesktopShellSettingsDrawer({
               current.map((node) => (node.id === id ? { ...node, base_url: value } : node))
             );
             setCommunityNodeEditorDirty(true);
+          }}
+          trustNodePriority={communityNodeConfig.trust_node_priority ?? []}
+          onTrustNodePriorityChange={(priority) => {
+            void handleSetCommunityNodeTrustPriority(priority);
           }}
           observationSharing={{
             getObservationSharing: (baseUrl) => api.getCommunityNodeObservationSharing(baseUrl),

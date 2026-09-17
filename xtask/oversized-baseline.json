@@ -9,7 +9,7 @@
       "path": "docs/THIRD_PARTY_NOTICES.md"
     },
     {
-      "lines": 1224,
+      "lines": 1226,
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
@@ -41,7 +41,7 @@
       "path": "crates/app-api/src/service/private_channels_support.rs"
     },
     {
-      "lines": 1065,
+      "lines": 1082,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
@@ -69,8 +69,24 @@
       "path": "crates/desktop-runtime/src/identity.rs"
     },
     {
+      "lines": 1004,
+      "path": "crates/desktop-runtime/src/tests/community_node/connectivity.rs"
+    },
+    {
+      "lines": 1000,
+      "path": "apps/desktop/src/components/core/PostCard.tsx"
+    },
+    {
+      "lines": 1000,
+      "path": "apps/desktop/src/shell/DesktopShellPage.tsx"
+    },
+    {
       "lines": 1000,
       "path": "apps/desktop/tests/playwright/shell.smoke.spec.ts"
+    },
+    {
+      "lines": 1000,
+      "path": "crates/desktop-runtime/src/tests/community_node/metadata.rs"
     }
   ]
 }

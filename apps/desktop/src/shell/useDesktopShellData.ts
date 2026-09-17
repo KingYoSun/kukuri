@@ -41,6 +41,7 @@ import {
   adoptingContentAdvisoryNodes,
   useTimelineContentAdvisoryLookup,
 } from '@/shell/data/useTimelineContentAdvisoryLookup';
+import { useAuthorTrustGateLookup } from '@/shell/data/useAuthorTrustGateLookup';
 import {
   activeTimelineStorageKey,
   PUBLIC_TIMELINE_SCOPE,
@@ -299,6 +300,30 @@ export function useDesktopShellData({
     posts: advisoryLookupPosts,
     notifications,
     adoptingNodes,
+  });
+  // #1061: live / game 一覧の主催者も折りたたみ判断の対象にする。
+  const trustGateHostPubkeys = useMemo(() => {
+    const hosts = new Set<string>();
+    for (const sessions of Object.values(state.liveSessionsByScopeKey)) {
+      for (const session of sessions) {
+        const pubkey = session.host_pubkey?.trim();
+        if (pubkey) hosts.add(pubkey);
+      }
+    }
+    for (const rooms of Object.values(gameRoomsByScopeKey)) {
+      for (const room of rooms) {
+        const pubkey = room.host_pubkey?.trim();
+        if (pubkey) hosts.add(pubkey);
+      }
+    }
+    return [...hosts];
+  }, [gameRoomsByScopeKey, state.liveSessionsByScopeKey]);
+  // #1061: 表示中の著者を採用 CN へ一括照会し、折りたたみ判断を state へ置く。
+  useAuthorTrustGateLookup({
+    api,
+    posts: advisoryLookupPosts,
+    hostPubkeys: trustGateHostPubkeys,
+    config: communityNodeConfig,
   });
 
   // #858 / #1107: 表示設定 OFF の間にゲート対象となる添付 hash(引用 snapshot 含む)。

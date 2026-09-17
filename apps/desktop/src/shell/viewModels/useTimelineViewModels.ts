@@ -1,3 +1,4 @@
+import { resolvePostTrustGate } from '@/shell/authorTrustGates';
 import { type SyntheticEvent, useCallback, useMemo } from 'react';
 
 import type {
@@ -59,8 +60,11 @@ type UseTimelineViewModelsArgs = {
   communityNodeManifests?: DesktopShellState['communityNodeManifests'];
   /// #1107: 表示設定 OFF の間ゲートする添付 blob hash(`useAdultGatedMediaHashes`)。
   gatedMediaHashes?: readonly string[];
+  /// #1061: 採用 CN の信頼値による著者の表示判断（著者 pubkey → 判断）。
+  authorTrustGates?: DesktopShellState['authorTrustGates'];
 };
 
+const EMPTY_TRUST_GATES: DesktopShellState['authorTrustGates'] = {};
 const EMPTY_ADVISORIES: TimelineContentAdvisoryIndex = {};
 const INACTIVE_LOOKUP: TimelineAdvisoryLookupState = { active: false, settled: {} };
 const EMPTY_MANIFESTS: DesktopShellState['communityNodeManifests'] = {};
@@ -85,6 +89,7 @@ export function useTimelineViewModels({
   timelineAdvisoryLookup = INACTIVE_LOOKUP,
   communityNodeManifests = EMPTY_MANIFESTS,
   gatedMediaHashes = EMPTY_HASHES,
+  authorTrustGates = EMPTY_TRUST_GATES,
 }: UseTimelineViewModelsArgs) {
   const gatedMediaHashSet = useMemo(() => new Set(gatedMediaHashes), [gatedMediaHashes]);
   const setUnsupportedVideoManifests = useDesktopShellFieldSetter(
@@ -251,8 +256,11 @@ export function useTimelineViewModels({
           };
         }
       }
+      // #1061: 著者または引用元の著者が非表示推奨なら、投稿を折りたたむ（ADR 0026 §8.4）。
+      const trustGate = resolvePostTrustGate(post, authorTrustGates);
       return {
         post,
+        trustGate,
         provenance: contentProvenanceFromView(post.provenance),
         context,
         authorLabel: authorDisplayLabel(
@@ -299,6 +307,7 @@ export function useTimelineViewModels({
     [
       activeJoinedChannels,
       adultContentEnabled,
+      authorTrustGates,
       communityNodeManifests,
       developerModeEnabled,
       gatedMediaHashSet,
