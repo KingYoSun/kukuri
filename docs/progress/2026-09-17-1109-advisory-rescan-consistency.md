@@ -85,4 +85,6 @@ sink 逆引き: `expire_superseded_advisory_signals` の caller は `SafetyScanS
 - `cargo test -p kukuri-cn-safety-runtime`: 成功（reuse 15 件を含む）。
 - `KUKURI_CN_RUN_INTEGRATION_TESTS=1` で `advisory_rescan_consistency`（4）、
   `expire_superseded_advisory_signals_migration`（1）、`safety_runtime`（19）: 成功。
-- `cargo xtask cn-check`: 成功。
+- `cargo xtask cn-check` / `cargo xtask cn-test` / `cargo xtask cn-e2e`: 成功（commit `7283e622` の tree）。
+- `git diff --check`: 問題なし。
+- desktop は無変更（INVAR-1 の取得ゲートは既存 contract が保護し、照会応答の advisory が現在の判定どおりに減るだけ）。
