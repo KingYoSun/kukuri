@@ -2,6 +2,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::paths::AppBuildProfile;
+
 use super::{
     AGE_ATTESTATION_VERSION, APP_LEGAL_DOCUMENTS, AgeAttestationRecord, AgeAttestationStatus,
     AppConsentDocumentRecord, AppConsentDocumentStatus, ClientStartupStatus,
@@ -79,6 +81,7 @@ pub fn record_app_consents(
     }
 
     let accepted_at = current_unix_seconds();
+    let build_profile = Some(AppBuildProfile::current().as_str().to_string());
     if age_attested {
         // 同一版の申告は日時等を更新し、それ以外は履歴として残す。
         if let Some(existing) = store
@@ -89,12 +92,14 @@ pub fn record_app_consents(
             existing.attested_at = accepted_at;
             existing.language = language.to_string();
             existing.app_version = app_version.to_string();
+            existing.build_profile = build_profile.clone();
         } else {
             store.age_attestations.push(AgeAttestationRecord {
                 version: AGE_ATTESTATION_VERSION,
                 attested_at: accepted_at,
                 language: language.to_string(),
                 app_version: app_version.to_string(),
+                build_profile: build_profile.clone(),
             });
         }
     }
@@ -108,6 +113,7 @@ pub fn record_app_consents(
             existing.accepted_at = accepted_at;
             existing.language = language.to_string();
             existing.app_version = app_version.to_string();
+            existing.build_profile = build_profile.clone();
         } else {
             store.records.push(AppConsentDocumentRecord {
                 slug: document.slug.clone(),
@@ -115,6 +121,7 @@ pub fn record_app_consents(
                 accepted_at,
                 language: language.to_string(),
                 app_version: app_version.to_string(),
+                build_profile: build_profile.clone(),
             });
         }
     }
@@ -187,5 +194,82 @@ mod tests {
         let renewed = app_consent_status(&db_path);
         assert!(renewed.satisfied);
         assert_eq!(renewed.age_attestation.attested_at, attested_at);
+    }
+
+    #[test]
+    fn recorded_consent_keeps_build_profile() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let db_path = directory.path().join("kukuri.db");
+        let documents = crate::host::APP_LEGAL_DOCUMENTS
+            .iter()
+            .map(|(slug, version)| AcceptedAppConsentDocument {
+                slug: (*slug).to_string(),
+                version: *version,
+            })
+            .collect::<Vec<_>>();
+        record_app_consents(&db_path, &documents, "en", true, "test").expect("consent");
+
+        let store = crate::host::load_app_consent_store(&db_path);
+        let expected = Some(AppBuildProfile::current().as_str().to_string());
+        assert_eq!(store.records.len(), documents.len());
+        assert!(
+            store
+                .records
+                .iter()
+                .all(|record| record.build_profile == expected)
+        );
+        assert_eq!(store.age_attestations.len(), 1);
+        assert_eq!(store.age_attestations[0].build_profile, expected);
+    }
+
+    #[test]
+    fn consent_version_check_ignores_build_profile() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let db_path = directory.path().join("kukuri.db");
+        let consent_path = crate::host::app_consent_path(&db_path);
+        let fixture = |version: i32, build_profile: Option<&str>| {
+            let build_profile = build_profile
+                .map(|value| format!(r#","build_profile":"{value}""#))
+                .unwrap_or_default();
+            let records = crate::host::APP_LEGAL_DOCUMENTS
+                .iter()
+                .map(|(slug, _)| {
+                    format!(
+                        r#"{{"slug":"{slug}","version":{version},"accepted_at":1,"language":"ja","app_version":"0.2.4"{build_profile}}}"#
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                r#"{{"records":[{records}],"age_attestations":[{{"version":{},"attested_at":1,"language":"ja","app_version":"0.2.4"{build_profile}}}]}}"#,
+                crate::host::AGE_ATTESTATION_VERSION
+            )
+        };
+        let current = crate::host::LEGAL_BUNDLE_VERSION;
+        // #1105 より前の記録(build_profile なし)も、版が一致すれば同意済みのまま。
+        // 版が古ければ build の種別に関係なく再同意を求める。
+        for (version, build_profile, satisfied) in [
+            (current, None, true),
+            (current, Some("release"), true),
+            (current, Some("development"), true),
+            (current - 1, None, false),
+            (current - 1, Some("release"), false),
+            (current - 1, Some("development"), false),
+        ] {
+            std::fs::write(&consent_path, fixture(version, build_profile)).expect("fixture");
+            let status = app_consent_status(&db_path);
+            assert_eq!(
+                status.satisfied, satisfied,
+                "version {version}, build profile {build_profile:?}"
+            );
+            let store = crate::host::load_app_consent_store(&db_path);
+            assert_eq!(store.records.len(), crate::host::APP_LEGAL_DOCUMENTS.len());
+            assert!(
+                store
+                    .records
+                    .iter()
+                    .all(|record| record.build_profile.as_deref() == build_profile)
+            );
+        }
     }
 }

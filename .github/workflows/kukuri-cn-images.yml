@@ -43,7 +43,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn-images
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -65,9 +65,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Prepare image metadata
         id: meta
@@ -122,11 +119,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # #1073: Namespace runner では docker build が既定で Namespace の Remote Builder に向き、
+      # layer cache は builder 側が保持する。setup-buildx-action は既定 builder を上書きするため
+      # 置かず、GitHub Actions cache（type=gha）の cache-from / cache-to も使わない。
+      #
       # cn-indexer は publish 前に production 契約を image smoke で固定する（#614）:
       # mock / unknown provider の fail-closed 拒否、slot 制約、credential env 欠落の明示的
       # 失敗、credential 値の非漏出、正常構成の exit 0。`validate-config` は外部接続なしの
-      # 起動前検証モードなので、secret 実値や DB を要しない。build layer は最終 build と
-      # cache 共有されるため二重 build のコストは小さい。
+      # 起動前検証モードなので、secret 実値や DB を要しない。build layer は同じ builder 上で
+      # 最終 build と共有されるため二重 build のコストは小さい。
       - name: Build cn-indexer image for smoke
         if: ${{ matrix.bin == 'cn-indexer' }}
         uses: docker/build-push-action@v6
@@ -139,8 +140,6 @@ jobs:
           build-args: |
             TARGET_PACKAGE=${{ matrix.package }}
             TARGET_BIN=${{ matrix.bin }}
-          cache-from: type=gha,scope=cn-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=cn-${{ matrix.image }}
 
       - name: Smoke test cn-indexer image
         if: ${{ matrix.bin == 'cn-indexer' }}
@@ -245,8 +244,6 @@ jobs:
           build-args: |
             TARGET_PACKAGE=${{ matrix.package }}
             TARGET_BIN=${{ matrix.bin }}
-          cache-from: type=gha,scope=cn-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=cn-${{ matrix.image }}
 
       - name: Image summary
         shell: bash
