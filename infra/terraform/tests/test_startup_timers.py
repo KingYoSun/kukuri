@@ -39,16 +39,18 @@ def seconds(value):
     return int(amount) * (60 if unit == 'min' else 1)
 
 
-def next_elapse(timer, boot, started, last_service_start):
+def next_elapse(timer, boot, started, last_service_start, now=None):
     """systemd の monotonic timer の次回時刻（RandomizedDelaySec 加算前）。
 
-    OnBootSec は boot 基準のため、timer 起動時点で過ぎていれば予定に入らない。
-    OnUnitActiveSec は service の前回起動記録が無ければ予定に入らない。
+    OnBootSec / OnActiveSec は基準時刻からの一回限りの予定で、評価時点（既定は timer
+    起動時点）で過ぎていれば予定に入らない。OnUnitActiveSec は service の前回起動記録が
+    無ければ予定に入らない。
     """
+    now = started if now is None else now
     candidates = []
-    if 'OnBootSec' in timer and boot + seconds(timer['OnBootSec']) > started:
+    if 'OnBootSec' in timer and boot + seconds(timer['OnBootSec']) > now:
         candidates.append(boot + seconds(timer['OnBootSec']))
-    if 'OnActiveSec' in timer:
+    if 'OnActiveSec' in timer and started + seconds(timer['OnActiveSec']) > now:
         candidates.append(started + seconds(timer['OnActiveSec']))
     if 'OnUnitActiveSec' in timer and last_service_start is not None:
         candidates.append(last_service_start + seconds(timer['OnUnitActiveSec']))
@@ -74,8 +76,9 @@ class ReadinessTimerTests(unittest.TestCase):
     def test_readiness_repeats_before_activation_expires(self):
         # service が一度走った後は、次回が activation の有効期限内に決まり続ける。
         last = 6 * 3600
-        following = next_elapse(self.timer, 0, 3 * 3600, last)
+        following = next_elapse(self.timer, 0, 3 * 3600, last, now=last)
         self.assertIsNotNone(following)
+        self.assertEqual(following, last + seconds(self.timer['OnUnitActiveSec']))
         delay = seconds(self.timer['RandomizedDelaySec'])
         self.assertLess(following + delay - last, ACTIVATION_TTL_SECS)
 
