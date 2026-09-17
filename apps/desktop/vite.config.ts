@@ -55,9 +55,14 @@ export default defineConfig({
           // These suites mount the full App in jsdom and are timing-sensitive.
           // Before the WP-S1 split they all lived in one file, so they (a) ran
           // serially and (b) mostly ran after the parallel unit suites had
-          // finished, i.e. on an otherwise idle CPU. Keep both properties:
-          // one file at a time, scheduled after the unit project completes.
-          maxWorkers: 1,
+          // finished, i.e. on an otherwise idle CPU. Keep the scheduling, but
+          // run two files at a time: #1121 measured repeated CI runs at this
+          // width without failures. Lower it again if flakes come back.
+          maxWorkers: 2,
+          // これらは full App を mount して数十回の操作を挟むため、既定の 5 秒では
+          // CPU が混むと待ち切れずに落ちる（#1121 の反復計測で 20 回中 1 回）。
+          // timeout は待ち時間の上限であって assertion ではないので、余裕を持たせる。
+          testTimeout: 20000,
           sequence: { groupOrder: 1 },
         },
       },

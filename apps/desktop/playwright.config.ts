@@ -13,6 +13,10 @@ const VISUAL_SPEC = '**/visual.spec.ts';
 export default defineConfig({
   testDir: './tests/playwright',
   fullyParallel: true,
+  // #1121: worker 数は既定（CPU 数の半分）のまま。4 vCPU の runner で 4 worker にする
+  // 反復計測では、1 回あたりの時間が 2 worker と変わらず（7.0〜9.4 分）、metaverse の
+  // 3D test が 20 回中 3 回 30 秒 timeout で落ちた。browser test は CPU を使い切るため、
+  // 速くするには worker ではなく job の vCPU を増やす（CI 側で 8 vCPU の profile を使う）。
   reporter: 'list',
   // baseline は Linux CI 生成に一本化する（@font-face 非同梱でシステムフォント依存のため
   // Windows 開発機との pixel 一致は構造的に不可能）。CI 以外では比較を skip し、視覚 spec は

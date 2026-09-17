@@ -242,7 +242,8 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-desktop-browser:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-desktop
+    # #1121: Playwright は CPU を使い切るため 8 vCPU で動かす（fast と同じ理由）。
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-desktop
     timeout-minutes: 45
     steps:
       - name: Checkout

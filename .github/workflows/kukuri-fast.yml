@@ -202,7 +202,10 @@ jobs:
         run: cargo xtask-lite ci-prune-target
 
   linux-desktop-browser:
-    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-desktop
+    # #1121: Playwright は CPU を使い切るため、4 vCPU では worker を増やしても速くならず
+    # metaverse の 3D test が timeout で落ちた。8 vCPU に戻すと既定で 4 worker になり、
+    # 1 run あたりの vCPU × 分はほぼ同じまま所要時間が半分になる。cache-tag は据え置き。
+    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-desktop
     timeout-minutes: 45
     steps:
       - name: Checkout
