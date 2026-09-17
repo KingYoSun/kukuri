@@ -327,10 +327,15 @@ cd /var/lib/kukuri/community-node
 docker ps                                        # cn-arcadedb / cn-indexer が healthy
 docker exec $(docker ps -qf name=cn-indexer) curl -fsS http://127.0.0.1:8630/healthz
 docker exec $(docker ps -qf name=cn-indexer) curl -fsS http://127.0.0.1:8630/v1/status  # last ingest / backoff 等
-systemctl list-timers kukuri-relation-analyze.timer
+systemctl list-timers kukuri-relation-analyze.timer --all   # NEXT が時刻であること
 systemctl status kukuri-relation-analyze.service # relation analyze の last success / failure
 journalctl -u kukuri-relation-analyze.service -n 50
 ```
+
+startup は relation analyze の service / timer を再生成する。再生成後の初回は timer 起動の 15 分後に予定され、
+以後は前回実行から `relation_analyze_interval_minutes` ごとに続く（#1099）。`NEXT` が `-` の場合や
+手動で解析する場合は `sudo systemctl start kukuri-relation-analyze.service` を使う
+（`docker-compose run` だけでは timer の記録が残らない）。
 
 外部からの port scan で 80/443/`relay_quic_port`/udp 以外（2480 / 8630 / 5432 / 6379）が
 閉じていることも確認する（firewall には新規 ingress を追加していない）。
@@ -372,7 +377,8 @@ sudo systemctl list-timers kukuri-readiness.timer --all   # NEXT が時刻であ
   sudo systemctl start kukuri-readiness.service
   ```
 - `relation_analysis_recent` が不合格の場合は relation analyze を 1 回実行する
-  （`docker-compose run --rm cn-relation-analyze`。既定の許容は 7200 秒以内の成功記録）。
+  （`sudo systemctl start kukuri-relation-analyze.service`。既定の許容は 7200 秒以内の成功記録）。
+  `systemctl list-timers kukuri-relation-analyze.timer` の `NEXT` も確認する。
 - 判定項目集合が変わる更新を入れた場合、古い記録は無効になり面は自動で閉じる
   （readiness の再実行で再解禁する。user-apiはread時に最新activationを読むため再起動不要）。
 
@@ -417,7 +423,7 @@ docker volume rm community-node_cn-arcadedb-data   # volume 名は docker volume
 /var/lib/toolbox/kukuri/bin/docker-compose up -d cn-indexer
 # cn-indexer が起動時に schema を作成し、全件見直し（poll interval、既定 300 秒）で再投影する。
 # relation graph は次回 relation analyze 実行で再構築される（手動なら:
-#   /var/lib/toolbox/kukuri/bin/docker-compose run --rm cn-relation-analyze ）
+#   sudo systemctl start kukuri-relation-analyze.service ）
 ```
 
 ### rollback（API / relay のみ構成へ戻す）

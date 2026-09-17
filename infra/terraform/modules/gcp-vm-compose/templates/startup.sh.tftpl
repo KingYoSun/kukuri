@@ -254,6 +254,9 @@ UNIT
 # --- systemd timer: relation graph の定期 batch 解析（#615） ---
 # oneshot unit は同一 unit の並行起動をしないため、実行が interval を超えても overlap しない。
 # last success / failure は `systemctl status kukuri-relation-analyze` / journalctl で確認する。
+# readiness timer と同じく、冒頭でunitを削除・再生成するため前回起動記録は残らない。boot後15分を
+# 過ぎてstartupを再実行した場合もOnActiveSecで初回を決め、以後はOnUnitActiveSecで継続させる
+# （停止するとreadinessのrelation_analysis_recentが不合格になり公開面が閉じる。#1099）。
 cat > /etc/systemd/system/kukuri-relation-analyze.service <<UNIT
 [Unit]
 Description=kukuri community node relation graph analysis
@@ -267,6 +270,7 @@ cat > /etc/systemd/system/kukuri-relation-analyze.timer <<UNIT
 Description=kukuri community node relation graph analysis timer
 [Timer]
 OnBootSec=15min
+OnActiveSec=15min
 OnUnitActiveSec=${relation_analyze_interval_minutes}min
 RandomizedDelaySec=60
 [Install]

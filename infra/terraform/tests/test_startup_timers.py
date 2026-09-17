@@ -7,10 +7,15 @@ TEMPLATE = Path(__file__).resolve().parents[1] / 'modules/gcp-vm-compose/templat
 DIRECTIVE = re.compile(r'%\{ (if (\w+)(?: != "")?|else|endif) ~\}\n?')
 DURATION = re.compile(r'^(\d+)(min|s)?$')
 ACTIVATION_TTL_SECS = 900
+# cn-cli readiness の既定 --relation-max-age-secs と、terraform 変数の既定値。
+RELATION_MAX_AGE_SECS = 7200
+RELATION_ANALYZE_INTERVAL_MINUTES = 60
+SYSTEMD = '/etc/systemd/system'
 
 
 def render(template, **flags):
-    """startup.sh.tftpl の条件分岐だけを展開する（`${...}` は readiness unit では使わない）。"""
+    """startup.sh.tftpl の条件分岐と timer 間隔の変数だけを展開する（他の `${...}` は unit では使わない）。"""
+    template = template.replace('${relation_analyze_interval_minutes}', str(RELATION_ANALYZE_INTERVAL_MINUTES))
     output, stack, pos = [], [], 0
     for match in DIRECTIVE.finditer(template):
         if all(stack):
@@ -57,12 +62,39 @@ def next_elapse(timer, boot, started, last_service_start, now=None):
     return min(candidates) if candidates else None
 
 
-class ReadinessTimerTests(unittest.TestCase):
+class StartupTimerTestCase(unittest.TestCase):
+    UNIT = None
+
     def setUp(self):
         self.template = TEMPLATE.read_text(encoding='utf-8')
-        self.script = render(self.template, **dict.fromkeys(
-            re.findall(r'%\{ if (\w+)', self.template), True))
-        self.timer = unit_file(self.script, '/etc/systemd/system/kukuri-readiness.timer')
+        self.flags = dict.fromkeys(re.findall(r'%\{ if (\w+)', self.template), True)
+        self.script = render(self.template, **self.flags)
+        self.timer = unit_file(self.script, f'{SYSTEMD}/{self.UNIT}.timer')
+
+    def assert_timer_is_started_after_units_are_regenerated(self):
+        lines = self.script.splitlines()
+        disabled = lines.index(f'systemctl disable --now {self.UNIT}.timer 2>/dev/null || true')
+        removed = lines.index(f'  {SYSTEMD}/{self.UNIT}.timer \\')
+        written = lines.index(f'cat > {SYSTEMD}/{self.UNIT}.timer <<UNIT')
+        reloaded = lines.index('systemctl daemon-reload')
+        started = lines.index(f'systemctl enable --now {self.UNIT}.timer')
+        self.assertLess(disabled, removed)
+        self.assertLess(removed, written)
+        self.assertLess(written, reloaded)
+        self.assertLess(reloaded, started)
+
+    def assert_units_absent_when(self, *disabled_flags):
+        for disabled in disabled_flags:
+            with self.subTest(disabled=disabled):
+                script = render(self.template, **dict(self.flags, **{disabled: False}))
+                self.assertIsNone(unit_file(script, f'{SYSTEMD}/{self.UNIT}.timer'))
+                self.assertNotIn(f'systemctl enable --now {self.UNIT}.timer', script)
+                # 前回構成の timer は常に片付ける。
+                self.assertIn(f'systemctl disable --now {self.UNIT}.timer 2>/dev/null || true', script)
+
+
+class ReadinessTimerTests(StartupTimerTestCase):
+    UNIT = 'kukuri-readiness'
 
     def test_startup_rerun_after_boot_schedules_readiness_within_five_minutes(self):
         # startup はunitを削除・再生成するため service の前回起動記録は無い（#1097）。
@@ -88,15 +120,7 @@ class ReadinessTimerTests(unittest.TestCase):
         self.assertIsNotNone(next_elapse(legacy, 0, 30, None))
 
     def test_timer_is_started_after_units_are_regenerated(self):
-        lines = self.script.splitlines()
-        removed = lines.index('  /etc/systemd/system/kukuri-readiness.timer \\')
-        written = lines.index('cat > /etc/systemd/system/kukuri-readiness.timer <<UNIT')
-        reloaded = lines.index('systemctl daemon-reload')
-        started = lines.index('systemctl enable --now kukuri-readiness.timer')
-        self.assertLess(lines.index('systemctl disable --now kukuri-readiness.timer 2>/dev/null || true'), removed)
-        self.assertLess(removed, written)
-        self.assertLess(written, reloaded)
-        self.assertLess(reloaded, started)
+        self.assert_timer_is_started_after_units_are_regenerated()
 
     def test_service_keeps_fail_closed_readiness_command(self):
         service = unit_file(self.script, '/etc/systemd/system/kukuri-readiness.service')
@@ -104,14 +128,43 @@ class ReadinessTimerTests(unittest.TestCase):
         self.assertEqual(service['ExecStart'], '$COMPOSE_BIN run --rm cn-readiness')
 
     def test_readiness_units_require_indexer_stack_and_operator_config(self):
-        flags = dict.fromkeys(re.findall(r'%\{ if (\w+)', self.template), True)
-        for disabled in ('deploy_indexer_stack', 'operator_config_enabled'):
-            with self.subTest(disabled=disabled):
-                script = render(self.template, **dict(flags, **{disabled: False}))
-                self.assertIsNone(unit_file(script, '/etc/systemd/system/kukuri-readiness.timer'))
-                self.assertNotIn('systemctl enable --now kukuri-readiness.timer', script)
-                # 前回構成の timer は常に片付ける。
-                self.assertIn('systemctl disable --now kukuri-readiness.timer 2>/dev/null || true', script)
+        self.assert_units_absent_when('deploy_indexer_stack', 'operator_config_enabled')
+
+
+class RelationAnalyzeTimerTests(StartupTimerTestCase):
+    UNIT = 'kukuri-relation-analyze'
+
+    def test_startup_rerun_after_boot_schedules_relation_analysis(self):
+        # startup は unit を削除・再生成するため service の前回起動記録は無い（#1099）。
+        delay = seconds(self.timer['RandomizedDelaySec'])
+        interval = seconds(self.timer['OnUnitActiveSec'])
+        for started in (60, 15 * 60, 20 * 60, 6 * 3600):
+            with self.subTest(started=started):
+                first = next_elapse(self.timer, 0, started, None)
+                self.assertIsNotNone(first, 'relation analyze timer has no next elapse')
+                # 再実行の直前に成功していた解析からの最大間隔でも readiness の許容内に収まる。
+                self.assertLess(interval + (first + delay - started), RELATION_MAX_AGE_SECS)
+
+    def test_relation_analysis_repeats_at_configured_interval(self):
+        last = 6 * 3600
+        following = next_elapse(self.timer, 0, 3 * 3600, last, now=last)
+        self.assertEqual(following, last + RELATION_ANALYZE_INTERVAL_MINUTES * 60)
+
+    def test_model_reproduces_missing_next_elapse_without_on_active_sec(self):
+        legacy = {key: value for key, value in self.timer.items() if key != 'OnActiveSec'}
+        self.assertIsNone(next_elapse(legacy, 0, 20 * 60, None))
+        self.assertIsNotNone(next_elapse(legacy, 0, 60, None))
+
+    def test_timer_is_started_after_units_are_regenerated(self):
+        self.assert_timer_is_started_after_units_are_regenerated()
+
+    def test_service_keeps_oneshot_analysis_command(self):
+        service = unit_file(self.script, f'{SYSTEMD}/{self.UNIT}.service')
+        self.assertEqual(service['Type'], 'oneshot')
+        self.assertEqual(service['ExecStart'], '$COMPOSE_BIN run --rm cn-relation-analyze')
+
+    def test_relation_analyze_units_require_indexer_stack(self):
+        self.assert_units_absent_when('deploy_indexer_stack')
 
 
 if __name__ == '__main__':
