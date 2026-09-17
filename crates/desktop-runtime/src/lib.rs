@@ -85,7 +85,9 @@ pub use host::{
 pub use requests::CreateAccountRequest;
 // 起動エラーの typed 分類(WP-Q2)。src-tauri は downcast で DatabaseOpen/Migration を判定する。
 pub use kukuri_store::StoreStartupError;
-pub use paths::{resolve_app_data_dir_from_env, resolve_db_path_from_env};
+pub use paths::{
+    AppBuildProfile, default_app_data_dir, resolve_app_data_dir_from_env, resolve_db_path_from_env,
+};
 pub use requests::{
     AbortDomeTransitionRequest, AcceptDomeConnectionProposalRequest, AuthorRequest,
     BookmarkCustomReactionRequest, BookmarkPostRequest, CloseDomeHostingRequest,
