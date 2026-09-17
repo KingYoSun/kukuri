@@ -596,6 +596,44 @@ async fn sharing_consent_required_stops_sending_until_reenabled() {
 }
 
 #[tokio::test]
+async fn reconsent_does_not_send_observations_that_no_longer_match_local_state() {
+    // 提供が止まっている間の解除は積まれないため、止まる前の「有効」が残ったままだと、
+    // 再同意で解除済みの観測を送ってしまう。端末の現在の状態と突き合わせて捨てる。
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let harness = harness().await;
+    harness.enable(false).await;
+    *harness.state.submit_error.lock().await = Some((
+        StatusCode::FORBIDDEN,
+        "TRUST_OBSERVATION_SHARING_CONSENT_REQUIRED".to_string(),
+    ));
+    harness.mute(author('1').as_str()).await;
+    harness.mute(author('2').as_str()).await;
+    harness
+        .runtime
+        .flush_community_node_trust_observations_once()
+        .await;
+    assert!(harness.status().await.needs_reconsent);
+
+    // 止まっている間に author 1 のミュートを解除する（解除は積まれない）。
+    harness
+        .runtime
+        .unmute_author(AuthorRequest {
+            pubkey: author('1'),
+        })
+        .await
+        .expect("unmute");
+
+    *harness.state.submit_error.lock().await = None;
+    harness.enable(false).await;
+    let submitted = harness.submitted().await;
+    assert_eq!(submitted.len(), 1, "{submitted:?}");
+    assert_eq!(submitted[0].target_pubkey.as_str(), author('2'));
+    assert!(submitted[0].active);
+    assert_eq!(harness.status().await.pending_count, 0);
+    harness.finish().await;
+}
+
+#[tokio::test]
 async fn not_offered_node_cannot_be_enabled() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
     let harness = harness().await;

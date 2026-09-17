@@ -9,11 +9,11 @@
 //!
 //! 状態は account DB の隣のファイル（`<db>.trust-observations.json`）に保存する。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
 use kukuri_app_api::SocialConnectionKind;
 use kukuri_cn_protocol::{
@@ -25,7 +25,7 @@ use kukuri_cn_protocol::{
 };
 use kukuri_core::{
     BlockEdgeStatus, KukuriEnvelope, MuteObservationStatus, Pubkey, TrustObservationKind,
-    build_block_edge_envelope, build_mute_observation_envelope,
+    build_block_edge_envelope, build_mute_observation_envelope, parse_trust_observation,
 };
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -143,6 +143,33 @@ fn save_state(db_path: &Path, state: &TrustObservationState) -> Result<()> {
 
 fn pending_key(target: &str, kind: TrustObservationKind) -> String {
     format!("{target}|{}", kind.as_str())
+}
+
+fn parse_pending_key(key: &str) -> Result<(Pubkey, TrustObservationKind)> {
+    let (target, kind) = key
+        .split_once('|')
+        .ok_or_else(|| anyhow!("malformed trust observation key `{key}`"))?;
+    let kind = match kind {
+        "block" => TrustObservationKind::Block,
+        "mute" => TrustObservationKind::Mute,
+        other => bail!("unknown trust observation kind `{other}`"),
+    };
+    Ok((Pubkey::from(target.to_string()), kind))
+}
+
+/// 送信待ちの観測が、この端末の現在の mute / block と一致するか。
+///
+/// 一致しない送信待ち（提供が止まっている間に解除された等）は、送らずに捨てる。
+fn pending_matches_current(
+    key: &str,
+    envelope: &KukuriEnvelope,
+    current: &BTreeSet<String>,
+) -> bool {
+    match parse_trust_observation(envelope) {
+        Ok(Some(observation)) => observation.active == current.contains(key),
+        // 読めない envelope は送らない。
+        _ => false,
+    }
 }
 
 fn sharing_policy(policies: &[CommunityNodePolicyDocument]) -> Option<CommunityNodePolicyDocument> {
@@ -581,37 +608,35 @@ impl DesktopRuntime {
             &consents,
         )?;
 
-        let existing = if request.include_existing {
-            let muted = self
-                .app_service
-                .list_social_connections(SocialConnectionKind::Muted)
-                .await?;
-            let blocking = self
-                .app_service
-                .list_social_connections(SocialConnectionKind::Blocking)
-                .await?;
-            muted
-                .into_iter()
-                .map(|view| (view.author_pubkey, TrustObservationKind::Mute))
-                .chain(
-                    blocking
-                        .into_iter()
-                        .map(|view| (view.author_pubkey, TrustObservationKind::Block)),
-                )
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
+        // 端末の現在の状態。送信待ちの突き合わせに使い、`include_existing` のときは送る対象にもする。
+        let mut current: BTreeSet<String> = BTreeSet::new();
+        for (kind, connection) in [
+            (TrustObservationKind::Mute, SocialConnectionKind::Muted),
+            (TrustObservationKind::Block, SocialConnectionKind::Blocking),
+        ] {
+            for view in self.app_service.list_social_connections(connection).await? {
+                current.insert(pending_key(
+                    normalize_pubkey(view.author_pubkey.as_str())?.as_str(),
+                    kind,
+                ));
+            }
+        }
         {
             let _guard = self.trust_observation_guard.lock().await;
             let mut state = load_state(&self.db_path)?;
             let mut pending = BTreeMap::new();
-            for (target, kind) in existing {
-                let target = Pubkey::from(normalize_pubkey(target.as_str())?);
-                let envelope = self.sign_observation(&mut state, &target, kind, true)?;
-                pending.insert(pending_key(target.as_str(), kind), envelope);
+            if request.include_existing {
+                for key in &current {
+                    let (target, kind) = parse_pending_key(key)?;
+                    let envelope = self.sign_observation(&mut state, &target, kind, true)?;
+                    pending.insert(key.clone(), envelope);
+                }
             }
             let node = state.nodes.entry(base_url.clone()).or_default();
+            // 提供が止まっている間の解除は積まれないので、端末の現在の状態と合わない送信待ちは捨てる
+            // （まだ送っていない観測なので、CN 側に取り消す行も無い）。
+            node.pending
+                .retain(|key, envelope| pending_matches_current(key, envelope, &current));
             node.enabled = true;
             node.needs_reconsent = false;
             node.revocation_pending = false;
