@@ -53,6 +53,8 @@ cargo xtask desktop-visual-test
 - `cargo xtask tauri-check` は `CARGO_TARGET_DIR=target/desktop-tauri-check` を使って `apps/desktop/src-tauri` を warm cache 向けに compile する。
 - `cargo xtask desktop-lint` / `desktop-test` / `desktop-storybook` / `desktop-browser-test` / `desktop-visual-test` は targeted rerun 用。workflow とローカル rerun のどちらでも同じ entrypoint を使う。
 - `cargo xtask cn-check` / `cargo xtask cn-test` は `cn-*` server slice の compile/test 用。
+- `cargo xtask-lite <command>` は xtask を `harness` feature なしで build して実行する alias（`.cargo/config.toml`）。`e2e-smoke` / `scenario` 以外の command は `cargo xtask` と同じ動作で、xtask 自体の build が軽い。CI の harness を使わない job はこちらを使う（#1120）。
+- `cargo xtask ci-prune-target` は `target/` と `apps/desktop/src-tauri/target/` から workspace crate の build 成果物だけを削除し、依存 crate の成果物は残す。CI の Cache Volume の容量対策として各 job の最後に実行する（#1120）。ローカルで実行すると workspace crate が次回再 compile される。
 - `cargo xtask cn-test` は `docker-compose.community-node.yml` の `cn-postgres` を自動起動し、`KUKURI_CN_RUN_INTEGRATION_TESTS=1` を付けて contract/integration test を流す。
 - `cargo xtask scenario community_node_public_connectivity` も `cn-postgres` を自動起動し、in-process の `cn-user-api` / `cn-iroh-relay` を立てて 2 desktop scenario を流す。
 - `cargo xtask scenario community_node_multi_device_connectivity` は same-author 2 desktop の endpoint-bound bootstrap で `post -> reply/thread -> reconnect` を確認する。
