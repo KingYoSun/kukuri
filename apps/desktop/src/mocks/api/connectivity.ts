@@ -31,6 +31,9 @@ type ConnectivityMock = Pick<
   | 'readCommunityNodeTrustUser'
   | 'readCommunityNodeRelationUser'
   | 'listCommunityNodeRelationNeighbors'
+  | 'getCommunityNodeObservationSharing'
+  | 'enableCommunityNodeObservationSharing'
+  | 'disableCommunityNodeObservationSharing'
   | 'getCommunityNodeRelationOptout'
   | 'setCommunityNodeRelationOptout'
   | 'clearCommunityNodeRelationOptout'
@@ -52,6 +55,18 @@ type ConnectivityMock = Pick<
   | 'getContentDisplaySettings'
   | 'setAdultContentDisplayEnabled'
 >;
+
+function observationSharingStatus(baseUrl: string, enabled: boolean) {
+  return {
+    base_url: baseUrl,
+    offered: true,
+    policy: null,
+    enabled,
+    needs_reconsent: false,
+    revocation_pending: false,
+    pending_count: 0,
+  };
+}
 
 export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
   let adultContentDisplayEnabled = false;
@@ -92,6 +107,7 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
   }
 
   const relationOptoutNodes = new Set<string>();
+  const observationSharingNodes = new Set<string>();
   // #975: node 別の索引申請簿。submit した申請を status 読取りが返す(mock 内 memory のみ)。
   const indexingRequestsByNode = new Map<string, IndexingRequestView[]>();
   // 索引対象は seed に依存せず固定する(Storybook の確認面用)。browser seed の general は対象外のままにし、
@@ -381,6 +397,17 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
         new Set(Object.values(postsByTopic).flatMap((posts) => posts.map((post) => post.author_pubkey)))
       );
       return { viewer_pubkey: 'mock-viewer', neighbors };
+    },
+    async getCommunityNodeObservationSharing(baseUrl) {
+      return observationSharingStatus(baseUrl, observationSharingNodes.has(baseUrl));
+    },
+    async enableCommunityNodeObservationSharing(request) {
+      observationSharingNodes.add(request.base_url);
+      return observationSharingStatus(request.base_url, true);
+    },
+    async disableCommunityNodeObservationSharing(baseUrl) {
+      observationSharingNodes.delete(baseUrl);
+      return observationSharingStatus(baseUrl, false);
     },
     async getCommunityNodeRelationOptout(baseUrl) {
       return {

@@ -3,10 +3,11 @@ use kukuri_desktop_runtime::{
     CommunityNodeContentAdvisoryLookupRequest, CommunityNodeContentAdvisoryLookupResult,
     CommunityNodeIndexQueryRequest,
     CommunityNodeIndexingRequest, CommunityNodeIndexingStatusRequest, CommunityNodeManifestFetch,
-    CommunityNodeNodeStatus,
+    CommunityNodeNodeStatus, CommunityNodeObservationSharingStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackResponse, CommunityNodeTesterFeedbackSubmission,
     CommunityNodeUserAdvisoryRequest, CreatePrivateChannelRequest, DiscoveryConfig,
+    EnableCommunityNodeObservationSharingRequest,
     ExportChannelAccessTokenRequest, ExportFriendOnlyGrantRequest, ExportFriendPlusShareRequest,
     ExportPrivateChannelInviteRequest, FetchCommunityNodePoliciesRequest,
     FreezePrivateChannelRequest,
@@ -408,6 +409,47 @@ pub async fn withdraw_community_node_consents(
     state
         .runtime()
         .withdraw_community_node_consents(request)
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: ブロック / ミュート観測の提供状態（任意文書の公開有無を含む）。
+#[tauri::command]
+pub async fn get_community_node_observation_sharing(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeObservationSharingStatus, CommandError> {
+    state
+        .runtime()
+        .get_community_node_observation_sharing(request)
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: 任意文書への同意で観測提供を有効にする。
+#[tauri::command]
+pub async fn enable_community_node_observation_sharing(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, DesktopState>,
+    request: EnableCommunityNodeObservationSharingRequest,
+) -> Result<CommunityNodeObservationSharingStatus, CommandError> {
+    let app_version = app_handle.package_info().version.to_string();
+    state
+        .runtime()
+        .enable_community_node_observation_sharing(request, app_version.as_str())
+        .await
+        .map_err(map_error)
+}
+
+/// #1061: 観測提供を止め、保存済み観測の削除を要求する。
+#[tauri::command]
+pub async fn disable_community_node_observation_sharing(
+    state: tauri::State<'_, DesktopState>,
+    request: CommunityNodeTargetRequest,
+) -> Result<CommunityNodeObservationSharingStatus, CommandError> {
+    state
+        .runtime()
+        .disable_community_node_observation_sharing(request)
         .await
         .map_err(map_error)
 }

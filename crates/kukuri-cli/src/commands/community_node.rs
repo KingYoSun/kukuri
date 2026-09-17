@@ -10,8 +10,9 @@ use kukuri_desktop_runtime::{
     CommunityNodeIndexingStatusRequest, CommunityNodeNodeStatus,
     CommunityNodeRelationNeighborsRequest, CommunityNodeTargetRequest,
     CommunityNodeTesterFeedbackSubmission, CommunityNodeUserAdvisoryRequest,
-    FetchCommunityNodePoliciesRequest, SetCommunityNodeConfigRequest,
-    SetCommunityNodeInviteCodeRequest, SubmitCommunityNodeReportRequest,
+    EnableCommunityNodeObservationSharingRequest, FetchCommunityNodePoliciesRequest,
+    SetCommunityNodeConfigRequest, SetCommunityNodeInviteCodeRequest,
+    SubmitCommunityNodeReportRequest,
 };
 use serde_json::Value;
 use std::sync::Arc;
@@ -216,6 +217,31 @@ impl CommandHandler for Handler {
                     .await
                     .map_err(|error| command_error(error.into()))?,
             ),
+            "get_community_node_observation_sharing" => encode(
+                runtime
+                    .get_community_node_observation_sharing(decode::<CommunityNodeTargetRequest>(
+                        payload,
+                    )?)
+                    .await
+                    .map_err(command_error)?,
+            ),
+            "enable_community_node_observation_sharing" => encode(
+                runtime
+                    .enable_community_node_observation_sharing(
+                        decode::<EnableCommunityNodeObservationSharingRequest>(payload)?,
+                        env!("CARGO_PKG_VERSION"),
+                    )
+                    .await
+                    .map_err(command_error)?,
+            ),
+            "disable_community_node_observation_sharing" => encode(
+                runtime
+                    .disable_community_node_observation_sharing(
+                        decode::<CommunityNodeTargetRequest>(payload)?,
+                    )
+                    .await
+                    .map_err(command_error)?,
+            ),
             "accept_community_node_consents" => encode(safe_status(
                 runtime
                     .accept_community_node_consents(
@@ -284,6 +310,13 @@ pub(super) fn registrations() -> Vec<CommandRegistration> {
         ("set_community_node_relation_optout", Write, false),
         ("clear_community_node_relation_optout", Destructive, false),
         ("accept_community_node_consents", Write, false),
+        ("get_community_node_observation_sharing", Read, false),
+        ("enable_community_node_observation_sharing", Write, false),
+        (
+            "disable_community_node_observation_sharing",
+            Destructive,
+            false,
+        ),
         ("set_community_node_invite_code", Write, true),
     ]
     .into_iter()

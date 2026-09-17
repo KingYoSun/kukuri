@@ -314,6 +314,13 @@ export function DesktopShellSettingsDrawer({
             );
             setCommunityNodeEditorDirty(true);
           }}
+          observationSharing={{
+            getObservationSharing: (baseUrl) => api.getCommunityNodeObservationSharing(baseUrl),
+            enableObservationSharing: (request) =>
+              api.enableCommunityNodeObservationSharing(request),
+            disableObservationSharing: (baseUrl) =>
+              api.disableCommunityNodeObservationSharing(baseUrl),
+          }}
           onNodeContentAdvisoryChange={(id, enabled) => {
             setCommunityNodeInput((current) =>
               current.map((node) =>

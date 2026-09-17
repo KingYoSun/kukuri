@@ -282,6 +282,20 @@
       "reviewPolicies": "Review terms",
       "later": "Later",
       "openSettings": "Open community node settings"
+    },
+    "observationSharing": {
+      "title": "Sharing blocks and mutes",
+      "description": "Share the blocks and mutes you made on this device with this node. Only this node receives them, and they only affect what people close to you see.",
+      "enabled": "Sharing. Stopping asks this node to delete the records it stores.",
+      "disabled": "Not sharing.",
+      "start": "Start sharing",
+      "stop": "Stop sharing",
+      "accept": "Accept and start sharing",
+      "includeExisting": "Also send my current blocks and mutes",
+      "dialogIntro": "Accepting this document starts sharing. It is optional and you can stop at any time.",
+      "needsReconsent": "Sharing stopped because this node's document changed. Accept it again to resume.",
+      "revocationPending": "Waiting for the deletion request to finish. Sharing stays off until it does.",
+      "failed": "Could not change the sharing setting. Try again later."
     }
   },
   "connectivity": {

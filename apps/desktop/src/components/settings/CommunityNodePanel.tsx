@@ -14,6 +14,10 @@ import {
 
 import { CommunityNodeAdvisoryAdoptionField } from './CommunityNodeAdvisoryAdoptionField';
 import { CommunityNodeConsentDialog } from './CommunityNodeConsentDialog';
+import {
+  CommunityNodeObservationSharingField,
+  type CommunityNodeObservationSharingHandlers,
+} from './CommunityNodeObservationSharingField';
 import { useCommunityNodePolicyDialog, type FetchCommunityNodePolicyView, type AcceptCommunityNodePolicyView } from '@/shell/actions/useCommunityNodePolicyDialog';
 import { SettingsActionRow } from './SettingsActionRow';
 import { SettingsDiagnosticList } from './SettingsDiagnosticList';
@@ -41,6 +45,8 @@ type CommunityNodePanelProps = {
   onRefresh: (baseUrl: string) => boolean | void | Promise<boolean | void>;
   onClearToken: (baseUrl: string) => void;
   onSubmitInviteCode: (baseUrl: string, inviteCode: string) => Promise<void>;
+  /// #1061: ブロック / ミュート観測の提供（CN の任意文書への同意）。未指定なら選択肢を出さない。
+  observationSharing?: CommunityNodeObservationSharingHandlers;
   onGetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onSetRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
   onClearRelationOptout?: (baseUrl: string) => Promise<RelationOptoutResponse>;
@@ -70,6 +76,7 @@ export function CommunityNodePanel({
   onRefresh,
   onClearToken,
   onSubmitInviteCode,
+  observationSharing,
   onGetRelationOptout,
   onSetRelationOptout,
   onClearRelationOptout,
@@ -396,6 +403,15 @@ export function CommunityNodePanel({
                 nodeId={node.id}
                 enabled={node.contentAdvisoryEnabled !== false}
                 onChange={(enabled) => onNodeContentAdvisoryChange(node.id, enabled)}
+              />
+            ) : null}
+            {observationSharing && node.saved && node.baseUrl.trim() ? (
+              <CommunityNodeObservationSharingField
+                nodeId={node.id}
+                baseUrl={node.baseUrl}
+                disabled={nodeActionsDisabled}
+                language={i18n.resolvedLanguage ?? i18n.language}
+                {...observationSharing}
               />
             ) : null}
             {relationOptoutAvailable ? (

@@ -97,7 +97,13 @@ pub(super) fn input(name: &str) -> Value {
                 json!("招待コードは専用frameのUTF-8で渡す。空のframeは保存済みコードを解除する。");
             input
         }
-        "authenticate_community_node"
+        "enable_community_node_observation_sharing" => object(
+            json!({"base_url": string(), "policy_version": integer(), "policy_snapshot_revision": nullable(string()), "language": string(), "include_existing": boolean()}),
+            &["base_url", "policy_version"],
+        ),
+        "get_community_node_observation_sharing"
+        | "disable_community_node_observation_sharing"
+        | "authenticate_community_node"
         | "clear_community_node_token"
         | "withdraw_community_node_consents"
         | "refresh_community_node_metadata"
@@ -126,6 +132,13 @@ pub(super) fn output(name: &str) -> Value {
         | "withdraw_community_node_consents"
         | "refresh_community_node_metadata" => community_views::status(),
         "clear_community_node_config" => json!({"type": "null"}),
+        "get_community_node_observation_sharing"
+        | "enable_community_node_observation_sharing"
+        | "disable_community_node_observation_sharing" => view(
+            json!({"base_url": string(), "offered": boolean(), "policy": nullable(community_views::policy_document()),
+                "enabled": boolean(), "needs_reconsent": boolean(), "revocation_pending": boolean(), "pending_count": integer()}),
+            &[],
+        ),
         "fetch_community_node_policies" => community_views::policies(),
         "fetch_community_node_manifest" => view(
             json!({"status": {"enum": ["ok", "absent"]}, "manifest": nullable(community_views::manifest())}),

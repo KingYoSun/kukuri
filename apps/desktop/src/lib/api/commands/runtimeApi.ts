@@ -12,6 +12,8 @@ import type {
   CommunityIndexPostResolveResponse,
   CommunityNodeManifestFetch,
   CommunityNodeNodeStatus,
+  CommunityNodeObservationSharingStatus,
+  EnableCommunityNodeObservationSharingRequest,
   CommunityNodePoliciesResponse,
   CommunityNodeRelationNeighborsRequest,
   CommunityNodeTesterFeedbackResponse,
@@ -921,6 +923,20 @@ export const runtimeApi: DesktopApi = {
     invokeDesktop<RelationNeighborsResponse>('list_community_node_relation_neighbors', {
       request: request satisfies CommunityNodeRelationNeighborsRequest,
     })),
+  getCommunityNodeObservationSharing: command('getCommunityNodeObservationSharing', (baseUrl) =>
+    invokeDesktop<CommunityNodeObservationSharingStatus>('get_community_node_observation_sharing', {
+      request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
+    })),
+  enableCommunityNodeObservationSharing: command('enableCommunityNodeObservationSharing', (request) =>
+    invokeDesktop<CommunityNodeObservationSharingStatus>(
+      'enable_community_node_observation_sharing',
+      { request: request satisfies EnableCommunityNodeObservationSharingRequest }
+    )),
+  disableCommunityNodeObservationSharing: command('disableCommunityNodeObservationSharing', (baseUrl) =>
+    invokeDesktop<CommunityNodeObservationSharingStatus>(
+      'disable_community_node_observation_sharing',
+      { request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest }
+    )),
   getCommunityNodeRelationOptout: command('getCommunityNodeRelationOptout', async (baseUrl) => {
     return invokeDesktop<RelationOptoutResponse>('get_community_node_relation_optout', {
       request: { base_url: baseUrl } satisfies CommunityNodeTargetRequest,
