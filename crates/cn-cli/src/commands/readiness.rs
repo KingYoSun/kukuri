@@ -261,9 +261,10 @@ pub(super) async fn run(
                 "openai-moderation" => {
                     match prepared_openai.as_ref().expect("OpenAI probe prepared") {
                         Ok(probe) => probe.run().await,
-                        Err(_) => ProbeOutcome {
+                        // 準備段階の detail は固定文言と分類だけで組み立てられている。
+                        Err(detail) => ProbeOutcome {
                             pass: false,
-                            detail: "OpenAI/動画decoderの設定・依存を確認してください".into(),
+                            detail: detail.clone(),
                         },
                     }
                 }

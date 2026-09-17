@@ -1,5 +1,6 @@
 //! Bounded CN video extraction. Decoder bytes and files remain transient.
 mod config;
+mod failure;
 mod probe;
 mod process;
 mod sandbox;
@@ -8,12 +9,21 @@ mod workdir;
 use async_trait::async_trait;
 use config::invalid;
 pub use config::{EXTRACTOR_VERSION, VideoExtractConfig};
+pub use failure::{DecoderFailure, classify_failure};
 use kukuri_cn_safety::{
     FetchedMedia, ScanError,
     provider::{VideoFrameExtractor, VideoScanFrames},
 };
 use sha2::{Digest, Sha256};
-use std::{ffi::OsString, sync::Arc, time::Duration};
+use std::{
+    ffi::OsString,
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 use tokio::{
     sync::{Semaphore, watch},
     time::Instant,
@@ -23,6 +33,8 @@ pub struct FfmpegVideoExtractor {
     config: VideoExtractConfig,
     fingerprint: String,
     active: Arc<Semaphore>,
+    /// Set after a decoder exec succeeded under the long deadline; see `warm_up`.
+    warm: Arc<AtomicBool>,
 }
 
 impl FfmpegVideoExtractor {
@@ -55,11 +67,14 @@ impl FfmpegVideoExtractor {
             );
         }
         // Fail startup instead of using a durable filesystem as a fallback.
-        drop(workdir::JobDirectory::create(&config.temporary_root)?);
+        drop(workdir::JobDirectory::create_blocking(
+            &config.temporary_root,
+        )?);
         Ok(Self {
             config,
             fingerprint: format!("{EXTRACTOR_VERSION}:{}", hex::encode(digest.finalize())),
             active: Arc::new(Semaphore::new(1)),
+            warm: Arc::new(AtomicBool::new(false)),
         })
     }
 }
@@ -84,17 +99,18 @@ impl VideoFrameExtractor for FfmpegVideoExtractor {
         let permit =
             tokio::time::timeout(Duration::from_secs(60), self.active.clone().acquire_owned())
                 .await
-                .map_err(|_| ScanError::Timeout("video extraction queue wait exceeded".into()))?
+                .map_err(|_| ScanError::Timeout(failure::QUEUE_TIMEOUT.into()))?
                 .map_err(|_| ScanError::Unavailable("video extractor is stopping".into()))?;
         let input = bytes.to_vec();
         let config = self.config.clone();
+        let warm = self.warm.clone();
         let (cancel_tx, mut cancel_rx) = watch::channel(false);
         let _cancel = CancelOnDrop(cancel_tx);
         // Detaching on caller cancellation is intentional: this owner kills/reaps the child
         // and drops the temporary directory before admitting the next extraction.
         let worker = tokio::spawn(async move {
             let _permit = permit;
-            extract_job(&config, &input, &mut cancel_rx).await
+            extract_job(&config, &input, &warm, &mut cancel_rx).await
         });
         worker
             .await
@@ -102,12 +118,51 @@ impl VideoFrameExtractor for FfmpegVideoExtractor {
     }
 }
 
+/// The first exec of a decoder on a cold page cache can exceed the short probe deadline.
+/// Load it once under the decode deadline so that deadline keeps bounding only the input.
+async fn warm_up(
+    config: &VideoExtractConfig,
+    directory: &Path,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<(), ScanError> {
+    process::run(
+        &config.ffprobe,
+        &args_of(&["-version"]),
+        directory,
+        config.max_frame_bytes,
+        Instant::now() + config.decode_timeout,
+        failure::WARM_UP_TIMEOUT,
+        cancel,
+    )
+    .await
+    .map(drop)
+}
+
+async fn run_probe(
+    config: &VideoExtractConfig,
+    args: &[OsString],
+    directory: &Path,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<Vec<u8>, ScanError> {
+    process::run(
+        &config.ffprobe,
+        args,
+        directory,
+        config.max_frame_bytes,
+        Instant::now() + config.probe_timeout,
+        failure::PROBE_TIMEOUT,
+        cancel,
+    )
+    .await
+}
+
 async fn extract_job(
     config: &VideoExtractConfig,
     bytes: &[u8],
+    warm: &AtomicBool,
     cancel: &mut watch::Receiver<bool>,
 ) -> Result<VideoScanFrames, ScanError> {
-    let job = workdir::JobDirectory::create(&config.temporary_root)?;
+    let job = workdir::JobDirectory::create(&config.temporary_root).await?;
     let input = job.path().join("input.media");
     tokio::fs::write(&input, bytes)
         .await
@@ -135,15 +190,20 @@ async fn extract_job(
     }
     args.extend(args_of(&["-show_streams", "-show_format", "-of", "json"]));
     args.push(input.as_os_str().into());
-    let output = process::run(
-        &config.ffprobe,
-        &args,
-        job.path(),
-        config.max_frame_bytes,
-        Instant::now() + config.probe_timeout,
-        cancel,
-    )
-    .await?;
+    let warmed_now = !warm.load(Ordering::Relaxed);
+    if warmed_now {
+        warm_up(config, job.path(), cancel).await?;
+        warm.store(true, Ordering::Relaxed);
+    }
+    let output = match run_probe(config, &args, job.path(), cancel).await {
+        // The page cache may have been evicted since the last warm-up. Retry once; a slow
+        // input still fails, bounded by two probe deadlines and one warm-up deadline.
+        Err(ScanError::Timeout(reason)) if !warmed_now && reason == failure::PROBE_TIMEOUT => {
+            warm_up(config, job.path(), cancel).await?;
+            run_probe(config, &args, job.path(), cancel).await?
+        }
+        result => result?,
+    };
     let probe = probe::VideoProbe::parse(&output)?;
     let samples = config.sample_times_us(probe.duration_us)?;
     let count = samples.len();
@@ -206,6 +266,7 @@ async fn extract_job(
         job.path(),
         config.max_frame_bytes,
         Instant::now() + config.decode_timeout,
+        failure::DECODE_TIMEOUT,
         cancel,
     )
     .await?;

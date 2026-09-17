@@ -2,7 +2,10 @@ use kukuri_cn_safety::ScanError;
 use std::{ffi::OsString, path::Path, process::Stdio};
 use tokio::{io::AsyncReadExt, process::Command, sync::watch, time::Instant};
 
-use crate::config::invalid;
+use crate::{
+    config::invalid,
+    failure::{CANCELLED, DECODER_EXITED, SPAWN_FAILED},
+};
 
 async fn bounded_output(reader: impl tokio::io::AsyncRead + Unpin) -> Result<Vec<u8>, ScanError> {
     let mut bytes = Vec::new();
@@ -23,10 +26,11 @@ pub async fn run(
     directory: &Path,
     max_file_bytes: usize,
     deadline: Instant,
+    timeout_reason: &'static str,
     cancel: &mut watch::Receiver<bool>,
 ) -> Result<Vec<u8>, ScanError> {
     if *cancel.borrow() {
-        return Err(ScanError::Unavailable("video scan cancelled".into()));
+        return Err(ScanError::Unavailable(CANCELLED.into()));
     }
     let mut command = Command::new(program);
     command
@@ -42,7 +46,7 @@ pub async fn run(
     crate::sandbox::configure(&mut command, max_file_bytes);
     let mut child = command
         .spawn()
-        .map_err(|_| ScanError::Unavailable("cannot start sandboxed decoder".into()))?;
+        .map_err(|_| ScanError::Unavailable(SPAWN_FAILED.into()))?;
     let id = child.id();
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
@@ -50,11 +54,11 @@ pub async fn run(
         result = async {
             let (stdout,_,status) = tokio::try_join!(bounded_output(stdout), bounded_output(stderr),
                 async {child.wait().await.map_err(|_| invalid("decoder wait failed"))})?;
-            if !status.success() { return Err(invalid("decoder failed or exceeded resource limits")); }
+            if !status.success() { return Err(invalid(DECODER_EXITED)); }
             Ok(stdout)
         } => result,
-        _ = tokio::time::sleep_until(deadline) => Err(ScanError::Timeout("video decoder deadline exceeded".into())),
-        _ = cancel.changed() => Err(ScanError::Unavailable("video scan cancelled".into())),
+        _ = tokio::time::sleep_until(deadline) => Err(ScanError::Timeout(timeout_reason.into())),
+        _ = cancel.changed() => Err(ScanError::Unavailable(CANCELLED.into())),
     };
     // Also terminate descendants holding pipes after their original child exited.
     crate::sandbox::kill_group(id);
@@ -72,7 +76,7 @@ mod tests {
         let (_tx, mut rx) = watch::channel(false);
         let output=run(Path::new("/usr/bin/python3"),&[
             "-c".into(),"import socket\ntry:\n socket.socket()\n print('allowed')\nexcept PermissionError:\n print('blocked')".into()
-        ],root.path(),1024,Instant::now()+std::time::Duration::from_secs(5),&mut rx).await.expect("sandboxed Python");
+        ],root.path(),1024,Instant::now()+std::time::Duration::from_secs(5),"test deadline",&mut rx).await.expect("sandboxed Python");
         assert_eq!(output, b"blocked\n");
     }
 }

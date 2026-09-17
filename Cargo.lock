@@ -3207,6 +3207,7 @@ name = "kukuri-cn-cli"
 version = "0.2.5"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "clap",
  "kukuri-cn-core",
@@ -3222,6 +3223,7 @@ dependencies = [
  "reqwest 0.13.4",
  "serde_json",
  "sqlx",
+ "tempfile",
  "tokio",
  "wiremock",
 ]

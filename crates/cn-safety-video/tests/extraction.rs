@@ -31,9 +31,13 @@ mod linux {
 
     #[tokio::test]
     async fn bundled_readiness_decodes_both_containers() {
-        let extractor =
-            kukuri_cn_safety_video::FfmpegVideoExtractor::new(VideoExtractConfig::default())
-                .expect("decoder");
+        // Each test owns its scratch root; the default root is left to deployed processes.
+        let root = private_tmpfs();
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("decoder");
         let frame = extractor
             .readiness_probe()
             .await
@@ -263,10 +267,13 @@ mod linux {
         });
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
         let pid = loop {
-            if let Some(pid) = jobs(root.path())
-                .iter()
-                .find_map(|job| std::fs::read_to_string(job.join("child.pid")).ok())
-            {
+            // The shell creates the file before writing it; an empty read is not a pid yet.
+            if let Some(pid) = jobs(root.path()).iter().find_map(|job| {
+                std::fs::read_to_string(job.join("child.pid"))
+                    .ok()?
+                    .parse::<u32>()
+                    .ok()
+            }) {
                 break pid;
             }
             assert!(tokio::time::Instant::now() < deadline, "decoder must start");
@@ -286,6 +293,231 @@ mod linux {
             !Path::new(&format!("/proc/{pid}")).exists(),
             "child must be reaped"
         );
+    }
+
+    fn hold_root_lock(root: &Path, hold: Duration) -> std::thread::JoinHandle<()> {
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(root.join(".kukuri-video-root-lock"))
+            .expect("root lock file");
+        // Children forked by parallel tests can briefly keep the extractor's closed lock.
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while let Err(error) = lock.try_lock() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "external maintenance holder: {error:?}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::spawn(move || {
+            std::thread::sleep(hold);
+            drop(lock);
+        })
+    }
+
+    #[tokio::test]
+    async fn short_scratch_maintenance_is_waited_for() {
+        let root = private_tmpfs();
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("extractor");
+        let holder = hold_root_lock(root.path(), Duration::from_millis(300));
+        let started = std::time::Instant::now();
+        let error = extractor
+            .extract(b"not a video container")
+            .await
+            .expect_err("garbage must not decode");
+        assert!(
+            matches!(error, kukuri_cn_safety::ScanError::Protocol(_)),
+            "waited for maintenance: {error}"
+        );
+        assert!(started.elapsed() >= Duration::from_millis(250));
+        holder.join().expect("holder");
+        let holder = hold_root_lock(root.path(), Duration::from_millis(300));
+        FfmpegVideoExtractor::new(VideoExtractConfig {
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("startup waits for maintenance");
+        holder.join().expect("holder");
+        assert!(jobs(root.path()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn stuck_scratch_maintenance_is_reported_as_busy() {
+        let root = private_tmpfs();
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("extractor");
+        let holder = hold_root_lock(root.path(), Duration::from_secs(4));
+        let error = extractor
+            .extract(b"not a video container")
+            .await
+            .expect_err("maintenance never finished");
+        assert_eq!(
+            kukuri_cn_safety_video::classify_failure(&error),
+            kukuri_cn_safety_video::DecoderFailure::ScratchBusy
+        );
+        holder.join().expect("holder");
+        assert!(jobs(root.path()).is_empty());
+    }
+
+    /// First exec of the real decoder is slower than the probe deadline, as on a cold page cache.
+    fn cold_start_wrapper(directory: &Path, delay: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let wrapper = directory.join("ffprobe-cold");
+        std::fs::write(
+            &wrapper,
+            format!(
+                "#!/bin/sh\nif [ ! -e \"$0.warm\" ]; then : > \"$0.warm\"; /bin/sleep {delay}; fi\nexec /usr/bin/ffprobe \"$@\"\n"
+            ),
+        )
+        .expect("cold start wrapper");
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700))
+            .expect("executable wrapper");
+        wrapper
+    }
+
+    #[tokio::test]
+    async fn cold_decoder_start_does_not_consume_the_probe_deadline() {
+        let root = private_tmpfs();
+        let programs = tempfile::tempdir().expect("trusted test wrapper directory");
+        let wrapper = cold_start_wrapper(programs.path(), "2");
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            ffprobe: wrapper.clone(),
+            temporary_root: root.path().to_owned(),
+            probe_timeout: Duration::from_secs(1),
+            ..Default::default()
+        })
+        .expect("extractor");
+        extractor
+            .readiness_probe()
+            .await
+            .expect("cold first exec is absorbed before the bounded probe");
+        // Page cache eviction after startup: the next probe is cold again.
+        std::fs::remove_file(wrapper.with_extension("warm")).expect("evict");
+        let bytes = fixture(root.path(), "webm", "0.417", false);
+        extractor
+            .extract(&bytes)
+            .await
+            .expect("probe timeout is retried once after warming the decoder");
+        assert!(jobs(root.path()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn slow_probe_still_times_out_within_bounds() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = private_tmpfs();
+        let programs = tempfile::tempdir().expect("trusted test wrapper directory");
+        let wrapper = programs.path().join("ffprobe-slow");
+        std::fs::write(
+            &wrapper,
+            "#!/bin/sh\ncase \"$*\" in *-version*) ;; *) /bin/sleep 3 ;; esac\nexec /usr/bin/ffprobe \"$@\"\n",
+        )
+        .expect("slow probe wrapper");
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700))
+            .expect("executable wrapper");
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            ffprobe: wrapper,
+            temporary_root: root.path().to_owned(),
+            probe_timeout: Duration::from_secs(1),
+            ..Default::default()
+        })
+        .expect("extractor");
+        let bytes = fixture(root.path(), "mp4", "0.417", false);
+        let started = std::time::Instant::now();
+        let error = extractor.extract(&bytes).await.expect_err("slow probe");
+        assert_eq!(
+            kukuri_cn_safety_video::classify_failure(&error),
+            kukuri_cn_safety_video::DecoderFailure::ProbeTimeout
+        );
+        // One warm-up and one retry at most: two probe deadlines plus a fast warm-up.
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(jobs(root.path()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn decoder_warm_up_deadline_is_classified() {
+        let root = private_tmpfs();
+        let programs = tempfile::tempdir().expect("trusted test wrapper directory");
+        let wrapper = cold_start_wrapper(programs.path(), "4");
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            ffprobe: wrapper,
+            temporary_root: root.path().to_owned(),
+            probe_timeout: Duration::from_secs(1),
+            decode_timeout: Duration::from_secs(2),
+            ..Default::default()
+        })
+        .expect("extractor");
+        let error = extractor.readiness_probe().await.expect_err("cold start");
+        assert_eq!(
+            kukuri_cn_safety_video::classify_failure(&error),
+            kukuri_cn_safety_video::DecoderFailure::WarmUpTimeout
+        );
+        assert!(jobs(root.path()).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_process_spawns_do_not_report_scratch_busy() {
+        const SPAWNERS: usize = 4;
+        use std::os::unix::process::CommandExt;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let root = private_tmpfs();
+        let extractor = FfmpegVideoExtractor::new(VideoExtractConfig {
+            temporary_root: root.path().to_owned(),
+            ..Default::default()
+        })
+        .expect("extractor");
+        let stop = Arc::new(AtomicBool::new(false));
+        // Forked children briefly share every open descriptor until exec, including a
+        // root lock that the extractor has already closed.
+        let spawners: Vec<_> = (0..SPAWNERS)
+            .map(|_| {
+                let stop = stop.clone();
+                std::thread::spawn(move || {
+                    while !stop.load(Ordering::Relaxed) {
+                        let mut command = Command::new("/bin/true");
+                        unsafe {
+                            command.pre_exec(|| {
+                                std::thread::sleep(Duration::from_millis(2));
+                                Ok(())
+                            });
+                        }
+                        let _ = command.status();
+                    }
+                })
+            })
+            .collect();
+        let mut busy = 0;
+        let mut first = None;
+        for _ in 0..2000 {
+            // A non-video signature is rejected right after the job directory is staged.
+            match extractor.extract(b"not a video container").await {
+                Err(kukuri_cn_safety::ScanError::Protocol(_)) => {}
+                Err(error) => {
+                    busy += 1;
+                    first.get_or_insert(error.to_string());
+                }
+                Ok(_) => panic!("garbage must not decode"),
+            }
+        }
+        stop.store(true, Ordering::Relaxed);
+        for spawner in spawners {
+            spawner.join().expect("spawner");
+        }
+        assert_eq!(busy, 0, "transient lock holders: {first:?}");
+        assert!(jobs(root.path()).is_empty());
     }
 
     #[test]
