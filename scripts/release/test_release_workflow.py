@@ -27,15 +27,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Linux + Windows assembly contracts passed", result.stdout)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_linux_refreshes_preinstalled_libgcrypt_before_bundling(self):
+    def test_linux_refreshes_preinstalled_bundled_libraries_before_bundling(self):
         steps = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]["steps"]
         dependencies = next(step for step in steps if step.get("name") == "Linux build dependencies")
         bundle = next(step for step in steps if step.get("name") == "Build and verify AppImage and Deb")
         self.assertLess(steps.index(dependencies), steps.index(bundle))
         commands = dependencies["run"].replace("\\\n", " ").splitlines()
         installs = [shlex.split(command) for command in commands if command.strip().startswith("sudo apt-get install ")]
-        self.assertTrue(any("libgcrypt20" in command and "--no-upgrade" not in command for command in installs),
-                        "refresh the runner's preinstalled libgcrypt20 before collecting exact matching source")
+        # Runner images keep superseded versions whose exact source leaves the APT index (#907, #1094).
+        for package in ("libgcrypt20", "libsqlite3-0"):
+            self.assertTrue(any(package in command and "--no-upgrade" not in command for command in installs),
+                            f"refresh the runner's preinstalled {package} before collecting exact matching source")
 
     def test_release_verify_installs_every_fast_cn_system_dependency(self):
         # linux-verify reruns the CN tests, including real ffmpeg video extraction (#1060).
