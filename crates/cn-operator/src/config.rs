@@ -261,19 +261,19 @@ fn default_zone() -> String {
 }
 
 fn default_cn_user_api_image() -> String {
-    "ghcr.io/kingyosun/kukuri-cn-user-api:latest".to_string()
+    "ghcr.io/kukuri-app/kukuri-cn-user-api:latest".to_string()
 }
 
 fn default_cn_iroh_relay_image() -> String {
-    "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest".to_string()
+    "ghcr.io/kukuri-app/kukuri-cn-iroh-relay:latest".to_string()
 }
 
 fn default_cn_cli_image() -> String {
-    "ghcr.io/kingyosun/kukuri-cn-cli:latest".to_string()
+    "ghcr.io/kukuri-app/kukuri-cn-cli:latest".to_string()
 }
 
 fn default_cn_indexer_image() -> String {
-    "ghcr.io/kingyosun/kukuri-cn-indexer:latest".to_string()
+    "ghcr.io/kukuri-app/kukuri-cn-indexer:latest".to_string()
 }
 
 fn default_arcadedb_image() -> String {

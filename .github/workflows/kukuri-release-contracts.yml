@@ -7,6 +7,7 @@ on:
       - '.github/workflows/kukuri-linux-package.yml'
       - '.github/workflows/kukuri-cli-package.yml'
       - 'scripts/release/**'
+      - 'apps/desktop/src-tauri/tauri.conf.json'
   workflow_dispatch:
 
 permissions:

@@ -134,17 +134,17 @@ GHCR image は `.github/workflows/kukuri-cn-images.yml` が `docker/cn/Dockerfil
 
 | binary | package | GHCR image |
 |---|---|---|
-| `cn-user-api` | `kukuri-cn-user-api` | `ghcr.io/kingyosun/kukuri-cn-user-api:<tag>` |
-| `cn-iroh-relay` | `kukuri-cn-iroh-relay` | `ghcr.io/kingyosun/kukuri-cn-iroh-relay:<tag>` |
-| `cn-cli` | `kukuri-cn-cli` | `ghcr.io/kingyosun/kukuri-cn-cli:<tag>` |
-| `cn-indexer` | `kukuri-cn-indexer` | `ghcr.io/kingyosun/kukuri-cn-indexer:<tag>` |
+| `cn-user-api` | `kukuri-cn-user-api` | `ghcr.io/kukuri-app/kukuri-cn-user-api:<tag>` |
+| `cn-iroh-relay` | `kukuri-cn-iroh-relay` | `ghcr.io/kukuri-app/kukuri-cn-iroh-relay:<tag>` |
+| `cn-cli` | `kukuri-cn-cli` | `ghcr.io/kukuri-app/kukuri-cn-cli:<tag>` |
+| `cn-indexer` | `kukuri-cn-indexer` | `ghcr.io/kukuri-app/kukuri-cn-indexer:<tag>` |
 
 `cn-indexer` image（#614）は production feature 構成（Project Arachnid Shield + OpenAI-compatible VLM。mock は選択不能）で build され、workflow が publish 前に `validate-config` smoke（provider 解決 / slot 制約 / credential env 欠落 / credential 非漏出）を通す。credential / endpoint / 署名鍵は image に含まれないため、デプロイ時に runtime secret（env）として注入する。手元でも次で構成だけを検証できる:
 
 ```bash
 docker run --rm -e COMMUNITY_NODE_DATABASE_URL=... -e COMMUNITY_NODE_CHANNEL_SECRET_KEY=... \
   -e COMMUNITY_NODE_INDEXER_EXTERNAL_RELAY_URLS=... \
-  ghcr.io/kingyosun/kukuri-cn-indexer:<tag> validate-config
+  ghcr.io/kukuri-app/kukuri-cn-indexer:<tag> validate-config
 ```
 
 `cn-indexer` は low-cost Terraform stack へ `deploy_indexer_stack=true`（#615）で追加する。手順は後述の「index / moderation stack のデプロイ」を参照。
@@ -164,17 +164,17 @@ workflow は PR では build のみ、`main` push / `develop` push / `v*` tag pu
 `terraform.tfvars` には、例えば以下を指定する:
 
 ```hcl
-cn_user_api_image   = "ghcr.io/kingyosun/kukuri-cn-user-api:latest"
-cn_iroh_relay_image = "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest"
-cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
-cn_indexer_image    = "ghcr.io/kingyosun/kukuri-cn-indexer:latest"
+cn_user_api_image   = "ghcr.io/kukuri-app/kukuri-cn-user-api:latest"
+cn_iroh_relay_image = "ghcr.io/kukuri-app/kukuri-cn-iroh-relay:latest"
+cn_cli_image        = "ghcr.io/kukuri-app/kukuri-cn-cli:latest"
+cn_indexer_image    = "ghcr.io/kukuri-app/kukuri-cn-indexer:latest"
 ```
 
-本番 apply では `latest` より digest 固定（例: `ghcr.io/kingyosun/kukuri-cn-user-api@sha256:...`）を推奨する。
+本番 apply では `latest` より digest 固定（例: `ghcr.io/kukuri-app/kukuri-cn-user-api@sha256:...`）を推奨する。
 全 kukuri image の digest は次で確認できる（`cn_*_image` 変数は `@sha256:` 参照をそのまま受け付ける）:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/kingyosun/kukuri-cn-indexer:latest --format '{{println .Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/kukuri-app/kukuri-cn-indexer:latest --format '{{println .Manifest.Digest}}'
 ```
 
 digestはworkflow logの先頭の `sha256:` から転記せず、workflow成功後のregistry manifestから取得する。
@@ -183,7 +183,7 @@ GHCRに存在しない。取得した参照はapply前に必ず解決確認す�
 
 ```bash
 docker manifest inspect \
-  ghcr.io/kingyosun/kukuri-cn-indexer@sha256:<registryで確認したdigest> >/dev/null
+  ghcr.io/kukuri-app/kukuri-cn-indexer@sha256:<registryで確認したdigest> >/dev/null
 ```
 
 ## low-cost deploy
@@ -288,7 +288,7 @@ safety:
 deploy:
   # ...既存の設定...
   deploy_indexer_stack: true
-  cn_indexer_image: ghcr.io/kingyosun/kukuri-cn-indexer:latest   # 本番は digest 固定
+  cn_indexer_image: ghcr.io/kukuri-app/kukuri-cn-indexer:latest   # 本番は digest 固定
   indexer_data_disk_gb: 10
   relation_analyze_interval_minutes: 60
   channel_secret_key_secret_id: kukuri-cn-channel-secret-key

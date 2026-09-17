@@ -7,9 +7,9 @@ api_domain   = "api.example.com"
 relay_domain = "iroh-relay.example.com"
 acme_email   = "ops@example.com"
 
-cn_user_api_image   = "ghcr.io/kingyosun/kukuri-cn-user-api:latest"
-cn_iroh_relay_image = "ghcr.io/kingyosun/kukuri-cn-iroh-relay:latest"
-cn_cli_image        = "ghcr.io/kingyosun/kukuri-cn-cli:latest"
+cn_user_api_image   = "ghcr.io/kukuri-app/kukuri-cn-user-api:latest"
+cn_iroh_relay_image = "ghcr.io/kukuri-app/kukuri-cn-iroh-relay:latest"
+cn_cli_image        = "ghcr.io/kukuri-app/kukuri-cn-cli:latest"
 
 jwt_secret_id = "kukuri-cn-jwt-secret"
 

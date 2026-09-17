@@ -221,7 +221,7 @@ manifest:
 #   # index / moderation stack（cn-indexer + ArcadeDB + relation 定期解析。#615, 任意）。
 #   # secret は値ではなく Secret Manager の ID のみ。credential / 鍵の実値は VM 起動時に取得される。
 #   deploy_indexer_stack: true
-#   cn_indexer_image: ghcr.io/kingyosun/kukuri-cn-indexer:latest
+#   cn_indexer_image: ghcr.io/kukuri-app/kukuri-cn-indexer:latest
 #   arcadedb_image: arcadedata/arcadedb:26.8.1
 #   indexer_data_disk_gb: 10
 #   relation_analyze_interval_minutes: 60

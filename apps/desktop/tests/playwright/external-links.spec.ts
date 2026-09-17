@@ -19,7 +19,7 @@ for (const input of ['pointer', 'keyboard'] as const) {
       await link.click();
     }
     const popup = await popupPromise;
-    await expect(popup).toHaveURL('https://github.com/KingYoSun/kukuri/releases/latest');
+    await expect(popup).toHaveURL('https://github.com/kukuri-app/kukuri/releases/latest');
     await expect(popup).toHaveTitle('Resource fixture');
     await expect(page).toHaveURL(originalUrl);
     await expect(dialog).toBeVisible();

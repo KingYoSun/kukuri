@@ -18,12 +18,12 @@ try {
 
 ### Features
 
-- topic一覧にsearch/filter/sort機能を追加 ([#340](https://github.com/KingYoSun/kukuri/pull/340))
+- topic一覧にsearch/filter/sort機能を追加 ([#340](https://github.com/kukuri-app/kukuri/pull/340))
 "@ | Set-Content -LiteralPath $sectionPath -Encoding UTF8
 
   & $scriptPath `
     -Tag "v0.1.0-preview.1" `
-    -Repository "KingYoSun/kukuri" `
+    -Repository "kukuri-app/kukuri" `
     -Version "0.1.0" `
     -InputDir $inputDir `
     -OutputDir $outputDir `
@@ -50,7 +50,7 @@ try {
   if ($platform.signature -ne "test-signature") {
     throw "Manifest signature did not embed .sig contents"
   }
-  if ($platform.url -ne "https://github.com/KingYoSun/kukuri/releases/download/v0.1.0-preview.1/kukuri_0.1.0_x64.zip") {
+  if ($platform.url -ne "https://github.com/kukuri-app/kukuri/releases/download/v0.1.0-preview.1/kukuri_0.1.0_x64.zip") {
     throw "Unexpected updater URL: $($platform.url)"
   }
 
@@ -81,7 +81,7 @@ try {
   if ($notes -notmatch '## Changes') {
     throw "Release notes are missing the Changes section"
   }
-  if ($notes -notmatch '\[#340\]\(https://github\.com/KingYoSun/kukuri/pull/340\)') {
+  if ($notes -notmatch '\[#340\]\(https://github.com/kukuri-app/kukuri/pull/340\)') {
     throw "Release notes did not embed the changelog PR link"
   }
   if ($notes -notmatch '## Included') {

@@ -356,7 +356,7 @@ variable "deploy_indexer_stack" {
 variable "cn_indexer_image" {
   description = "cn-indexer の公開 container image（GHCR、tag/digest 込み）。"
   type        = string
-  default     = "ghcr.io/kingyosun/kukuri-cn-indexer:latest"
+  default     = "ghcr.io/kukuri-app/kukuri-cn-indexer:latest"
 }
 
 variable "arcadedb_image" {

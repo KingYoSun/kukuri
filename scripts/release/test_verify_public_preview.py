@@ -31,12 +31,12 @@ class PublicTests(unittest.TestCase):
                 return public.file_record(root, name)["sha256"]
 
             with patch.object(public, "validate_output", return_value=[]):
-                result = public.verify(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, fetch)
+                result = public.verify(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, fetch)
                 self.assertEqual(result["public_files"], 7)
                 self.assertEqual(len(calls), 8)
                 for broken in ("linux.AppImage", "linux.deb", "windows.exe", names[-1]):
                     with self.subTest(broken=broken), self.assertRaisesRegex(ValueError, "Published artifact mismatch"):
-                        public.verify(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40,
+                        public.verify(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40,
                                       lambda url: "0" * 64 if url.endswith(broken) else fetch(url))
 
     def test_stale_latest_manifest_stops_before_bundle_download(self):
@@ -51,7 +51,7 @@ class PublicTests(unittest.TestCase):
 
             with patch.object(public, "validate_output", return_value=[]):
                 with self.assertRaises(ValueError):
-                    public.verify(root, "v0.1.8-preview.2", "KingYoSun/kukuri", "a" * 40, fetch)
+                    public.verify(root, "v0.1.8-preview.2", "kukuri-app/kukuri", "a" * 40, fetch)
             self.assertEqual(len(calls), 1)
             self.assertIn("/releases/latest/download/latest-preview.json", calls[0])
 

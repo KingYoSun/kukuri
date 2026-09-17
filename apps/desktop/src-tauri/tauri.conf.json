@@ -42,7 +42,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/KingYoSun/kukuri/releases/latest/download/latest-preview.json"
+        "https://github.com/kukuri-app/kukuri/releases/latest/download/latest-preview.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4QzVBN0U3NEIyOEQyM0YKUldRLzBpaEw1NmZGdUNPemlJOWVIMWpGQUZKbDN5NGhuenJoNm94ZU15a05KWk1EZHNDUGlObHAK"
     }

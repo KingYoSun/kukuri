@@ -19,7 +19,7 @@ import type { DesktopLogsStatus } from '@/shell/useDesktopLogs';
 import { SettingsActionRow } from './SettingsActionRow';
 
 export const TROUBLESHOOTING_RUNBOOK_URL =
-  'https://github.com/KingYoSun/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md';
+  'https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md';
 
 export type DeveloperLogViewerProps = {
   status: DesktopLogsStatus;
