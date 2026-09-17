@@ -3,19 +3,28 @@ from pathlib import Path
 import re
 import unittest
 
-TEMPLATE = Path(__file__).resolve().parents[1] / 'modules/gcp-vm-compose/templates/startup.sh.tftpl'
+ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY = ROOT.parents[1]
+TEMPLATE = ROOT / 'modules/gcp-vm-compose/templates/startup.sh.tftpl'
+INTERVAL_VARIABLE_FILES = (
+    ROOT / 'modules/gcp-vm-compose/variables.tf',
+    ROOT / 'envs/low-cost/variables.tf',
+)
+CN_CLI_MAIN = REPOSITORY / 'crates/cn-cli/src/main.rs'
+CN_OPERATOR_DEPLOY = REPOSITORY / 'crates/cn-operator/src/deploy.rs'
 DIRECTIVE = re.compile(r'%\{ (if (\w+)(?: != "")?|else|endif) ~\}\n?')
 DURATION = re.compile(r'^(\d+)(min|s)?$')
 ACTIVATION_TTL_SECS = 900
-# cn-cli readiness の既定 --relation-max-age-secs と、terraform 変数の既定値。
-RELATION_MAX_AGE_SECS = 7200
+# terraform 変数の既定値。
 RELATION_ANALYZE_INTERVAL_MINUTES = 60
+# 上限の間隔でも残す、解析の実行時間と boot にかかる時間の余裕（#1101）。
+RELATION_ANALYSIS_MARGIN_SECS = 14 * 60
 SYSTEMD = '/etc/systemd/system'
 
 
-def render(template, **flags):
+def render(template, interval_minutes=RELATION_ANALYZE_INTERVAL_MINUTES, **flags):
     """startup.sh.tftpl の条件分岐と timer 間隔の変数だけを展開する（他の `${...}` は unit では使わない）。"""
-    template = template.replace('${relation_analyze_interval_minutes}', str(RELATION_ANALYZE_INTERVAL_MINUTES))
+    template = template.replace('${relation_analyze_interval_minutes}', str(interval_minutes))
     output, stack, pos = [], [], 0
     for match in DIRECTIVE.finditer(template):
         if all(stack):
@@ -30,6 +39,25 @@ def render(template, **flags):
     assert not stack, 'unbalanced template directives'
     output.append(template[pos:])
     return ''.join(output)
+
+
+def relation_max_age_secs():
+    """readiness service が使う cn-cli readiness の既定 --relation-max-age-secs。"""
+    source = CN_CLI_MAIN.read_text(encoding='utf-8')
+    match = re.search(r'default_value_t = (\d+)\)\]\s*relation_max_age_secs: i64', source)
+    assert match, 'relation_max_age_secs default not found'
+    return int(match.group(1))
+
+
+def interval_bounds(path):
+    """terraform 変数 relation_analyze_interval_minutes の validation が許す範囲。"""
+    source = path.read_text(encoding='utf-8')
+    block = re.search(r'variable "relation_analyze_interval_minutes" \{(.*?)\n\}', source, re.S)
+    assert block, f'variable not found in {path}'
+    match = re.search(r'var\.relation_analyze_interval_minutes >= (\d+) && '
+                      r'var\.relation_analyze_interval_minutes <= (\d+)', block.group(1))
+    assert match, f'interval bounds not validated in {path}'
+    return int(match.group(1)), int(match.group(2))
 
 
 def unit_file(script, path):
@@ -161,7 +189,32 @@ class RelationAnalyzeTimerTests(StartupTimerTestCase):
                 first = next_elapse(self.timer, 0, started, None, last_trigger=last_trigger)
                 self.assertIsNotNone(first, 'relation analyze timer has no next elapse')
                 # 再実行の直前に成功していた解析からの最大間隔でも readiness の許容内に収まる。
-                self.assertLess(interval + (first + delay - started), RELATION_MAX_AGE_SECS)
+                self.assertLess(interval + (first + delay - started), relation_max_age_secs())
+
+    def test_interval_upper_bound_keeps_relation_analysis_recent(self):
+        # 上限の間隔でも、boot / startup 再実行の直後に初回の解析が終わるまでに
+        # readiness の許容時間を超えない（#1101）。
+        bounds = {interval_bounds(path) for path in INTERVAL_VARIABLE_FILES}
+        self.assertEqual(len(bounds), 1, f'module and env bounds differ: {bounds}')
+        (_, upper), = bounds
+        timer = unit_file(render(self.template, interval_minutes=upper, **self.flags),
+                          f'{SYSTEMD}/{self.UNIT}.timer')
+        delay = seconds(timer['RandomizedDelaySec'])
+        interval = seconds(timer['OnUnitActiveSec'])
+        self.assertEqual(interval, upper * 60)
+        # 定常状態: 前回の開始から interval + 遅延後に次の解析が始まる。
+        # boot 直後: 前回の成功から最大 interval 後に停止し、boot の OnBootSec + 遅延後に始まる。
+        worst_start = max(interval + delay, interval + next_elapse(timer, 0, 30, None) + delay)
+        self.assertLessEqual(worst_start + RELATION_ANALYSIS_MARGIN_SECS, relation_max_age_secs())
+        # 上限を 1 分超えると、同じ余裕を残せない。
+        self.assertGreater(worst_start + 60 + RELATION_ANALYSIS_MARGIN_SECS, relation_max_age_secs())
+
+    def test_operator_config_uses_same_interval_bounds(self):
+        (lower, upper), = {interval_bounds(path) for path in INTERVAL_VARIABLE_FILES}
+        source = CN_OPERATOR_DEPLOY.read_text(encoding='utf-8')
+        match = re.search(r'const RELATION_ANALYZE_INTERVAL_MINUTES_RANGE: RangeInclusive<u32> = (\d+)\.\.=(\d+);', source)
+        self.assertIsNotNone(match, 'cn-operator must define the interval range')
+        self.assertEqual((int(match.group(1)), int(match.group(2))), (lower, upper))
 
     def test_startup_rerun_after_boot_window_runs_analysis_immediately(self):
         # Persistent が無いため trigger 記録は戻らず、過ぎた OnBootSec は即時に実行される。

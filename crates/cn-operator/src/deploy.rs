@@ -10,10 +10,30 @@
 //! - 出力は wall-clock 非依存で、同じ config からは同じ tfvars が得られる（決定論）。
 
 use std::fmt::Write as _;
+use std::ops::RangeInclusive;
 
 use anyhow::{Result, bail};
 
 use crate::config::{DeployConfig, DeployProfile, ResolvedConfig};
+
+/// 関係解析の実行間隔（分）の許容範囲。Terraform の変数検証と同じ値にする。
+///
+/// readiness は解析の成功を既定 7200 秒以内に要求する。boot / startup 再実行の直後は初回まで
+/// 最大 16 分かかるため、解析と boot の所要時間に 14 分を残す（#1101）。
+const RELATION_ANALYZE_INTERVAL_MINUTES_RANGE: RangeInclusive<u32> = 1..=90;
+
+/// `deploy.relation_analyze_interval_minutes` が許容範囲内かを検証する。
+pub(crate) fn validate_relation_analyze_interval(minutes: u32) -> Result<()> {
+    let range = RELATION_ANALYZE_INTERVAL_MINUTES_RANGE;
+    if !range.contains(&minutes) {
+        bail!(
+            "deploy.relation_analyze_interval_minutes は {}〜{} で指定してください（readiness が求める関係解析の成功記録 7200 秒以内を保つため）",
+            range.start(),
+            range.end()
+        );
+    }
+    Ok(())
+}
 
 /// operator-config から `terraform.tfvars`（HCL 文字列）を生成する。
 ///

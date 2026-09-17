@@ -290,7 +290,7 @@ deploy:
   deploy_indexer_stack: true
   cn_indexer_image: ghcr.io/kukuri-app/kukuri-cn-indexer:latest   # 本番は digest 固定
   indexer_data_disk_gb: 10
-  relation_analyze_interval_minutes: 60
+  relation_analyze_interval_minutes: 60   # 1〜90（readiness の関係解析 7200 秒以内を保つ上限。#1101）
   channel_secret_key_secret_id: kukuri-cn-channel-secret-key
   arcadedb_password_secret_id: kukuri-cn-arcadedb-password
   arachnid_username_secret_id: kukuri-cn-arachnid-username

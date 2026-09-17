@@ -1006,9 +1006,7 @@ fn validate_indexer_stack(resolved: &ResolvedConfig, deploy: &DeployConfig) -> R
         return Ok(());
     }
 
-    if deploy.relation_analyze_interval_minutes == 0 {
-        bail!("deploy.relation_analyze_interval_minutes は 1 以上で指定してください");
-    }
+    crate::deploy::validate_relation_analyze_interval(deploy.relation_analyze_interval_minutes)?;
 
     let require_secret = |field: &str, value: &Option<String>| -> Result<()> {
         if value
