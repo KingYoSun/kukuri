@@ -178,7 +178,8 @@ describe('DomeHostingPanel Community Node consent', () => {
 
     expect(onFetch).toHaveBeenCalledWith('https://node.example', 'en');
     expect(roomActions.delegateHosting).not.toHaveBeenCalled();
-    expect(await screen.findByText('Builder preview policy body.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Builder Preview' }));
+    expect(screen.getByText('Builder preview policy body.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Accept' }));
 
     await waitFor(() =>

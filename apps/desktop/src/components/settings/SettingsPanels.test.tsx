@@ -258,6 +258,7 @@ test('community node consent dialog shows policy body, version, and update notic
   await user.click(screen.getAllByRole('button', { name: 'Consents' })[0]);
 
   const consentDialog = await screen.findByRole('dialog');
+  await user.click(within(consentDialog).getByRole('button', { name: 'Terms of Service' }));
   expect(
     within(consentDialog).getByText('You must follow the community node terms of service.')
   ).toBeInTheDocument();

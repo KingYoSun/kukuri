@@ -205,6 +205,7 @@
       "optional": "可选",
       "updatedBadge": "已更新",
       "updatedDetail": "已从 v{{previous}} 更新至 v{{current}}。",
+      "updatedContentDetail": "内容已更新。",
       "effectiveDate": "生效日期 {{date}}",
       "language": "语言 {{language}}",
       "referenceTranslation": "这是参考译文；以正文为准。",

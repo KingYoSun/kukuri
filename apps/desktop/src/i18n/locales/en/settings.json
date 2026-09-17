@@ -205,6 +205,7 @@
       "optional": "Optional",
       "updatedBadge": "Updated",
       "updatedDetail": "Updated from v{{previous}} to v{{current}}.",
+      "updatedContentDetail": "The content was updated.",
       "effectiveDate": "Effective {{date}}",
       "language": "Language {{language}}",
       "referenceTranslation": "This is a reference translation. The authoritative text prevails.",
