@@ -51,6 +51,9 @@ for (const width of [1600, 390]) {
       await page.keyboard.press('Escape');
       await expect(timeline.locator('.shell-column-primary-action')).toBeFocused();
       const primary = timeline.locator('.shell-column-primary-action');
+      // Check keyboard focus independently of the pointer left by the composer click.
+      await page.mouse.move(0, 0);
+      await expect.poll(() => primary.evaluate((element) => element.matches(':hover'))).toBe(false);
       await expect(primary).toHaveCSS('color', 'rgb(32, 22, 14)');
       await expect(primary).toHaveCSS('background-color', 'rgb(215, 125, 69)');
       await expect(primary).toHaveCSS('outline-style', 'solid');

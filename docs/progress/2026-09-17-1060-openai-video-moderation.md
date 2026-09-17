@@ -235,3 +235,17 @@ MP4単一frame 3,241ms、WebM単一frame 932ms、音声付き12秒59,744ms、60�
 
 同じCIで既存 `theme-palette.spec.ts` の色判定も失敗したが、desktopの製品コードとtestに今回のdiffはない。
 fixture/期待値の変更やskipで回避せず、更新headの通常CIでもう一度確認する。
+
+### 補助CIテストの入力状態を固定
+
+必須CIの `theme-palette.spec.ts`（390px）では、composerをclick→Escapeで閉じた後、
+ポインタがprimary button上に残り、通常色 `#d77d45` の検査にhover色 `#c86f38` が混ざっていた。
+製品CSSはDESIGNのdefault/hover契約どおりであり、このIssueのdesktop製品差分は0。
+CIと同じhover状態に固定して遷移完了を待つと、元の通常色assertionが同じ値で失敗することを再現した。
+CI保守として検査前にポインタを外し、`:hover` がfalseである前提を明示してから既存のkeyboard focusの検査を行う。
+色・outline・draft・Column維持のassertion、timeout、snapshot baselineは変更しない。
+
+- 変更はtest前提のみ（製品挙動・layout/tokenの変更はない）。UI review recordやTauri固有の実機確認は非該当。
+- Playwright Chromiumの1600px / 390px、light/dark、invalid保存値の3caseを3回ずつ、計9件成功（22.3秒）。
+- 対象specのESLintとfrontend TypeScript型検査も成功。
+- 最終headの通常CIでも全browser / visualレーンを確認する。
