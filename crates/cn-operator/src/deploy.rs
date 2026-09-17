@@ -274,6 +274,8 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         "vlm_api_key_secret_id        = {}",
         hcl_string(&optional_secret(&deploy.vlm_api_key_secret_id))
     );
+    // secret ID 群と同じ段落に置くと terraform fmt が `=` を揃え直すため、段落を分ける（#1082）。
+    let _ = writeln!(out);
     let _ = writeln!(
         out,
         "moderation = {{ api_base_url = {}, model = {}, config_version = {}, rpm = {}, rpd = {}, tpm = {}, image_tokens = {} }}",

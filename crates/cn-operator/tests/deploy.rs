@@ -457,6 +457,54 @@ fn dedicated_moderation_deploy_requires_secret_and_general_slot() {
     }
 }
 
+/// terraform fmt と同じく、空行区切りの段落ごとに top-level attribute の `=` が
+/// 「段落内最長 key + 1 空白」の桁に揃っていることを確認する（#1082）。
+fn assert_tfvars_fmt_aligned(tfvars: &str) {
+    for paragraph in tfvars.split("\n\n") {
+        let attrs: Vec<(&str, &str)> = paragraph
+            .lines()
+            .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+            .map(|line| {
+                assert!(
+                    !line.starts_with(char::is_whitespace),
+                    "top-level 以外の行は想定外: {line:?}"
+                );
+                line.split_once('=')
+                    .unwrap_or_else(|| panic!("attribute 行ではない: {line:?}"))
+            })
+            .collect();
+        let Some(width) = attrs.iter().map(|(key, _)| key.trim_end().len()).max() else {
+            continue;
+        };
+        for (key, value) in attrs {
+            assert_eq!(
+                key.len(),
+                width + 1,
+                "`=` の桁が段落内で揃っていない: {key:?}\n段落:\n{paragraph}"
+            );
+            assert!(
+                value.starts_with(' ') && !value.starts_with("  "),
+                "`=` の後は 1 空白: {value:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn generated_tfvars_matches_terraform_fmt_alignment() {
+    let default = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
+    let moderation = config_with_indexer_stack(
+        "  vlm_api_key_secret_id: existing-vlm-key\n  moderation:\n    config_version: rollout-2\n    rpm: 300\n",
+        "",
+    );
+    for yaml in [default, moderation] {
+        let resolved = load_and_validate(&yaml).unwrap();
+        let tfvars = generate_tfvars(&resolved).unwrap();
+        assert!(tfvars.contains("moderation"), "tfvars:\n{tfvars}");
+        assert_tfvars_fmt_aligned(&tfvars);
+    }
+}
+
 #[test]
 fn machine_type_defaults_to_e2_medium() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
