@@ -147,6 +147,27 @@ impl SafetyProvider for VlmModerationProvider {
     }
 
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
+        self.scan_with_reference(request, None).await
+    }
+
+    async fn scan_guarded(
+        &self,
+        request: &ProviderScanRequest,
+        guard: &dyn kukuri_cn_safety::provider::ScanReferenceGuard,
+    ) -> Result<ProviderScanResult, ScanError> {
+        self.scan_with_reference(request, Some(guard)).await
+    }
+}
+
+impl VlmModerationProvider {
+    async fn scan_with_reference(
+        &self,
+        request: &ProviderScanRequest,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
+    ) -> Result<ProviderScanResult, ScanError> {
+        if let Some(guard) = guard {
+            guard.check().await?;
+        }
         let text = request
             .text
             .as_deref()
@@ -181,6 +202,9 @@ impl SafetyProvider for VlmModerationProvider {
             None => None,
         };
 
+        if let Some(guard) = guard {
+            guard.check().await?;
+        }
         let moderation = self
             .client
             .moderate(&VlmScanInput {

@@ -1,0 +1,100 @@
+{
+  "date": "2026-09-17",
+  "image": "kukuri-1060-cn-cli:phase2",
+  "image_digest": "sha256:5f354e023a9b3cd1a93d53a175e8b731e5f692cff8d6ba01f1103a7aac300c4f",
+  "test_source_commit": "28110c2c94af9e7e252152be6e651289dacf7b78",
+  "cold": [
+    {
+      "api_attempts": 2,
+      "cold_ms": 3725,
+      "decode_ms": 106,
+      "fixture": "mp4-single",
+      "frames": 1,
+      "input_bytes": 1558
+    },
+    {
+      "api_attempts": 1,
+      "cold_ms": 1490,
+      "decode_ms": 91,
+      "fixture": "webm-single",
+      "frames": 1,
+      "input_bytes": 577
+    },
+    {
+      "api_attempts": 3,
+      "cold_ms": 59397,
+      "decode_ms": 137,
+      "fixture": "mp4-audio-12s",
+      "frames": 3,
+      "input_bytes": 46370
+    },
+    {
+      "api_attempts": 8,
+      "cold_ms": 177506,
+      "decode_ms": 282,
+      "fixture": "mp4-60s",
+      "frames": 8,
+      "input_bytes": 21857
+    }
+  ],
+  "reused_after_service_restart_and_new_author": [
+    {
+      "api_attempts": 0,
+      "decode": 0,
+      "fetch": 0,
+      "millis": 159
+    },
+    {
+      "api_attempts": 0,
+      "decode": 0,
+      "fetch": 0,
+      "millis": 69
+    },
+    {
+      "api_attempts": 0,
+      "decode": 0,
+      "fetch": 0,
+      "millis": 62
+    },
+    {
+      "api_attempts": 0,
+      "decode": 0,
+      "fetch": 0,
+      "millis": 63
+    }
+  ],
+  "cold_api_attempts": 14,
+  "production_cli_readiness_api_attempts": 2,
+  "readiness_provider_status": "pass",
+  "readiness_overall_status": "fail (isolated fixture has no public indexer/known-CSAM deployment)",
+  "missing_key_after_cached_pass": {
+    "provider_status": "fail",
+    "additional_api_reservations": 0
+  },
+  "boundaries": {
+    "real": [
+      "PostgreSQL migrations/cache/budget/artifacts/index truth",
+      "signed post ingest",
+      "bounded BlobMediaFetcher",
+      "FFmpeg/ffprobe in production Docker runtime",
+      "OpenAI /v1/moderations"
+    ],
+    "test_doubles": [
+      "in-memory docs replica/blob source/search projection",
+      "known-hash no-known-match for benign fixtures"
+    ]
+  },
+  "inputs": "Only locally generated blue video, synthetic sine audio (not sent), and benign text; no user media",
+  "operator_limits": {
+    "rpm": 500,
+    "rpd": 10000,
+    "tpm": 10000,
+    "method": "read-only operator Limits UI"
+  },
+  "node_budget": {
+    "rpm": 400,
+    "rpd": 8000,
+    "tpm": 8000,
+    "image_tokens": 2048
+  }
+}

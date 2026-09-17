@@ -104,7 +104,7 @@ PR [#1079](https://github.com/kukuri-app/kukuri/pull/1079)を `4bc44d40a942339b6
 | P2-2 | ingest → `scan_or_reuse_guarded` → subject reuse / content coordinator | lookup前・関連付け前にguard。`verdict_reuse_contracts`、`reference_guard_contracts` |
 | P2-3 | service `scan_or_reuse` / `scan_and_record` / `scan_and_record_for_author` → orchestrator / recording | 未公開の内部service入口。ingestはguard付き入口のみ。既存service/orchestrator/appeal contracts |
 | P2-4 | coordinator → ContentScanStore load/claim/complete/release | 完了provider/capability/coverage構成、owner fencing、320秒lease。`content_cache`、`moderation_content` |
-| P2-5 | OpenAI provider scan/scan_guarded → bounded fetch → decoder → shared client | queue前のbytes取得なし、fetch後・各frame/retry直前の参照guard。`provider_contract` |
+| P2-5 | OpenAI/Arachnid/VLM provider scan/scan_guarded → bounded fetch → decoder → shared client | queue前のbytes取得なし、fetch後・各frame/retry直前の参照guard。`provider_contract` |
 | P2-6 | OpenAI client moderate/moderate_guarded → PgModerationBudget → HTTP send | 本文・静止画・動画・probe・retryの全attemptを同一DB予算で予約。`moderation_content` atomic budget |
 | P2-7 | report/再利用 → `record_signals` → signal/event/verdict/advisory/author persistence | 内容cacheにauthor/scope/appealを含めない。複数categoryは個別signal。`content_cache`、PG advisory test |
 | P2-8 | ingest → index truth store → projection / de-index | association/index直前にもguard。不正stateもkey identityの旧rowを除去。`reference_guard_contracts`、既存ingestion contracts |
@@ -135,3 +135,49 @@ S5 index/advisoryはP2-7/8へ逆引きする。登録表・trait実装・`scan*`
 
 実projectのread-only確認（2026-09-17）ではomni-moderationの500 RPM / 10000 TPM、organization bucketの10000 RPDを確認。
 設定変更は行わず、project ID・請求情報・資格情報は記録しない。初期local予算は400 / 8000 / 8000を維持。
+
+## 第2PRの追加検証・監査対応
+
+- [PR #1080](https://github.com/kukuri-app/kukuri/pull/1080) を作成し、固定head `28110c2c` の独立監査を実施。
+- 監査でArachnid/VLMのfetch中失効後もHTTPが1回送られる失敗を再現。
+  `scan_guarded` を各providerに実装し、取得前と送信直前のguardを共通処理で再確認する。
+  `provider_reference_guards::{arachnid,vlm}_rechecks_guard_after_media_fetch` は修正後HTTP 0で成功。
+  P2-5の逆引きcaller groupへ両providerを明記した。critical/known-matchの判定方式は変更しない。
+- Arachnid endpoint変更でfingerprintが不変となる失敗も再現。非秘密のendpoint・timeout・credential環境変数名と
+  判定versionをfingerprintへ追加し、`arachnid_endpoint_change_invalidates_content_identity` が成功。
+- `ReadinessProbeRecord` のDB row型はclippy指摘に従って型aliasへ整理。
+- operator configは既存validation入口への必須配線31行追加のため大型baselineを更新する。
+  新しいmoderation値の検証本体は独立moduleへ置き、無関係な構造整理は混ぜない。ratchet gate自体は維持する。
+
+### Production imageと無害な実API
+
+[内容を含まない計測JSON](2026-09-17-1060-live-moderation.json) を参照。
+Dockerfileからcn-cli release imageをbuildし、同runtimeのFFmpeg/ffprobeとtmpfsを使用。
+第2PRのintegration test binaryをread-only mountし、実PostgreSQLとOpenAIへ接続した。
+source replica/blobと検索投影はメモリ内、known-hashはbenign専用doubleであり、実ArachnidやP2Pネットワークの検証とは区別する。
+既存Arachnid/P2Pを含む全構成検証は `cn-e2e` が所有する。
+
+| fixture | frames | cold時間 | decode時間 | OpenAI attempts |
+| --- | --- | --- | --- | --- |
+| MP4 1frame | 1 | 3,725 ms | 106 ms | 2（本文1 + frame1） |
+| WebM 1frame | 1 | 1,490 ms | 91 ms | 1 |
+| MP4 12秒・合成音声付き | 3 | 59,397 ms | 137 ms | 3 |
+| MP4 60秒 | 8 | 177,506 ms | 282 ms | 8 |
+
+cold計14request。長尺の時間にはTPM予約待ちを含み、全体deadline 300秒以内。
+serviceを破棄して再構築し、別著者の新投稿で全4blobを再利用した。
+各投稿はindex可、本文/動画の再利用2件、元blob fetch・decode・APIはすべて0、時間は159/69/62/63ms。
+データベースの再接続・service再構築を伴う再利用であり、OS再起動を実施した証拠ではない。
+
+さらにproduction cn-cli自体のreadinessを専用DBで実行し、同梱MP4/WebM decodeとbenign本文/JPEGの2requestに成功。
+provider記録はPASS、構成fingerprintあり。公開ノードの周辺サービスを用意していないため全体readinessはFAILのまま。
+キーを渡さず期限内に再実行すると旧provider PASSは再利用されずFAIL、API予算予約は2件のままで追加0。
+合計16requestに秘密値・利用者投稿・実在人物のmediaを含めない。
+
+### CIの既存認証設定の修復
+
+Terraform CIは実装のplan前に、GCP WIFが移転前 `KingYoSun/kukuri` のみを信頼しているため失敗した。
+GitHub APIで旧URL/現URLのrepository IDがともに `1025894008` であることを確認し、providerのconditionと
+CI service accountの既存 `roles/iam.workloadIdentityUser` principalを `kukuri-app/kukuri` へ置換した。
+他のbinding/roleは変更せず、旧名の許可は残さない。VM apply・本番media送信は行っていない。
+runbookの移転時の手順も同期した。CIの再実行で認証とplanの成功を確認してからmergeする。

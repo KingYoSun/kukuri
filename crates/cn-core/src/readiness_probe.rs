@@ -51,14 +51,15 @@ pub async fn upsert_readiness_probe(pool: &PgPool, record: &ReadinessProbeRecord
 
 /// 保存済みの疎通確認結果を slot 順で返す。
 pub async fn list_readiness_probes(pool: &PgPool) -> Result<Vec<ReadinessProbeRecord>> {
-    let rows: Vec<(
+    type ProbeRow = (
         String,
         String,
         String,
         String,
         DateTime<Utc>,
         Option<String>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<ProbeRow> = sqlx::query_as(
         "SELECT provider_slot, provider, status, detail, checked_at, configuration_fingerprint \
          FROM cn_admin.readiness_probe_cache ORDER BY provider_slot",
     )
