@@ -33,6 +33,12 @@ output "indexer_data_disk_name" {
   value       = local.use_indexer_disk ? google_compute_disk.indexer_data[0].name : ""
 }
 
+output "startup_script" {
+  description = "生成した startup script（terraform test の契約検査用）。"
+  value       = local.startup_script
+  sensitive   = true
+}
+
 output "ssh_iap_command" {
   description = "IAP 経由の SSH コマンド例。"
   value       = "gcloud compute ssh ${google_compute_instance.vm.name} --zone ${google_compute_instance.vm.zone} --tunnel-through-iap --project ${var.project_id}"

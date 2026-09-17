@@ -1,6 +1,6 @@
 # Community Node GCP Terraform Deploy
 
-最終更新日: 2026-08-07
+最終更新日: 2026-09-17
 
 `openai-moderation` の非秘密設定は `deploy.moderation`、キーは既存の `deploy.vlm_api_key_secret_id` から注入する。詳細は[専用providerの運用](community-node-openai-moderation.md)を参照。
 
@@ -348,23 +348,29 @@ GCP構成では `kukuri-readiness.timer` が5分ごとに同じ判定を実行�
 `journalctl -u kukuri-readiness.service -n 100` で、最終成功・失敗と次回実行を確認する。判定失敗時は
 CLIが旧activationをrevokeし、read-time gateがindex / trust surfaceを閉じる。timerは次回再試行する。
 
-`cn-relation-analyze` サービス（cn-cli image）を流用して実行するが、プロバイダ資格情報の
-env はサービス定義に含まれないため、project `.env` を source して `-e` で転送する:
+手動で判定する場合も service 経由で実行し、timer の記録と次回実行を残す:
 
 ```bash
 # VM 上で:
-cd /var/lib/kukuri/community-node
-sudo bash -c 'set -a; . ./.env; set +a; \
-  /var/lib/toolbox/kukuri/bin/docker-compose run --rm \
-    -e PROJECT_ARACHNID_API_USERNAME -e PROJECT_ARACHNID_API_PASSWORD \
-    -e COMMUNITY_NODE_VLM_API_KEY \
-    -v /var/lib/kukuri/community-node/operator-config.yaml:/work/operator-config.yaml:ro \
-    cn-relation-analyze readiness --config /work/operator-config.yaml'
+sudo systemctl start kukuri-readiness.service
+sudo journalctl -u kukuri-readiness.service -n 100 --no-pager
+sudo systemctl list-timers kukuri-readiness.timer --all   # NEXT が時刻であること
 # 全項目合格 → 有効化記録が書かれ、次のreadから反映される。
 ```
 
+- startup は readiness の service / timer を再生成する。再生成後の初回は timer 起動の 2 分後に予定され、
+  以後は前回実行から 5 分ごとに続く（#1097）。`NEXT` が `-` の場合は上記の service 起動で再開する。
 - 疎通確認（Arachnid への合成ハッシュ送信 / VLM への無害な 1 リクエスト）の結果は
-  15 分 TTL で保存され、`--force-probe` で強制再実行できる。
+  15 分 TTL で保存される。強制再実行（`--force-probe`）は service に引数を渡せないため、
+  `cn-readiness` を直接実行した後に上記の service 起動を続ける
+  （`docker-compose run` だけで終えない。手順は `community-node-production-rollout.md` §5.2）:
+
+  ```bash
+  cd /var/lib/kukuri/community-node
+  sudo /var/lib/toolbox/kukuri/bin/docker-compose run --rm cn-readiness \
+    readiness --config /etc/kukuri/operator-config.yaml --force-probe
+  sudo systemctl start kukuri-readiness.service
+  ```
 - `relation_analysis_recent` が不合格の場合は relation analyze を 1 回実行する
   （`docker-compose run --rm cn-relation-analyze`。既定の許容は 7200 秒以内の成功記録）。
 - 判定項目集合が変わる更新を入れた場合、古い記録は無効になり面は自動で閉じる

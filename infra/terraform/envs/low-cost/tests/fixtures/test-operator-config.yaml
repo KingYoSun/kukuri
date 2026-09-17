@@ -1,0 +1,2 @@
+# terraform test 用の最小 operator config（内容は startup script の生成だけに使う）。
+version: 1
