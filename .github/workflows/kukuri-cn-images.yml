@@ -33,6 +33,12 @@ on:
         default: true
         type: boolean
 
+# #1117: 同じ PR に続けて push したときは古い head の run を取り消し、Namespace の
+# 同時実行枠を空ける。push / workflow_dispatch は run ごとに別 group にして取り消さない。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   packages: write
@@ -43,7 +49,9 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-cn-images
+    # #1117: 専用 profile（同時 runner 2）で動かし、Kukuri Fast の同時実行枠を食い尽くさない。
+    # cargo の Cache Volume は使わないので cache-tag は付けない。
+    runs-on: namespace-profile-kukuri-cn-images
     timeout-minutes: 60
     strategy:
       fail-fast: false

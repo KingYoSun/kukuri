@@ -30,7 +30,7 @@ jobs:
         run: cargo xtask app-api-slow-test
 
   linux-additional-scenarios:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -165,7 +165,7 @@ jobs:
         run: cargo xtask rust-test
 
   linux-desktop-ui:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -218,7 +218,7 @@ jobs:
         run: cargo xtask desktop-test
 
   linux-desktop-browser:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -312,7 +312,7 @@ jobs:
         run: cargo xtask cn-test
 
   linux-smoke:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -353,7 +353,7 @@ jobs:
           if-no-files-found: warn
 
   linux-community-node:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -397,7 +397,7 @@ jobs:
           if-no-files-found: warn
 
   linux-community-node-multi-device:
-    runs-on: namespace-profile-kukuri;overrides.cache-tag=kukuri-harness
+    runs-on: namespace-profile-kukuri-4v;overrides.cache-tag=kukuri-harness
     timeout-minutes: 45
     steps:
       - name: Checkout
