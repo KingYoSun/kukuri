@@ -24,6 +24,10 @@ pub const INDEX_RECOMMENDATIONS_PATH: &str = "/v1/index/recommendations";
 pub const ADVISORY_LOOKUP_PATH: &str = "/v1/advisories/lookup";
 pub const TRUST_USERS_PATH_PREFIX: &str = "/v1/trust/users/";
 pub const TRUST_USERS_ROUTE: &str = "/v1/trust/users/{pubkey}";
+/// 閲覧者向け信頼値の一括評価(#1061)。
+pub const TRUST_EVALUATIONS_PATH: &str = "/v1/trust/evaluations";
+/// ブロック / ミュート観測の提供と取消(#1061)。
+pub const TRUST_OBSERVATIONS_PATH: &str = "/v1/trust/observations";
 pub const RELATION_USERS_PATH_PREFIX: &str = "/v1/relation/users/";
 pub const RELATION_USERS_ROUTE: &str = "/v1/relation/users/{target}";
 pub const RELATION_NEIGHBORS_PATH: &str = "/v1/relation/neighbors";

@@ -334,15 +334,42 @@ export function CommunityNodeAdvisoryPanel({
               {t('profile:communityNodeAdvisory.trust.continuousNotice')}
             </p>
           </div>
-          <dl
-            className='grid gap-2 text-sm'
-            style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
-          >
-            <div><dt>{t('profile:communityNodeAdvisory.trust.trust')}</dt><dd>{continuous(trust.value.trust)}</dd></div>
-            <div><dt>{t('profile:communityNodeAdvisory.trust.absolute')}</dt><dd>{continuous(trust.value.absolute)}</dd></div>
-            <div><dt>{t('profile:communityNodeAdvisory.trust.relative')}</dt><dd>{continuous(trust.value.relative)}</dd></div>
-            <div><dt>{t('profile:communityNodeAdvisory.trust.weight')}</dt><dd>{continuous(trust.value.w_abs_applied)}</dd></div>
+          {/* #1061: trust はノードが合算した「あなたから見た信頼度」。内訳から再計算しない。 */}
+          <dl className='space-y-1 text-sm'>
+            <div>
+              <dt>{t('profile:communityNodeAdvisory.trust.trust')}</dt>
+              <dd className='text-base font-semibold'>{continuous(trust.value.trust)}</dd>
+            </div>
+            {trust.value.evaluation && trust.value.evaluation.reasons.length > 0 ? (
+              <div>
+                <dt>{t('profile:communityNodeAdvisory.trust.reasonsLabel')}</dt>
+                <dd>
+                  {trust.value.evaluation.reasons
+                    .map((reason) => t(`profile:communityNodeAdvisory.trust.reasons.${reason}`))
+                    .join(' / ')}
+                </dd>
+              </div>
+            ) : null}
           </dl>
+          {trust.value.evaluation?.hide_recommended ? (
+            <Notice>{t('profile:communityNodeAdvisory.trust.hideRecommended')}</Notice>
+          ) : null}
+          <div className='space-y-1'>
+            <h5 className='text-sm font-medium'>
+              {t('profile:communityNodeAdvisory.trust.breakdownTitle')}
+            </h5>
+            <p className='text-xs text-[var(--muted-foreground)]'>
+              {t('profile:communityNodeAdvisory.trust.breakdownNotice')}
+            </p>
+            <dl
+              className='grid gap-2 text-sm'
+              style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
+            >
+              <div><dt>{t('profile:communityNodeAdvisory.trust.absolute')}</dt><dd>{continuous(trust.value.absolute)}</dd></div>
+              <div><dt>{t('profile:communityNodeAdvisory.trust.relative')}</dt><dd>{continuous(trust.value.relative)}</dd></div>
+              <div><dt>{t('profile:communityNodeAdvisory.trust.weight')}</dt><dd>{continuous(trust.value.w_abs_applied)}</dd></div>
+            </dl>
+          </div>
           {trust.value.basis.length === 0 ? (
             <Notice>{t('profile:communityNodeAdvisory.trust.noBasis')}</Notice>
           ) : (

@@ -7,18 +7,21 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use kukuri_cn_core::{
     ApiError, ApiResult, clear_relation_optout, filter_relation_visible, get_relation_optout,
+    latest_successful_relation_snapshot_id, list_active_relation_observations,
     list_trust_risk_inputs, relation_pair_is_suppressed, require_bearer_identity, require_consents,
-    set_relation_optout,
+    set_relation_optout, trust_observation_revisions,
 };
 use kukuri_cn_protocol::{
     RELATION_NOT_FOUND_CODE, RELATION_VISIBILITY_NOT_ACTIVATED_CODE,
     RELATION_VISIBILITY_NOT_CONFIGURED_CODE, RelationNeighborsResponse, RelationOptoutResponse,
-    RelationReadResponse, TRUST_READ_NOT_ACTIVATED_CODE, TRUST_READ_NOT_CONFIGURED_CODE,
-    TrustUserReadResponse, normalize_pubkey,
+    RelationReadResponse, TRUST_EVALUATIONS_MAX_TARGETS, TRUST_READ_NOT_ACTIVATED_CODE,
+    TRUST_READ_NOT_CONFIGURED_CODE, TrustEvaluationItem, TrustEvaluationsRequest,
+    TrustEvaluationsResponse, TrustReadView, TrustUserReadResponse, normalize_pubkey,
 };
 use kukuri_cn_safety::RiskSignalTarget;
 use kukuri_cn_trust::{
-    PullAudience, UniformRelationWeight, build_trust_read, cross_node_trust_disclosure,
+    PullAudience, RelationAdjustment, UniformRelationWeight, apply_viewer_relation,
+    build_trust_read, compose_relation_adjustment, cross_node_trust_disclosure, relation_version,
 };
 use serde::Deserialize;
 
@@ -32,7 +35,7 @@ use crate::state::{RelationVisibilityState, TrustReadState, UserApiState};
 /// 発行された bearer(`BearerIdentity`)であり、**viewer = bearer の pubkey に固定**される
 /// (`viewer_relative_read_requires_authenticated_viewer` / `relation_read_requires_authenticated_viewer`。
 /// 他人を viewer に指定する手段を持たない = なりすまし防止)。
-async fn require_trust_read(
+pub(crate) async fn require_trust_read(
     state: &UserApiState,
     headers: &HeaderMap,
 ) -> ApiResult<(Arc<TrustReadState>, String)> {
@@ -79,7 +82,7 @@ async fn require_relation_visibility(
     Ok((relation_visibility, identity.pubkey))
 }
 
-fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
+pub(crate) fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
     normalize_pubkey(raw).map_err(|error| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -89,12 +92,114 @@ fn parse_target_pubkey(raw: &str) -> Result<String, ApiError> {
     })
 }
 
-/// per-user trust read(ADR 0026 §2.3 / §6.2)。
+/// 閲覧者 viewer から見た各 target の利用者向け view(`trust` = 合算済みの S)を作る
+/// (ADR 0026 §8)。
 ///
-/// 絶対成分(viewer 非依存・relation 非依存・減衰なし)+ 相対成分(viewer / cluster 相対・
-/// relation 重み付け・半減期減衰)+ 合成 trust を、寄与 signal の根拠つきで返す。
-/// 相対成分の relation 重みは observer-attributed 観測の producer(非決定論的 moderation,
-/// ADR 0028 系)実装まで一様 1.0(重み付けの seam は scoring 層で固定済み)。
+/// T は target ごとの risk signal から閲覧者によらず求め、R は target への active な観測と
+/// viewer → observer の proximity から求める。observer の一覧は戻り値に含めない。
+async fn evaluate_viewer_trust(
+    state: &UserApiState,
+    trust_read: &TrustReadState,
+    viewer_pubkey: &str,
+    targets: &[String],
+    now: chrono::DateTime<chrono::Utc>,
+) -> ApiResult<Vec<(String, TrustReadView)>> {
+    let now_rfc3339 = now.to_rfc3339();
+    let mut trust_views = Vec::with_capacity(targets.len());
+    for target in targets {
+        let inputs = list_trust_risk_inputs(
+            &state.pool,
+            RiskSignalTarget::UserPubkey,
+            target.as_str(),
+            now_rfc3339.as_str(),
+        )
+        .await
+        .map_err(|source| {
+            TrustRelationError::trust_read(TrustRelationOperation::LoadTrustInputs, source)
+        })
+        .map_err(trust_relation_error)?;
+        // T は相対成分も一様重みで集計する(閲覧者に依存させない。ADR 0026 §8.1)。
+        trust_views.push(build_trust_read(
+            target.as_str(),
+            &inputs,
+            now,
+            &trust_read.params,
+            &UniformRelationWeight::default(),
+        ));
+    }
+
+    let observation_error = |source| {
+        trust_relation_error(TrustRelationError::trust_read(
+            TrustRelationOperation::LoadRelationObservations,
+            source,
+        ))
+    };
+    let observations = list_active_relation_observations(&state.pool, targets, now)
+        .await
+        .map_err(observation_error)?;
+    let revisions = trust_observation_revisions(&state.pool, targets)
+        .await
+        .map_err(observation_error)?;
+    let snapshot_id = latest_successful_relation_snapshot_id(&state.pool)
+        .await
+        .map_err(observation_error)?;
+    let mut observers: Vec<String> = observations
+        .values()
+        .flatten()
+        .map(|observation| observation.observer_pubkey.clone())
+        .filter(|observer| observer != viewer_pubkey)
+        .collect();
+    observers.sort();
+    observers.dedup();
+    let proximities = if observers.is_empty() {
+        Default::default()
+    } else {
+        trust_read
+            .relation
+            .proximity_scores(viewer_pubkey, observers.as_slice())
+            .await
+            .map_err(|source| {
+                TrustRelationError::relation_graph(
+                    TrustRelationOperation::ReadProximityScores,
+                    source,
+                )
+            })
+            .map_err(trust_relation_error)?
+    };
+
+    Ok(targets
+        .iter()
+        .cloned()
+        .zip(trust_views)
+        .map(|(target, trust_view)| {
+            let adjustment = observations
+                .get(target.as_str())
+                .map(|items| {
+                    compose_relation_adjustment(
+                        viewer_pubkey,
+                        items.as_slice(),
+                        &proximities,
+                        now,
+                        &trust_read.params,
+                    )
+                })
+                .unwrap_or(RelationAdjustment::NONE);
+            let version = relation_version(
+                snapshot_id,
+                revisions.get(target.as_str()).copied().unwrap_or(0),
+            );
+            let view =
+                apply_viewer_relation(trust_view, adjustment, version, now, &trust_read.params);
+            (target, view)
+        })
+        .collect())
+}
+
+/// per-user trust read(ADR 0026 §2.3 / §6.2 / §8)。
+///
+/// `trust` は trust 絶対値 T と閲覧者別 relation 値 R を CN 側で合算した S。`absolute` /
+/// `relative` / `basis` は T の内訳(寄与 signal の根拠つき)で、`evaluation` に版・期限・
+/// 表示 policy を付ける。viewer は bearer identity に固定する。
 pub(crate) async fn trust_user_read(
     State(state): State<UserApiState>,
     headers: HeaderMap,
@@ -103,27 +208,65 @@ pub(crate) async fn trust_user_read(
     let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
     let target = parse_target_pubkey(pubkey.as_str())?;
     let now = chrono::Utc::now();
-    let inputs = list_trust_risk_inputs(
-        &state.pool,
-        RiskSignalTarget::UserPubkey,
-        target.as_str(),
-        now.to_rfc3339().as_str(),
-    )
-    .await
-    .map_err(|source| {
-        TrustRelationError::trust_read(TrustRelationOperation::LoadTrustInputs, source)
-    })
-    .map_err(trust_relation_error)?;
-    let view = build_trust_read(
-        target.as_str(),
-        &inputs,
+    let (_, view) = evaluate_viewer_trust(
+        &state,
+        &trust_read,
+        viewer_pubkey.as_str(),
+        std::slice::from_ref(&target),
         now,
-        &trust_read.params,
-        &UniformRelationWeight::default(),
-    );
+    )
+    .await?
+    .into_iter()
+    .next()
+    .expect("one evaluation per requested target");
     Ok(Json(TrustUserReadResponse {
         viewer_pubkey,
         view,
+    }))
+}
+
+/// 閲覧者向け信頼値の一括評価(ADR 0026 §8.4)。target ごとに合算済みの S と評価 metadata を返す。
+pub(crate) async fn trust_evaluations(
+    State(state): State<UserApiState>,
+    headers: HeaderMap,
+    Json(request): Json<TrustEvaluationsRequest>,
+) -> ApiResult<Json<TrustEvaluationsResponse>> {
+    let (trust_read, viewer_pubkey) = require_trust_read(&state, &headers).await?;
+    if request.targets.is_empty() || request.targets.len() > TRUST_EVALUATIONS_MAX_TARGETS {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "INVALID_TRUST_QUERY",
+            format!("targets must contain 1 to {TRUST_EVALUATIONS_MAX_TARGETS} pubkeys"),
+        ));
+    }
+    let mut targets = request
+        .targets
+        .iter()
+        .map(|raw| parse_target_pubkey(raw.as_str()))
+        .collect::<Result<Vec<_>, _>>()?;
+    targets.sort();
+    targets.dedup();
+    let now = chrono::Utc::now();
+    let evaluations = evaluate_viewer_trust(
+        &state,
+        &trust_read,
+        viewer_pubkey.as_str(),
+        targets.as_slice(),
+        now,
+    )
+    .await?
+    .into_iter()
+    .map(|(target_pubkey, view)| TrustEvaluationItem {
+        target_pubkey,
+        trust: view.trust,
+        evaluation: view
+            .evaluation
+            .expect("viewer evaluation always carries metadata"),
+    })
+    .collect();
+    Ok(Json(TrustEvaluationsResponse {
+        viewer_pubkey,
+        evaluations,
     }))
 }
 

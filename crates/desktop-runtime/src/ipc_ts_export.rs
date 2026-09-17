@@ -91,7 +91,8 @@ fn export_ipc_types() {
         CommunityNodeConsentStatus, CommunityNodePoliciesResponse, CommunityNodePolicyDocument,
         CommunityNodeResolvedUrls, CommunityNodeSeedPeer, ContentAdvisory, IndexingRequestStatus,
         Proximity, ProximityBasisEntry, RiskSignalTarget, SafetyCategory, Severity,
-        TrustBasisEntry, TrustComponentKind, TrustReadView, Visibility,
+        TrustBasisEntry, TrustComponentKind, TrustEvaluation, TrustEvaluationReason, TrustReadView,
+        Visibility,
     };
     use kukuri_core::{
         ChannelAudienceKind, ChannelId, ChannelRef, ChannelSharingState, ClientResourceBudget,
@@ -333,6 +334,8 @@ fn export_ipc_types() {
         AppealStatus,
         RiskSignalTarget,
         TrustBasisEntry,
+        TrustEvaluationReason,
+        TrustEvaluation,
         TrustReadView,
         TrustUserReadResponse,
         ProximityBasisEntry,

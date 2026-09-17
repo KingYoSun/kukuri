@@ -9,6 +9,10 @@ trust の相対成分へ寄与しない（0）**。signal は生成・永続化�
 advisory-only（0）」の 3 分岐になる。詳細は「§7 改訂追補」を正本とし、§2.3 / §2.7 と必須 scenario の該当行は
 失効注記で後継を示す。絶対成分、cross-node 開示（§6.3）、appeal 反映（§6.2）は変更しない。
 
+**2026-09-18 改訂**（#1061）: 利用者向けの信頼値 `trust` を、閲覧者に依存しない trust 絶対値 T と、閲覧者別の
+relation 値 R（関係の深いユーザー群のブロック / ミュート観測から求める）の CN 側合算値にする。T の算出と cross-node
+開示は変更しない。詳細は「§8 改訂追補」を正本とする。
+
 ## Date
 2026-06-30
 
@@ -293,3 +297,108 @@ foundation（#409 / PR #414）が残した §6 の未決事項を #416 で決定
 ### 7.5 変更しないもの
 - 絶対成分の入力・非減衰・`w_abs_negative = 2.0` の合成式、最終クランプ `[-1, 1]`。
 - cross-node 開示範囲、viewer 相対 read の署名検証、distance opt-out、private channel の `Local` 固定。
+
+## 8. 改訂追補（#1061、2026-09-18）: trust 絶対値 T と閲覧者別 relation 値 R の別管理・合算、ブロック/ミュート観測
+
+本節は Issue #1061（Scope revision 2026-09-15-r2）の決定を記録する。§2.3 / §6.2 / §7 の既存成分は変更せず、
+その上に閲覧者別の relation 値と、CN 側で合算した利用者向けの信頼値を定義する。
+
+### 8.1 三つの値と責務
+| 値 | CN 内の単位 | 内容 | 更新元 |
+| --- | --- | --- | --- |
+| T_N(B)（trust 絶対値） | CN × 対象 B | §6.2 の合成式 `compose_trust(absolute, relative)` の値。`relative` は spam / malware / phishing と node-local risk signal を**一様重み 1.0** で集計する。閲覧者に依存しない | `cn_safety.risk_signals`（appeal・operator 調整・失効を含む） |
+| R_N(A,B)（relation 値） | CN × 閲覧者 A × 対象 B | 閲覧者 A と関係の深いユーザー群による B へのブロック / ミュート観測から求める調整値。値域は `[-1, 0]` | `cn_trust.observations` と relation graph の proximity |
+| S_N(A,B)（返却する信頼値） | CN × A × B × 評価版 | `S = clamp(-1, 1, T + R)` | read 時に CN が合算する |
+
+- 既存 wire の `absolute` / `relative` は **T の内訳**（説明用）であり、R ではない。ここでの `relative` は §2.3 の
+  相対指標（risk signal 由来）を指し、#1061 の relation 値とは別の量である。
+- wire の `trust` は S を返す。クライアントの表示判断に使う評価値は `trust` と、§8.4 の `hide_recommended` だけであり、
+  クライアントは `absolute` / `relative` から評価値を再合成しない。別 CN の値とも混ぜない。
+- T の算出は #1061 以前の production の `trust` と同一である。既存評価を落とさず、relation 寄与を二重に計上しない。
+- R は T を変更しない。T の変化は R を上書きしない。S は T・R・重みの入力へ戻さない。critical safety の強制制限
+  （ADR 0027）は S とは別に維持し、正の relation で相殺しない。
+
+### 8.2 R の算出（初期決め打ち、operator 可変）
+```
+R_base = 0                                  # 近接度そのものを信頼値にしない
+w(A,U) = 1                    if U == A
+       = proximity(A,U)       otherwise     # relation snapshot の値。edge が無ければ 0
+w(A,U) = 0                    if w(A,U) < min_weight            # 既定 0.1
+s(U,B) = max(block ? 1.0 : 0, mute ? 0.5 : 0)                    # 同一 U→B の両操作は強い方
+d(U,B) = 0.5^(age_days / relative_half_life_days)               # 観測時刻からの半減期減衰（既定 30 日）
+c(U)   = w(A,U) × s(U,B) × d(U,B)
+penalty = 1 - Π_{上位 K 件の c(U)} (1 - c(U))                    # noisy-OR、K の既定 5
+R = clamp(-1, 0, R_base - penalty_scale × penalty)                # penalty_scale の既定 1.0
+```
+- 重みは非負で、Aと関係の遠い（proximity の低い）ユーザーの観測は小さくしか効かない。負の relation を負の重みにして
+  B を加点しない。観測が 1 件なら penalty は `w × s × d` で、w に対して単調に増える（重み付き平均のように w が相殺されない）。
+- 上位 K 件の noisy-OR にするため、低重みの観測が件数だけで結果を支配しない。
+- 重みは relation graph の proximity（co-participation 由来）だけから求め、R / S を入力に戻さない。したがって
+  評価は循環せず、同じ入力（観測集合・proximity・評価時刻）は入力の順序によらず同じ R を得る。
+- relation snapshot は直近の `relation analyze` の実行結果とする。解析中の read で更新前後の proximity が混在しうることは
+  許容し、`relation_version` には直近で成功した実行の id を載せる。
+- 観測が無い、または active な観測がすべて除外された場合 R = 0 とする。本文 hash / blob hash の重複は観測を生まず、
+  R を下げない。
+- nsfw / objectionable（§7）は R の入力にしない。距離 opt-out（§6.3）は R にも T にも影響しない。
+
+### 8.3 ブロック / ミュート観測の契約
+- 観測は **observer 本人が署名した envelope** だけを受け付ける。
+  - block: 既存の `block-edge` envelope（ADR 0043。author replica に書かれる署名 edge）をそのまま送る。
+  - mute: `mute-observation` envelope（kukuri-core。subject = observer、target、status `active` / `revoked`、created_at）。
+    docs sync・gossip・author replica には書かない（ADR 0022 の local mute canonical は変えない）。
+- 受付 `POST /v1/trust/observations` は次をすべて満たす場合だけ保存する。満たさない場合は保存せず拒否する。
+  - bearer identity の pubkey と envelope の署名者（subject）が一致する。
+  - 必須同意が成立し、かつ任意文書 `trust_observation_sharing`（§8.5）の現行版に同意済みで、その同意後に取消していない。
+- 保存は `cn_trust.observations` に `(observer, target, kind)` 単位で upsert する。`(created_at, envelope_id)` が保存済みより
+  新しい場合だけ置き換え、再送・複数端末・順序逆転で増幅せず、古い active で復活しない。
+- 取消 `DELETE /v1/trust/observations` は、その observer の観測を全削除し、任意同意の取消時刻を記録する。取消後の受付は
+  再同意まで拒否する。任意同意の版が変わった observer の観測は、再同意まで評価に使わない。
+- 保持: revoked は 30 日、active は観測時刻から 180 日で評価対象から外し、定期 cleanup で削除する。
+  revoked の行を削除した後は、それより古い active envelope の再送を古いと判定できない。client の送信待ちは
+  対象・種別ごとに最新 1 件へ集約して送るため、通常の再送では起きない。
+- 観測時刻が受信時刻より 5 分以上未来の envelope は拒否する（後の解除を古いと誤判定させないため）。
+- 評価では 1 対象あたり新しい順に 200 件までの active 観測を使う。
+- 匿名通報（`cn_admin.reports`）から observer 付き観測を作らない。観測を「phishing 検出済み」等の risk category に変換しない。
+- 観測・R・observer は CN 間 pull（§6.3）に返さない。利用者向け read にも observer の一覧・件数を返さず、
+  R の寄与は理由の種類（§8.4 `reasons`）としてだけ示す。
+
+### 8.4 評価の版・期限と表示 policy
+- read 応答は `evaluation` を同伴する（旧 node の応答では欠落し、クライアントは未評価として扱う）。
+  - `policy_version`: 合算・表示 policy の parameter から決まる識別子。
+  - `trust_version`: T に寄与する入力（signal id・appeal 状態・operator 調整・失効）の digest。
+  - `relation_version`: 直近で成功した relation 解析の id と、B に対する観測の最新 revision の組。
+  - `computed_at` / `expires_at`: 評価時刻と、クライアントが結果を再利用してよい期限（既定 600 秒）。
+  - `hide_recommended`: `S <= hide_threshold`（既定 -0.5）。
+  - `reasons`: `risk_signals`（T が負）/ `related_users_block_or_mute`（R が負）。数値・observer は含めない。
+- `hide_threshold` は **node-local な表示 policy の parameter** であり、§6.2「断定閾値を置かない」を変更しない。
+  CN は利用者を troll と断定するラベルを返さず、クライアントは折りたたみと再表示・例外設定を提供する。
+- 一括 read `POST /v1/trust/evaluations`（最大 100 件、viewer 認証必須）は target ごとに `trust` と `evaluation` を返す。
+- parameter の env: `COMMUNITY_NODE_TRUST_RELATION_MIN_WEIGHT`、`_RELATION_TOP_K`、`_RELATION_PENALTY_SCALE`、
+  `_BLOCK_STRENGTH`、`_MUTE_STRENGTH`、`_HIDE_THRESHOLD`、`_EVALUATION_TTL_SECONDS`（接頭辞 `COMMUNITY_NODE_TRUST`）。
+
+### 8.5 観測提供の同意
+- 観測提供は CN の同意カタログの**任意文書**（kind `trust_observation_sharing`、slug `trust_observation_sharing`、
+  `required: false`）への同意で有効になる。文書を公開していない CN には観測を送らない。
+- 文書には送信項目（observer pubkey・target pubkey・block / mute の種別と状態・時刻・署名）、宛先（その CN だけ）、
+  利用目的（閲覧者別 relation 値の調整）、保持期間と取消方法を記載する。
+- 既存のローカル mute / block は、利用者が有効化時に明示的に選んだ場合だけ送る。CN の採用順位の変更だけでは送らない。
+
+### 8.6 contract / scenario
+- 追加 contract（右は固定する test）:
+  - `trust_value_is_absolute_plus_viewer_relation`（S = clamp(T + R)）:
+    `cn-trust/tests/relation_adjustment.rs` の `trust_component_is_unchanged_by_observations`、
+    `cn-user-api/tests/trust_observations.rs` の `trust_read_sums_absolute_and_viewer_relation`
+  - `relation_observation_penalty_scales_with_viewer_relation`: `viewer_with_higher_relation_gets_larger_penalty`、
+    `single_observation_penalty_is_not_cancelled_by_weight`、`many_low_weight_observers_do_not_dominate`
+  - `relation_observation_does_not_change_trust_absolute`: `relation_update_does_not_touch_trust_component`
+  - `relation_observation_is_idempotent_and_order_independent`: `adjustment_is_order_independent`、
+    `block_and_mute_same_observer_takes_max`、`observation_upsert_is_idempotent_and_ignores_stale`
+  - `relation_observation_requires_signed_observer_and_sharing_consent`:
+    `observation_intake_requires_matching_signer_and_sharing_consent`、`observation_revocation_deletes_rows_and_blocks_intake`
+  - `relation_observation_expires_and_is_purged`: `revoked_and_expired_observations_are_excluded`、`observation_retention_purges_expired`
+  - `relation_observation_is_not_cross_node_pullable` / `trust_read_does_not_disclose_observers`:
+    `trust_read_sums_absolute_and_viewer_relation`（pull・単体 read・一括評価の本文に observer が現れない）
+  - `trust_hide_recommendation_is_node_local_policy`: `hide_recommendation_follows_node_local_threshold_and_reasons`
+- 追加 scenario（`trust_read_sums_absolute_and_viewer_relation` で固定）: A→U の relation が高く C→U が低いとき、
+  U が B をブロックすると A から見た B の S が C より大きく下がり、T は共通で、U が解除すると元に戻る。
+  提供同意を取り消した U の観測は評価に使わない。

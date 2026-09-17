@@ -305,6 +305,23 @@ slug/version 判定を維持する。
 `COMMUNITY_NODE_OPERATOR_CONFIG` を必須とし、法務表示と expiry／cleanup が同じ明示 retention を使う。
 rights-request 操作だけが `RetentionPolicy::default()` へ戻る経路は設けない。
 
+### ブロック・ミュート観測の提供（任意文書、#1061）
+
+`community_local_trust` を提供する Node は、利用者からブロック・ミュートの観測を受け付ける場合だけ
+任意文書 `trust_observation_sharing` を公開する（ADR 0026 §8.5）。slug は固定で、`required: false`
+以外は設定検証で拒否する。公開しない Node は `POST /v1/trust/observations` に
+`TRUST_OBSERVATION_SHARING_NOT_OFFERED`（404）を返し、client は提供の選択肢を出さない。
+
+```yaml
+    - { kind: trust_observation_sharing, slug: trust_observation_sharing, version: 1, effective_date: 2026-09-18, language: ja, required: false }
+```
+
+- 文書を追加すると `policy_snapshot_revision` が変わり、既存利用者は必須文書の再同意が必要になる。
+- 本文（送信項目・提供先・利用目的・保持期間・取消）は operator 設定から生成する。保持期間は active 180 日 /
+  revoked 30 日で、定期 cleanup が削除する。
+- 閲覧者向けの評価 parameter は `COMMUNITY_NODE_TRUST_RELATION_*` / `_BLOCK_STRENGTH` / `_MUTE_STRENGTH` /
+  `_HIDE_THRESHOLD` / `_EVALUATION_TTL_SECONDS` で変更できる（既定値は ADR 0026 §8.2 / §8.4）。
+
 ## server-manifest.json
 
 `server-manifest.json` は型付きの共有スキーマ（`kukuri_cn_operator::CommunityNodeManifest`）として

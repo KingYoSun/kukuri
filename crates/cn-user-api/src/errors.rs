@@ -177,6 +177,10 @@ pub(crate) enum TrustRelationOperation {
     SetOptOut,
     GetOptOut,
     ClearOptOut,
+    LoadRelationObservations,
+    ReadProximityScores,
+    StoreObservations,
+    RevokeObservations,
 }
 
 #[derive(Debug, thiserror::Error)]

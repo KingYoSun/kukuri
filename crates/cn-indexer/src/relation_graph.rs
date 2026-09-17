@@ -15,6 +15,8 @@
 //! - edge は正規化ペア（辞書順 (小, 大)）で 1 本だけ張り、読みは無向 match（`-[r]-`）で
 //!   双方向から同じ feature が見える（対称性 contract）。
 
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -30,6 +32,8 @@ use crate::config::ArcadeDbConfig;
 const USER_TYPE: &str = "TrustUser";
 /// relation graph の edge type 名。
 const EDGE_TYPE: &str = "RelatesTo";
+/// `proximity_scores` の 1 query あたりの candidate 数。
+const PROXIMITY_SCORES_CHUNK: usize = 200;
 
 /// ArcadeDB 上の relation graph。
 pub struct ArcadeDbRelationGraph {
@@ -151,6 +155,40 @@ impl RelationStore for ArcadeDbRelationGraph {
         };
         // score の合成は backend 非依存の純関数（in-memory 実装と同一の値を返す contract）。
         Ok(Some(proximity_from_features(&features_from_json(&raw)?)))
+    }
+
+    async fn proximity_scores(
+        &self,
+        viewer: &str,
+        candidates: &[String],
+    ) -> Result<BTreeMap<String, f64>> {
+        // relation 値 R の重み（ADR 0026 §8.2）。candidate ごとの往復を避け、分割した一括 query で読む。
+        let mut scores = BTreeMap::new();
+        for chunk in candidates.chunks(PROXIMITY_SCORES_CHUNK) {
+            let value = self
+                .client
+                .command_with_params(
+                    "cypher",
+                    &format!(
+                        "MATCH (a:{USER_TYPE} {{pubkey: $viewer}})-[r:{EDGE_TYPE}]-(b:{USER_TYPE}) \
+                         WHERE b.pubkey IN $candidates \
+                         RETURN b.pubkey AS pubkey, r.features_json AS features_json"
+                    ),
+                    json!({ "viewer": viewer, "candidates": chunk }),
+                )
+                .await?;
+            for row in result_rows(&value) {
+                let (Some(pubkey), Some(raw)) = (
+                    string_column(&row, "pubkey"),
+                    string_column(&row, "features_json"),
+                ) else {
+                    continue;
+                };
+                let score = proximity_from_features(&features_from_json(&raw)?).score;
+                scores.insert(pubkey, score);
+            }
+        }
+        Ok(scores)
     }
 
     async fn neighbors(&self, viewer: &str, k: usize) -> Result<Vec<String>> {

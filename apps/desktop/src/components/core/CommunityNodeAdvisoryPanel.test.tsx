@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import i18n from '@/i18n';
 import { InvokeError } from '@/lib/api/invoke/error';
+import type { TrustUserReadResponse } from '@/lib/api/types.generated';
 
 import { CommunityNodeAdvisoryPanel } from './CommunityNodeAdvisoryPanel';
 
@@ -212,6 +213,59 @@ describe('CommunityNodeAdvisoryPanel', () => {
     expect(screen.getByText(/node-a/)).toBeInTheDocument();
     expect(screen.getByText(/Continuous proximity: 0.420|連続値の proximity: 0.420/)).toBeInTheDocument();
     expect(screen.getByText('b'.repeat(64))).toBeInTheDocument();
+  });
+
+  test('shows the node-composed trust as the main value with reasons and the breakdown', async () => {
+    await i18n.changeLanguage('ja');
+    const client = api();
+    const composed: TrustUserReadResponse = {
+      ...trustResponse(targetPubkey, 'node-a'),
+      absolute: 0,
+      relative: -0.2,
+      trust: -0.9,
+      evaluation: {
+        policy_version: 'v1-policy',
+        trust_version: 't-1',
+        relation_version: 'r-1-2',
+        computed_at: '2026-09-18T00:00:00Z',
+        expires_at: '2026-09-18T00:10:00Z',
+        hide_recommended: true,
+        reasons: ['risk_signals', 'related_users_block_or_mute'],
+      },
+    };
+    client.readCommunityNodeTrustUser.mockResolvedValue(
+      composed as Awaited<ReturnType<typeof client.readCommunityNodeTrustUser>>
+    );
+    render(
+      <CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '取得' }));
+
+    // 表示する信頼度はノードが合算した値そのもので、内訳から再計算しない。
+    const main = await screen.findByText('あなたから見た信頼度');
+    expect(main.nextElementSibling).toHaveTextContent('-0.900');
+    expect(
+      screen.getByText('リスク判定 / あなたと関係の近い利用者のブロック・ミュート')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/折りたたむ対象です/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'ノード共通の評価の内訳' })).toBeInTheDocument();
+    expect(screen.getByText('-0.200')).toBeInTheDocument();
+
+    await i18n.changeLanguage('en');
+  });
+
+  test('treats a trust response without evaluation metadata as having no reasons', async () => {
+    const client = api();
+    render(
+      <CommunityNodeAdvisoryPanel api={client} targetPubkey={targetPubkey} nodeBaseUrls={[nodeA]} />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Load relationship and trust|取得/ }));
+
+    expect(await screen.findByText('Trust for you')).toBeInTheDocument();
+    expect(screen.queryByText('Lowered by')).not.toBeInTheDocument();
+    expect(screen.queryByText(/posts from this user are collapsed/)).not.toBeInTheDocument();
   });
 
   test('shows generic relation unavailable copy without exposing an opt-out inference', async () => {

@@ -75,9 +75,17 @@
     "trust": {
       "title": "信任提示",
       "continuousNotice": "显示连续值及其依据，不分配固定风险标签。",
-      "trust": "综合信任值",
-      "absolute": "绝对分量",
-      "relative": "相对分量",
+      "trust": "对你而言的信任值",
+      "reasonsLabel": "降低原因",
+      "reasons": {
+        "risk_signals": "风险判定",
+        "related_users_block_or_mute": "与你关系较近的用户的屏蔽和静音"
+      },
+      "hideRecommended": "按照此节点的显示标准，该用户的帖子会被折叠。",
+      "breakdownTitle": "节点通用评估明细",
+      "breakdownNotice": "明细是节点为所有查看者计算的值。对你而言的信任值还会反映与你关系较近的用户的屏蔽和静音。",
+      "absolute": "风险判定（绝对）",
+      "relative": "风险判定（相对）",
       "weight": "绝对权重",
       "noBasis": "该提示不含依据条目。"
     },

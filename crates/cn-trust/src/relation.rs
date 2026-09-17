@@ -113,6 +113,23 @@ pub trait RelationStore: Send + Sync {
     /// viewer 視点の target への近接度（根拠つき）。edge が無ければ None。
     async fn pairwise_proximity(&self, viewer: &str, target: &str) -> Result<Option<Proximity>>;
 
+    /// viewer から複数 candidate への proximity score（`[0, 1]`）。edge の無い candidate は含めない。
+    ///
+    /// relation 値 R の重み `w(A,U)`（ADR 0026 §8.2）に使う。backend は一括 query で上書きしてよい。
+    async fn proximity_scores(
+        &self,
+        viewer: &str,
+        candidates: &[String],
+    ) -> Result<BTreeMap<String, f64>> {
+        let mut scores = BTreeMap::new();
+        for candidate in candidates {
+            if let Some(proximity) = self.pairwise_proximity(viewer, candidate).await? {
+                scores.insert(candidate.clone(), proximity.score);
+            }
+        }
+        Ok(scores)
+    }
+
     /// discovery / surfacing 用の近接近傍（proximity 降順で最大 k 件）。
     async fn neighbors(&self, viewer: &str, k: usize) -> Result<Vec<String>>;
 

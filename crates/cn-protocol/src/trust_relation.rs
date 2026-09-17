@@ -42,8 +42,13 @@ pub struct TrustBasisEntry {
 }
 
 /// trust read の応答形（node-local advisory）。
+///
+/// `trust` は CN が合算した利用者向けの信頼値 S（ADR 0026 §8.1）。`absolute` / `relative` /
+/// `w_abs_applied` / `basis` は閲覧者に依存しない trust 絶対値 T の内訳（説明用）であり、
+/// クライアントはこれらから評価値を再合成しない。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct TrustReadView {
     pub target_id: String,
     pub absolute: f64,
@@ -52,7 +57,96 @@ pub struct TrustReadView {
     pub w_abs_applied: f64,
     pub computed_at: String,
     pub basis: Vec<TrustBasisEntry>,
+    /// 評価の版・期限・表示 policy（#1061）。旧 node の応答では欠落し、クライアントは未評価として扱う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation: Option<TrustEvaluation>,
 }
+
+/// 信頼値が負になった理由の種類（ADR 0026 §8.4）。数値・observer は含めない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum TrustEvaluationReason {
+    /// trust 絶対値 T が負（risk signal 由来）。
+    RiskSignals,
+    /// relation 値 R が負（閲覧者と関係の深いユーザー群のブロック / ミュート）。
+    RelatedUsersBlockOrMute,
+}
+
+/// CN 側で合算した評価の版・期限と表示 policy（ADR 0026 §8.4）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustEvaluation {
+    /// 合算・表示 policy の parameter から決まる識別子。
+    pub policy_version: String,
+    /// T に寄与する入力の digest。
+    pub trust_version: String,
+    /// relation snapshot と対象への観測 revision の組。
+    pub relation_version: String,
+    pub computed_at: String,
+    /// クライアントが結果を再利用してよい期限（RFC3339）。
+    pub expires_at: String,
+    /// node-local な表示 policy による非表示推奨（`trust <= hide_threshold`）。
+    pub hide_recommended: bool,
+    pub reasons: Vec<TrustEvaluationReason>,
+}
+
+/// 一括評価の要求（`POST /v1/trust/evaluations`）。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustEvaluationsRequest {
+    pub targets: Vec<String>,
+}
+
+/// 一括評価の 1 件。`trust` は合算済みの S。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustEvaluationItem {
+    pub target_pubkey: String,
+    pub trust: f64,
+    pub evaluation: TrustEvaluation,
+}
+
+/// 一括評価の応答。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustEvaluationsResponse {
+    pub viewer_pubkey: String,
+    pub evaluations: Vec<TrustEvaluationItem>,
+}
+
+/// 一括評価で一度に指定できる対象数の上限。
+pub const TRUST_EVALUATIONS_MAX_TARGETS: usize = 100;
+
+/// ブロック / ミュート観測の提供（`POST /v1/trust/observations`、ADR 0026 §8.3）。
+///
+/// `envelopes` は observer 本人が署名した `block-edge` / `mute-observation` envelope。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrustObservationsSubmitRequest {
+    pub envelopes: Vec<kukuri_core::KukuriEnvelope>,
+}
+
+/// 観測提供の結果。`stored` は保存済みより新しく置き換えた件数、`ignored` は古い・重複のため
+/// 変更しなかった件数。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustObservationsSubmitResponse {
+    pub stored: u32,
+    pub ignored: u32,
+}
+
+/// 観測の削除と提供同意の取消（`DELETE /v1/trust/observations`）の結果。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TrustObservationsRevokeResponse {
+    pub deleted: u64,
+}
+
+/// 一度に提供できる観測 envelope 数の上限。
+pub const TRUST_OBSERVATIONS_MAX_ENVELOPES: usize = 100;
+
+/// 観測提供の同意に使う任意文書の slug（ADR 0026 §8.5）。
+pub const TRUST_OBSERVATION_SHARING_POLICY_SLUG: &str = "trust_observation_sharing";
 
 /// viewer を含む per-user trust read wire 応答。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -14,6 +14,8 @@ pub mod config;
 pub mod deploy;
 pub mod docs;
 mod docs_moderation_policy;
+mod docs_trust_observation_sharing;
+pub use docs_trust_observation_sharing::TRUST_OBSERVATION_SHARING_SLUG;
 pub mod drift;
 pub mod manifest;
 pub mod moderation_config;

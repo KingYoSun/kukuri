@@ -10,6 +10,7 @@
 //! - §6.1 graph-store 抽象境界（ArcadeDB 最小 / neo4j scale、Cypher 互換）
 //! - §6.2 合成式・最終クランプ `[-1, 1]`・相対成分の半減期減衰・appeal 反映
 //! - §6.3 cross-node 開示（confirmed 絶対成分のみ）・viewer 相対 read の認証
+//! - §8 trust 絶対値 T と閲覧者別 relation 値 R の合算（ブロック / ミュート観測、#1061）
 //!
 //! スコープ境界（本 crate に含まないもの）:
 //! - risk signal の永続化・供給（`cn-core` の `trust_risk_inputs_from` / `list_trust_risk_inputs`）
@@ -25,6 +26,7 @@ pub mod memory;
 pub mod params;
 pub mod read;
 pub mod relation;
+pub mod relation_adjustment;
 pub mod score;
 
 /// `RelationStore` 実装への共有 contract スイート。`testing` feature でのみ有効
@@ -42,6 +44,10 @@ pub use read::{TrustBasisEntry, TrustReadView, build_trust_read};
 pub use relation::{
     ClusterRef, EdgeFeatures, FEATURE_CO_PARTICIPATION_EVENTS, FEATURE_FOLLOW_PROJECTION,
     FEATURE_SHARED_TOPICS, Proximity, ProximityBasisEntry, RelationStore, proximity_from_features,
+};
+pub use relation_adjustment::{
+    RelationAdjustment, RelationObservation, RelationObservationKind, apply_viewer_relation,
+    compose_relation_adjustment, compose_viewer_trust, relation_version, trust_version,
 };
 pub use score::{
     ComposedTrust, RelationWeighting, UniformRelationWeight, compose_trust, decay_factor,

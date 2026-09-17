@@ -1144,6 +1144,9 @@ pub fn generate_all(config: &ResolvedConfig) -> Vec<GeneratedFile> {
             content: gen_capability_risk_and_practices(config),
         },
     ];
+    files.extend(crate::docs_trust_observation_sharing::generated_file(
+        config,
+    ));
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
     files
 }

@@ -20,6 +20,7 @@ mod private_channels;
 mod profile;
 mod reactions;
 mod rendezvous;
+mod trust_observations;
 pub mod wire;
 
 #[cfg(test)]
@@ -189,3 +190,8 @@ pub use reactions::{
     deterministic_reaction_id, parse_custom_reaction_asset, parse_reaction,
 };
 pub use rendezvous::{private_topic_rendezvous_key_hex_secret, public_topic_rendezvous_key};
+pub use trust_observations::{
+    KukuriMuteObservationEnvelopeContentV1, MUTE_OBSERVATION_KIND, MuteObservationStatus,
+    TrustObservation, TrustObservationKind, build_mute_observation_envelope,
+    parse_trust_observation,
+};

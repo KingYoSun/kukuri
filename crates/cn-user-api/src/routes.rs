@@ -23,7 +23,8 @@ use kukuri_cn_protocol::{
     NODE_MANIFEST_PATH, POLICIES_PATH, RELATION_NEIGHBORS_PATH, RELATION_OPTOUT_PATH,
     RELATION_USERS_ROUTE, REPORT_PATH, RIGHTS_REQUEST_CREATE_PATH, RIGHTS_REQUEST_FORM_PATH,
     RIGHTS_REQUEST_SCOPE_PATH, RIGHTS_REQUEST_STATUS_PATH, RIGHTS_REQUEST_WITHDRAW_PATH,
-    TESTER_FEEDBACK_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_USERS_ROUTE,
+    TESTER_FEEDBACK_PATH, TOPIC_RENDEZVOUS_HEARTBEAT_PATH, TRUST_EVALUATIONS_PATH,
+    TRUST_OBSERVATIONS_PATH, TRUST_USERS_ROUTE,
 };
 use serde_json::{Value, json};
 use tower_http::trace::TraceLayer;
@@ -56,13 +57,14 @@ use crate::handlers::rights_requests::{
 };
 use crate::handlers::tester_feedback::submit_tester_feedback;
 use crate::handlers::transmission_prevention::transmission_prevention_status;
+use crate::handlers::trust_observations::{revoke_trust_observations, submit_trust_observations};
 use crate::handlers::trust_relation::{
     relation_neighbors, relation_optout_clear, relation_optout_get, relation_optout_set,
-    relation_user_read, trust_pull, trust_user_read,
+    relation_user_read, trust_evaluations, trust_pull, trust_user_read,
 };
 use crate::rate_limit::apply_rate_limit;
 use crate::state::{ManifestState, UserApiState, build_runtime_state};
-use kukuri_cn_core::{apply_retention_policy, cleanup_expired};
+use kukuri_cn_core::{apply_retention_policy, cleanup_expired, cleanup_trust_observations};
 
 pub fn app_router(state: UserApiState) -> Router {
     let manifest = manifest_routes(
@@ -146,6 +148,11 @@ pub fn app_router(state: UserApiState) -> Router {
             get(transmission_prevention_status),
         )
         .route(TRUST_USERS_ROUTE, get(trust_user_read))
+        .route(TRUST_EVALUATIONS_PATH, post(trust_evaluations))
+        .route(
+            TRUST_OBSERVATIONS_PATH,
+            post(submit_trust_observations).delete(revoke_trust_observations),
+        )
         .route("/v1/trust/pull/{pubkey}", get(trust_pull))
         .route(RELATION_USERS_ROUTE, get(relation_user_read))
         .route(RELATION_NEIGHBORS_PATH, get(relation_neighbors))
@@ -319,7 +326,14 @@ fn spawn_retention_cleanup(state: UserApiState) {
             interval.tick().await;
             let result = async {
                 apply_retention_policy(&state.pool, &state.retention).await?;
-                cleanup_expired(&state.pool, chrono::Utc::now()).await
+                let now = chrono::Utc::now();
+                let counts = cleanup_expired(&state.pool, now).await?;
+                let trust_observations = cleanup_trust_observations(&state.pool, now).await?;
+                tracing::info!(
+                    trust_observations,
+                    "community-node trust observation cleanup completed"
+                );
+                anyhow::Ok(counts)
             }
             .await;
             match result {

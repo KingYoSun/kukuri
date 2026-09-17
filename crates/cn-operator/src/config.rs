@@ -63,6 +63,9 @@ pub enum LegalDocumentKind {
     AbusePolicy,
     DataRetention,
     RightsInfringement,
+    /// ブロック / ミュート観測の提供に対する任意同意（ADR 0026 §8.5、#1061）。
+    /// 公開は任意で、`ALL` には含めない。
+    TrustObservationSharing,
 }
 
 impl LegalDocumentKind {
@@ -85,6 +88,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "abuse-policy.md",
             Self::DataRetention => "data-retention-policy.md",
             Self::RightsInfringement => "rights-infringement-policy.md",
+            Self::TrustObservationSharing => "trust-observation-sharing.md",
         }
     }
 
@@ -97,6 +101,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "abuse-policy",
             Self::DataRetention => "data-retention",
             Self::RightsInfringement => "rights-infringement-policy",
+            Self::TrustObservationSharing => "trust-observation-sharing",
         }
     }
 
@@ -109,6 +114,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "Community Node Abuse ポリシー",
             Self::DataRetention => "Community Node データ保持ポリシー",
             Self::RightsInfringement => "Community Node 権利侵害申出ポリシー",
+            Self::TrustObservationSharing => "Community Node ブロック・ミュート観測の提供",
         }
     }
 
@@ -121,6 +127,7 @@ impl LegalDocumentKind {
             Self::AbusePolicy => "Community Node Abuse Policy",
             Self::DataRetention => "Community Node Data Retention Policy",
             Self::RightsInfringement => "Community Node Rights Request Policy",
+            Self::TrustObservationSharing => "Community Node Block and Mute Observation Sharing",
         }
     }
 }
@@ -751,6 +758,7 @@ fn validate_legal_config(config: &OperatorConfig) -> Result<()> {
             }
         }
     }
+    crate::docs_trust_observation_sharing::validate_document(legal)?;
     for kind in LegalDocumentKind::ALL {
         if !kinds.contains(&kind) {
             bail!("legal.documents に kind {:?} が必要です", kind);

@@ -75,9 +75,17 @@
     "trust": {
       "title": "Trust advisory",
       "continuousNotice": "Continuous values with their basis; no fixed risk label is assigned.",
-      "trust": "Composite trust",
-      "absolute": "Absolute component",
-      "relative": "Relative component",
+      "trust": "Trust for you",
+      "reasonsLabel": "Lowered by",
+      "reasons": {
+        "risk_signals": "Risk assessments",
+        "related_users_block_or_mute": "Blocks and mutes by people close to you"
+      },
+      "hideRecommended": "Under this node's display policy, posts from this user are collapsed.",
+      "breakdownTitle": "Node-wide evaluation breakdown",
+      "breakdownNotice": "The breakdown is calculated by the node for every viewer. Trust for you also reflects blocks and mutes by people close to you.",
+      "absolute": "Risk assessment (absolute)",
+      "relative": "Risk assessment (relative)",
       "weight": "Absolute weight",
       "noBasis": "This advisory contains no basis entries."
     },
