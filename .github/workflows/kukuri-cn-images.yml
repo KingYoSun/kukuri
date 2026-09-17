@@ -48,109 +48,97 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.image }}
-    # #1117: 専用 profile（同時 runner 2）で動かし、Kukuri Fast の同時実行枠を食い尽くさない。
+    name: Build community node images
+    # #1117: 専用 profile（同時 runner 1）で動かし、Kukuri Fast の同時実行枠を食い尽くさない。
     # cargo の Cache Volume は使わないので cache-tag は付けない。
     runs-on: namespace-profile-kukuri-cn-images
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: kukuri-cn-user-api
-            bin: cn-user-api
-            image: kukuri-cn-user-api
-          - package: kukuri-cn-iroh-relay
-            bin: cn-iroh-relay
-            image: kukuri-cn-iroh-relay
-          - package: kukuri-cn-cli
-            bin: cn-cli
-            image: kukuri-cn-cli
-          - package: kukuri-cn-indexer
-            bin: cn-indexer
-            image: kukuri-cn-indexer
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # #1122: 4 image 分の tag を先に決める。push は smoke の後にだけ行う。
       - name: Prepare image metadata
         id: meta
         shell: bash
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          image="${REGISTRY}/${owner}/${{ matrix.image }}"
           short_sha="${GITHUB_SHA::12}"
           push="false"
-          tags=("${image}:sha-${short_sha}")
+          extra_tag=""
 
           case "${GITHUB_EVENT_NAME}" in
-            pull_request)
-              tags=("${image}:pr-${{ github.event.pull_request.number }}-${short_sha}")
-              ;;
             workflow_dispatch)
               if [[ "${{ github.event.inputs.push }}" == "true" ]]; then
                 push="true"
               fi
-              tag="${{ github.event.inputs.image_tag }}"
-              if [[ -n "$tag" ]]; then
-                tags+=("${image}:${tag}")
-              fi
+              extra_tag="${{ github.event.inputs.image_tag }}"
               ;;
             push)
               push="true"
               if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-                tags+=("${image}:${GITHUB_REF_NAME}")
+                extra_tag="${GITHUB_REF_NAME}"
               elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
-                tags+=("${image}:latest")
+                extra_tag="latest"
               else
-                safe_ref="${GITHUB_REF_NAME//\//-}"
-                tags+=("${image}:${safe_ref}")
+                extra_tag="${GITHUB_REF_NAME//\//-}"
               fi
               ;;
           esac
 
+          mkdir -p "${RUNNER_TEMP}/cn-image-tags"
+          for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
+            ref="${REGISTRY}/${owner}/${image}"
+            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+              printf '%s\n' "${ref}:pr-${{ github.event.pull_request.number }}-${short_sha}" \
+                > "${RUNNER_TEMP}/cn-image-tags/${image}"
+            else
+              printf '%s\n' "${ref}:sha-${short_sha}" > "${RUNNER_TEMP}/cn-image-tags/${image}"
+              if [[ -n "$extra_tag" ]]; then
+                printf '%s\n' "${ref}:${extra_tag}" >> "${RUNNER_TEMP}/cn-image-tags/${image}"
+              fi
+            fi
+          done
+
           {
-            echo "image=${image}"
+            echo "owner=${owner}"
             echo "push=${push}"
-            echo "tags<<EOF"
-            printf '%s\n' "${tags[@]}"
-            echo "EOF"
           } >> "$GITHUB_OUTPUT"
+          echo 'Tags:'
+          for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
+            sed "s/^/  ${image}: /" "${RUNNER_TEMP}/cn-image-tags/${image}"
+          done
 
-      - name: Login to GHCR
-        if: ${{ steps.meta.outputs.push == 'true' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # #1122: 4 image を 1 回の build session で作る。builder stage を共有するので
+      # 共通の依存 crate の compile は 1 回だけになる。ここでは registry へ出さず、
+      # OCI layout（と smoke 用の docker archive）へ書き出す。
+      - name: Build images
+        env:
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+          OUT_DIR: ${{ runner.temp }}/cn-images-out
+        run: |
+          set -euo pipefail
+          docker buildx version
+          mkdir -p "${OUT_DIR}"
+          # context の外へ書き出すため、書き込み先を明示して許可する（buildx の filesystem entitlement）。
+          docker buildx bake --file docker/cn/docker-bake.hcl --progress plain --allow "fs.write=${OUT_DIR}"
 
-      # #1073: Namespace runner では docker build が既定で Namespace の Remote Builder に向き、
-      # layer cache は builder 側が保持する。setup-buildx-action は既定 builder を上書きするため
-      # 置かず、GitHub Actions cache（type=gha）の cache-from / cache-to も使わない。
-      #
+      - name: Load cn-indexer image for smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker load --input "${RUNNER_TEMP}/cn-images-out/kukuri-cn-indexer-smoke.tar"
+          docker image inspect cn-indexer-smoke:local --format 'loaded {{.Id}}'
+
       # cn-indexer は publish 前に production 契約を image smoke で固定する（#614）:
       # mock / unknown provider の fail-closed 拒否、slot 制約、credential env 欠落の明示的
       # 失敗、credential 値の非漏出、正常構成の exit 0。`validate-config` は外部接続なしの
-      # 起動前検証モードなので、secret 実値や DB を要しない。build layer は同じ builder 上で
-      # 最終 build と共有されるため二重 build のコストは小さい。
-      - name: Build cn-indexer image for smoke
-        if: ${{ matrix.bin == 'cn-indexer' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/cn/Dockerfile
-          load: true
-          push: false
-          tags: cn-indexer-smoke:local
-          build-args: |
-            TARGET_PACKAGE=${{ matrix.package }}
-            TARGET_BIN=${{ matrix.bin }}
-
+      # 起動前検証モードなので、secret 実値や DB を要しない。#1122 以降、この step は production
+      # target と同じ stage・同じ build args から作った image に対して実行し、通ってから push する。
       - name: Smoke test cn-indexer image
-        if: ${{ matrix.bin == 'cn-indexer' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -238,26 +226,43 @@ jobs:
           fi
           echo "credential leak check: ok"
 
-      - name: Build and optionally push
-        uses: docker/build-push-action@v6
+      - name: Login to GHCR
+        if: ${{ steps.meta.outputs.push == 'true' }}
+        uses: docker/login-action@v3
         with:
-          context: .
-          file: docker/cn/Dockerfile
-          push: ${{ steps.meta.outputs.push == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.title=${{ matrix.image }}
-          build-args: |
-            TARGET_PACKAGE=${{ matrix.package }}
-            TARGET_BIN=${{ matrix.bin }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Image summary
+      # #1122: smoke が通った image だけを GHCR へ出す。build し直さず、書き出した
+      # OCI layout の manifest（attestation を含む）をそのまま push する。
+      - name: Push images
+        if: ${{ steps.meta.outputs.push == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "Image: ${{ steps.meta.outputs.image }}"
+          for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
+            layout="${RUNNER_TEMP}/cn-images-out/${image}"
+            digest=$(jq -r '.manifests[0].digest' "${layout}/index.json")
+            if [[ -z "$digest" || "$digest" == "null" ]]; then
+              echo "::error::${image}: OCI layout の digest を読めない"
+              exit 1
+            fi
+            tag_args=()
+            while read -r tag; do
+              [[ -n "$tag" ]] && tag_args+=(--tag "$tag")
+            done < "${RUNNER_TEMP}/cn-image-tags/${image}"
+            echo "pushing ${image} (${digest}) -> ${tag_args[*]}"
+            docker buildx imagetools create "${tag_args[@]}" "oci-layout://${layout}@${digest}"
+          done
+
+      - name: Image summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
           echo "Push: ${{ steps.meta.outputs.push }}"
-          echo 'Tags:'
-          printf '%s\n' '${{ steps.meta.outputs.tags }}'
+          for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
+            echo "Image: ${image}"
+            sed 's/^/  tag: /' "${RUNNER_TEMP}/cn-image-tags/${image}" || true
+          done

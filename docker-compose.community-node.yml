@@ -76,7 +76,7 @@ services:
       context: .
       dockerfile: docker/cn/Dockerfile
       args:
-        TARGET_PACKAGE: kukuri-cn-cli
+        TARGET_PACKAGES: kukuri-cn-cli
         TARGET_BIN: cn-cli
     depends_on:
       cn-postgres:
@@ -96,7 +96,7 @@ services:
       context: .
       dockerfile: docker/cn/Dockerfile
       args:
-        TARGET_PACKAGE: kukuri-cn-user-api
+        TARGET_PACKAGES: kukuri-cn-user-api
         TARGET_BIN: cn-user-api
     depends_on:
       cn-migrate:
@@ -159,7 +159,7 @@ services:
       context: .
       dockerfile: docker/cn/Dockerfile
       args:
-        TARGET_PACKAGE: kukuri-cn-iroh-relay
+        TARGET_PACKAGES: kukuri-cn-iroh-relay
         TARGET_BIN: cn-iroh-relay
     restart: unless-stopped
     environment:
@@ -184,7 +184,7 @@ services:
       context: .
       dockerfile: docker/cn/Dockerfile
       args:
-        TARGET_PACKAGE: kukuri-cn-indexer
+        TARGET_PACKAGES: kukuri-cn-indexer
         TARGET_BIN: cn-indexer
     depends_on:
       cn-migrate:
@@ -264,7 +264,7 @@ services:
       context: .
       dockerfile: docker/cn/Dockerfile
       args:
-        TARGET_PACKAGE: kukuri-cn-cli
+        TARGET_PACKAGES: kukuri-cn-cli
         TARGET_BIN: cn-cli
     depends_on:
       cn-migrate:
