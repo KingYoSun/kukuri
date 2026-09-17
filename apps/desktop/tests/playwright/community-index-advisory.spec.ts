@@ -25,14 +25,18 @@ test('advisory-labeled Explore results are gated and explain the issuing node', 
   await seedExploreMedia(page, { locale: 'ja', theme: 'dark', advisoryLabeled: true });
   const explore = await runExploreSearch(page);
 
-  await expect(explore.getByTestId(`media-adult-gated-${OBJECT_ID}`)).toBeVisible();
+  const placeholder = explore.getByTestId(`media-adult-gated-${OBJECT_ID}`);
+  await expect(placeholder).toBeVisible();
   await expect(explore.getByTestId(`media-preview-${OBJECT_ID}`)).toHaveCount(0);
 
-  const advisory = explore.getByTestId(`post-advisory-gated-${OBJECT_ID}`);
+  // #1108: 説明は枠から開く詳細 dialog に置く。
+  await placeholder.click();
+  const dialog = page.getByRole('dialog', { name: 'コミュニティノードによる推定' });
+  const advisory = dialog.getByTestId(`post-advisory-gated-${OBJECT_ID}`);
   await expect(advisory).toBeVisible();
   // 断定せず「推定」であることと、発行元を示す。
-  await expect(advisory).toContainText('コミュニティノードによる推定');
-  await expect(explore.getByTestId(`post-advisory-issuer-${OBJECT_ID}`)).toContainText(
+  await expect(advisory).toContainText('投稿した人自身の申告でも');
+  await expect(dialog.getByTestId(`post-advisory-issuer-${OBJECT_ID}`)).toContainText(
     'index.kukuri.example'
   );
   await expect(advisory).toContainText('性的表現の可能性');
@@ -47,17 +51,20 @@ test('the advisory placeholder opens an appeal addressed to the issuing node', a
   await seedExploreMedia(page, { locale: 'ja', theme: 'dark', advisoryLabeled: true });
   const explore = await runExploreSearch(page);
 
-  const appeal = explore.getByTestId(`post-advisory-appeal-${OBJECT_ID}`);
-  // キーボードからも到達できる(カード全体の開く操作に飲み込まれない)。
+  // キーボードからも詳細 dialog と申し立てへ到達できる(カード全体の開く操作に飲み込まれない)。
+  const placeholder = explore.getByTestId(`media-adult-gated-${OBJECT_ID}`);
+  await placeholder.focus();
+  await page.keyboard.press('Enter');
+  const appeal = page.getByTestId(`post-advisory-appeal-${OBJECT_ID}`);
   await appeal.focus();
   await expect(appeal).toBeFocused();
-  await appeal.click();
+  await page.keyboard.press('Enter');
 
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog', { name: 'リスク判定への異議申し立て' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('リスク判定への異議申し立て');
   await capture(page, 'ja-dark-1400-advisory-appeal');
   await page.keyboard.press('Escape');
+  await expect(placeholder).toBeFocused();
 });
 
 test('the advisory explanation stays inside a narrow column', async ({ page }) => {
@@ -65,7 +72,7 @@ test('the advisory explanation stays inside a narrow column', async ({ page }) =
   await seedExploreMedia(page, { locale: 'ja', theme: 'light', advisoryLabeled: true });
   const explore = await runExploreSearch(page);
 
-  await expect(explore.getByTestId(`post-advisory-gated-${OBJECT_ID}`)).toBeVisible();
+  await expect(explore.getByTestId(`media-adult-gated-${OBJECT_ID}`)).toBeVisible();
   const overflow = await explore.evaluate((root) => root.scrollWidth - root.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await capture(page, 'ja-light-390-advisory-gated');

@@ -1,8 +1,8 @@
 # 2026-09-16 「見つける」の content advisory 代替表示
 
-- Status: current
+- Status: superseded
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [2026-09-17 推定による代替表示の詳細 dialog 化](2026-09-17-1108-advisory-details-dialog.md)
 - PR: [#1071](https://github.com/KingYoSun/kukuri/pull/1071)
 - Issue / Scope revision: [#1055](https://github.com/KingYoSun/kukuri/issues/1055)、2026-09-15
 - Preview: 下表の before / after 画像（`assets/1055/`）

@@ -76,6 +76,11 @@ content advisory（ADR 0028 §8.6）を第 2 の源**として合成する。adv
   にする。
 - 代替表示は発行 node、category、confidence、basis を説明でき、異議申し立て（`POST /v1/report` の
   `appeal.risk_signal_id`）へ導線を持つ。断定表現（「成人向けと認定」）にせず「Community Node の推定」と示す。
+- 一覧では説明を常時展開しない（#1108、2026-09-17）。メディア枠を持つ投稿は枠の上に「成人向け画像 / 動画: 詳細は
+  クリック」だけを示し、枠を持たない投稿は本文欄に同じ趣旨の短い操作だけを置く。枠・操作から開く詳細 dialog に、
+  代替表示の説明文、推定の出所（投稿者の申告でもネットワーク全体の判断でもないこと）、発行 node、category、
+  confidence、basis、異議申し立てをまとめて示す。短いラベルは分類名であり、推定であることの説明は dialog 内で
+  欠かさない。dialog を開いてもメディアは描画せず、表示設定 OFF の取得ゲートは変えない。
 - 一括照会（仮名 `POST /v1/advisories/lookup`）は認証 + 同意済み client から可視 post id / blob hash を受け、
   その node 自身が発行した advisory のみ返す（`advisory_lookup_returns_only_configured_node_signals`）。照会と
   見つけるは同じ subject について同じ現在の判定を返す（再 scan 後の整合は ADR 0028 §8.14）。送信する

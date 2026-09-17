@@ -113,6 +113,70 @@
   opacity: 0.6;
 }
 
+/* #1108: Community Node の推定による代替表示。枠全体を詳細 dialog を開く button にし、
+   説明文の代わりに短いラベルだけを枠の上へ重ねる。 */
+.media-gated-trigger {
+  display: block;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.media-gated-trigger .media-gated-placeholder {
+  display: block;
+}
+
+.media-gated-trigger:hover {
+  border-color: var(--border-subtle-strong);
+}
+
+.media-gated-label {
+  position: absolute;
+  top: 50%;
+  right: var(--space-md);
+  left: var(--space-md);
+  width: fit-content;
+  margin-inline: auto;
+  transform: translateY(-50%);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border-subtle-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel-solid);
+  color: var(--foreground);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* #1108: advisory の詳細 dialog(説明の本体は shell-phase1-part1.css の .post-advisory-note)。 */
+.post-advisory-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+/* #1108: メディア枠を持たない advisory 付き投稿で、本文欄から詳細 dialog を開く。 */
+.post-advisory-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--surface-panel-muted);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.post-advisory-trigger:hover {
+  border-color: var(--border-subtle-strong);
+}
+
 .media-badges {
   position: absolute;
   top: 0.75rem;

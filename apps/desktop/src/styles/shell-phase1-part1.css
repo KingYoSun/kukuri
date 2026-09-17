@@ -828,22 +828,16 @@
 }
 
 /* #1055: Community Node の content advisory による代替表示の説明。断定表現を避け、
-   発行元と根拠を同じカード内で読めるようにする(ADR 0046 §6.3)。 */
+   発行元と根拠を読めるようにする(ADR 0046 §6.3)。#1108 以降は詳細 dialog 内に置く
+   (dialog と開く操作は shell-phase1-part2.css)。 */
 .post-advisory-note {
   display: grid;
   gap: var(--space-2xs);
-  margin-top: var(--space-2xs);
   padding: var(--space-sm);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-input);
   background: var(--surface-panel-muted);
   min-width: 0;
-}
-
-.post-advisory-title {
-  color: var(--foreground);
-  font-size: var(--text-caption);
-  font-weight: 600;
 }
 
 .post-advisory-facts {

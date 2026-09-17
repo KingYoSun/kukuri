@@ -9,6 +9,11 @@ import { seedUnconsentedCommunityNodes } from './community-node-fixture';
 import { seedAppConsent } from './app-consent-fixture';
 import { seedFeedback } from './tester-feedback-fixture';
 import { expectIndexContentContained, seedIndexLayout } from './community-index-layout-fixture';
+import {
+  TIMELINE_ADVISORY_OBJECT_ID,
+  TIMELINE_ADVISORY_URL,
+  seedTimelineAdvisory,
+} from './timeline-advisory-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 
@@ -151,6 +156,28 @@ for (const { locale, theme, width, height } of [
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('Search / 検索 / 搜索')).toBeVisible();
     await expect(dialog).toHaveScreenshot(`feedback-unavailable-${locale}-${theme}.png`);
+  });
+}
+
+// #1108: 推定による代替表示(枠と短いラベル)と、枠から開く詳細 dialog。
+for (const { locale, theme, width, title } of [
+  { locale: 'ja', theme: 'dark', width: 1400, title: 'コミュニティノードによる推定' },
+  { locale: 'en', theme: 'light', width: 390, title: 'Community Node estimate' },
+] as const) {
+  test(`advisory placeholder and details ${locale} ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width < 600 ? 844 : 980 });
+    await seedTimelineAdvisory(page, { locale, theme, lookup: 'advisory' });
+    await page.goto(TIMELINE_ADVISORY_URL);
+    const placeholder = page.getByTestId(`media-adult-gated-${TIMELINE_ADVISORY_OBJECT_ID}`);
+    await expect(placeholder).toBeVisible();
+    const card = page.locator(`[data-post-object-id="${TIMELINE_ADVISORY_OBJECT_ID}"]`).first();
+    await expect(card).toHaveScreenshot(`advisory-placeholder-${locale}-${theme}.png`);
+    await placeholder.click();
+    const dialog = page.getByRole('dialog', { name: title });
+    await expect(dialog.getByTestId(`post-advisory-issuer-${TIMELINE_ADVISORY_OBJECT_ID}`)).toContainText(
+      'index.kukuri.example'
+    );
+    await expect(dialog).toHaveScreenshot(`advisory-details-${locale}-${theme}.png`);
   });
 }
 

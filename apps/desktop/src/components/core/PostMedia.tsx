@@ -12,6 +12,9 @@ type PostMediaProps = {
   onOpenImage?: (index: number) => void;
   /// 動画添付そのものを media として通報する(#697)。未指定なら操作を出さない。
   onReportVideo?: (hash: string) => void;
+  /// #1108: Community Node の推定による代替表示で、枠そのものから詳細 dialog を開く。
+  /// 指定時は説明文を出さず、枠の上に短いラベルだけを置く。
+  onOpenGatedDetails?: (trigger: HTMLElement) => void;
 };
 
 export function PostMedia({
@@ -19,6 +22,7 @@ export function PostMedia({
   showUnavailableDiagnostic = false,
   onOpenImage,
   onReportVideo,
+  onOpenGatedDetails,
 }: PostMediaProps) {
   const { t } = useTranslation(['common', 'shell']);
   const videoReportHash = media.kind === 'video' ? media.videoReportHash : null;
@@ -28,6 +32,23 @@ export function PostMedia({
   }
   // #858: 成人向けラベル付きメディアは、表示設定 OFF の間は取得もデコードもせず
   // 一貫したプレースホルダーだけを出す(全表示経路共通)。
+  if (media.state === 'gated' && onOpenGatedDetails) {
+    // 画像 / 動画は取得・表示しない。枠全体を button にして Enter / Space でも開ける。
+    return (
+      <button
+        type='button'
+        className='media-frame media-frame-gated media-gated-trigger'
+        aria-haspopup='dialog'
+        data-testid={`media-adult-gated-${media.objectId}`}
+        onClick={(event) => onOpenGatedDetails(event.currentTarget)}
+      >
+        <span className='media-gated-placeholder' aria-hidden='true' />
+        <span className='media-gated-label'>
+          {media.kind === 'video' ? t('media.advisoryDetailsVideo') : t('media.advisoryDetailsImage')}
+        </span>
+      </button>
+    );
+  }
   if (media.state === 'gated') {
     return (
       <div
