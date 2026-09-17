@@ -31,6 +31,8 @@ kukuri-cn-safety-openai = { path = "../cn-safety-openai" }
 kukuri-cn-safety-video = { path = "../cn-safety-video" }
 
 [dev-dependencies]
+async-trait.workspace = true
+tempfile.workspace = true
 wiremock.workspace = true
 
 [lints]

@@ -80,6 +80,27 @@ readinessのキャッシュはproviderとdecoder構成の一致、および期�
 429・一時5xx・通信障害は最大3attempt、Retry-Afterとbackoff、scan全体300秒の範囲で再試行する。
 失敗・cancel・途中成功を共通完了cacheに保存しない。claimは取消時に解放し、crash時は320秒のlease満了で回復する。
 
+### readinessの失敗表示と一時失敗（#1091）
+
+`provider_credential_valid` の general は `<段階>に失敗: <分類>` を表示する。表示は固定文言とHTTP statusの数値だけで作り、
+キー・API応答本文・mediaを含めない。段階は順に実行し、decoderの確認に失敗した場合はOpenAIへの要求と共有予算の予約を行わない。
+
+| 段階 | 主な分類と確認先 |
+| --- | --- |
+| 設定不備 / 資格情報未設定 | `COMMUNITY_NODE_MODERATION_*` の値、`COMMUNITY_NODE_VLM_API_KEY` の注入 |
+| 動画decoderの初期化 | 実行ファイル、作業領域（専用tmpfs）の有無・権限、抽出設定値、作業領域の保守処理との競合 |
+| 動画decoderの確認 | 初回起動の準備が時間切れ、ffprobe / ffmpeg の時間切れ、起動失敗、異常終了または資源上限、同梱動画の検証失敗 |
+| OpenAI本文 / 画像の確認 | 認証拒否（401/403）、頻度制限（429）、プロバイダ側エラー（5xx）、予期しない応答、共有予算の枯渇・DB不可、時間切れ、通信失敗、応答の解釈失敗 |
+
+decoderの初回起動は、page cacheが冷えた直後（image更新直後など）に数秒かかることがある。
+各extractorは最初の抽出の前に同じ隔離環境で `ffprobe -version` を実行し、decode期限（最大30秒）の範囲で読み込みを済ませる。
+probe期限（最大5秒）は入力の解析だけに使う。起動後にprobeが時間切れになった場合は、準備を1回やり直してから1回だけ再試行する。
+「初回起動の準備が時間切れ」が続く場合は、VMのCPU・disk I/Oの負荷とimageの配置を確認する。
+
+作業領域の保守処理（残留jobの回収とjob directoryの作成）は、同じtmpfsを使う他のextractorや、
+fork直後の子processが保持するlockと短時間競合する。作成処理は最大2秒待ち、それを超えた場合だけ「作業領域の保守処理との競合」で失敗する。
+Composeでは各containerが専用tmpfsを持つ。直接起動でindexerとreadinessが `/dev/shm/kukuri-video` を共有する構成でも、待機の範囲内なら失敗しない。
+
 ## 保存範囲と開示
 
 OpenAIへ送るのは本文・正規化した静止画・動画由来JPEGであり、原動画・音声は送らない。
