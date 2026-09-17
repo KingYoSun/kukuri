@@ -179,6 +179,7 @@ locals {
 
   monitor_script_b64 = base64encode(replace(templatefile("${path.module}/templates/monitor.sh.tftpl", {
     index_health_helpers  = file("${path.module}/scripts/index-health.sh")
+    relation_age_helpers  = file("${path.module}/scripts/relation-age.sh")
     index_expected_topics = sort(tolist(var.index_expected_topics))
     install_dir           = local.install_dir
     postgres_data_path    = local.postgres_data_path

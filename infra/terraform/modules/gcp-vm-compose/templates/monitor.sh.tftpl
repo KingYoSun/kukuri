@@ -90,13 +90,7 @@ while read -r metric value; do
   write_metric "$metric" "$value"
 done <<< "$health_metrics"
 
-relation_timestamp="$(systemctl show kukuri-relation-analyze.service -p ExecMainExitTimestamp --value 2>/dev/null || true)"
-relation_epoch="$(date -d "$relation_timestamp" +%s 2>/dev/null || echo 0)"
-relation_status="$(systemctl show kukuri-relation-analyze.service -p ExecMainStatus --value 2>/dev/null || echo 1)"
-if [ "$relation_epoch" -gt 0 ] && [ "$relation_status" = "0" ]; then
-  relation_age="$(( $(date +%s) - relation_epoch ))"
-else
-  relation_age=1000000000
-fi
+${relation_age_helpers}
+relation_age="$(relation_last_success_age "$INSTALL_DIR/.monitor-relation-analyze")"
 write_metric relation_last_success_age_seconds "$relation_age"
 %{ endif ~}
