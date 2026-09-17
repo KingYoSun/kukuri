@@ -46,7 +46,7 @@ fn arachnid(url: &str) -> ProjectArachnidShieldProvider {
         },
         ShieldCredentials::new("synthetic-user", "synthetic-password"),
     )
-    .unwrap()
+    .expect("synthetic provider fixture")
 }
 async fn assert_revocation_blocks(
     provider: Box<dyn SafetyProvider>,
@@ -59,7 +59,11 @@ async fn assert_revocation_blocks(
     let request = ProviderScanRequest::for_subject(SubjectKind::Blob, "a".repeat(64))
         .with_media_hint("a".repeat(64));
     let result = provider.scan_guarded(&request, &Guard(active)).await;
-    let hits = server.received_requests().await.unwrap().len();
+    let hits = server
+        .received_requests()
+        .await
+        .expect("synthetic provider fixture")
+        .len();
     println!(
         "provider={}, HTTP hits after revocation={hits}, result={result:?}",
         provider.name()
@@ -93,7 +97,7 @@ async fn vlm_rechecks_guard_after_media_fetch() {
         VlmCredentials::new("synthetic-key"),
         CapabilityProfile::General,
     )
-    .unwrap()
+    .expect("synthetic provider fixture")
     .with_media_fetcher(Arc::new(RevokingFetcher(active.clone())));
     assert_revocation_blocks(Box::new(provider), server, active).await;
 }

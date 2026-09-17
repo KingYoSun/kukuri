@@ -58,7 +58,7 @@ pub struct IngestSummary {
     pub deindexed: usize,
     /// provider を呼んで判定した scan 数（post text + media blob。#1050）。
     pub scans_fresh: usize,
-    /// 保存済み verdict を再利用して provider を呼ばなかった scan 数（#1050）。
+    /// 保存済みsubject判定または共通内容判定を再利用してproviderを呼ばなかったscan数。
     pub scans_reused: usize,
 }
 
@@ -224,7 +224,8 @@ impl IngestPipeline {
     /// 外部プロバイダ利用不可）を記録する（#1050）。
     ///
     /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
-    /// blob = blob hash）。再利用時は provider を呼ばず artifact も作らない。
+    /// blob = blob hash）。再利用時はproviderを呼ばない。共通内容cacheから別subjectへ
+    /// 再利用する場合は、そのsubjectのartifactを新たに生成する。
     ///
     /// media blob の未複製・ピア不在も verdict 上は `ProviderUnavailable` になるが、外部 safety
     /// provider 障害ではない。scan 中に media fetch の利用不可カウンタが増えた場合は、専用の
@@ -461,13 +462,9 @@ impl IngestPipeline {
                 Ok(IngestOutcome::Indexed) => summary.indexed += 1,
                 Ok(IngestOutcome::SkippedNonAllow) => summary.skipped_non_allow += 1,
                 Ok(IngestOutcome::Deindexed) => summary.deindexed += 1,
+                Ok(IngestOutcome::Ignored) => {}
                 Err(error) => {
-                    if let Some(id) = record
-                        .key
-                        .strip_prefix("objects/")
-                        .and_then(|key| key.strip_suffix("/state"))
-                        .filter(|id| !id.is_empty() && !id.contains('/'))
-                    {
+                    if let Some(id) = post_id_from_state_key(&record.key) {
                         self.deindex_object(scope_kind, scope_id, id).await?;
                     }
                     // 単一 entry の失敗で scope 全体を止めない。fail-closed（投影しない）側に倒す。
@@ -493,6 +490,11 @@ impl IngestPipeline {
         context: &ScopeContext,
         stats: &mut ScanStats,
     ) -> Result<IngestOutcome> {
+        // Other key domains are not posts. A corrupt value under a real post identity,
+        // however, must reach the error path to remove a previously indexed row.
+        if post_id_from_state_key(&record.key).is_none() {
+            return Ok(IngestOutcome::Ignored);
+        }
         let object: PostObjectView =
             serde_json::from_slice(&record.value).context("invalid post object state")?;
         if record.key != format!("objects/{}/state", object.object_id) {
@@ -747,6 +749,13 @@ enum IngestOutcome {
     Indexed,
     SkippedNonAllow,
     Deindexed,
+    Ignored,
+}
+
+fn post_id_from_state_key(key: &str) -> Option<&str> {
+    key.strip_prefix("objects/")?
+        .strip_suffix("/state")
+        .filter(|id| id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 /// 本文 text に derived 検索タグを相乗りさせた投影用 text を組み立てる。

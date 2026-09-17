@@ -2,7 +2,7 @@
 
 ## 状態と固定範囲
 
-- In progress、区分C、Scope revision `2026-09-17-expanded`。
+- 実装・ローカル検証完了。区分C、Scope revision `2026-09-17-expanded`。最終headの監査・CI・merge照合と現在判定は [PR #1080](https://github.com/kukuri-app/kukuri/pull/1080) / [Issue #1060](https://github.com/kukuri-app/kukuri/issues/1060) の記録を参照。
 - 基準commit: `7f13c8821bbc6cdfb164156611293254662ca601`。
 - [Issue #1060](https://github.com/kukuri-app/kukuri/issues/1060) の AC-1〜10、INVAR-1〜5、INV-1〜5、TR-1〜7、S1〜S5 を固定する。
 - ユーザーは2026-09-17に計画・推奨案を承認し、D1（本文/静止画provider・共有予算）とD2（共通内容hashキャッシュ）も本Issueへ統合した。Issue作業・commit・PR・mergeは追加承認不要。mergeには必須CIと独立監査PASSが必要。
@@ -19,8 +19,8 @@
 | T4 D1専用provider・共有予算 | AC-2/3/5/6/9 | providerはPR #1079、PostgreSQL共有予算とproduction resolverは第2PR |
 | T5 D2共通内容cache・投稿合成 | AC-4/5/6/10 | 第2PRで実装。memory/PGの再利用・並行・restart・lease fencing・カテゴリ別signal・参照guardのtargeted test成功 |
 | T6 配備・readiness・運用 | AC-7/8/9 | 第2PRで実装。operator/CLI test、合成decoder probe、Compose構文、Terraform validate成功 |
-| T7 統合・実API検証 | 全AC/INVAR | 全CN suite・production image・benign live計測を実行中 |
-| T8 独立監査・CI・merge照合 | 全AC/INVAR | 第1PRはPASS・CI成功・merge済み。第2PRは未完了 |
+| T7 統合・実API検証 | 全AC/INVAR | cn-check / cn-test / cn-e2e成功。production imageのbenign live16requestと再利用時I/O 0を記録 |
+| T8 独立監査・CI・merge照合 | 全AC/INVAR | 第1PRはPASS・CI成功・merge済み。第2PRの固定head監査・CI・merge照合はPR #1080の記録に集約 |
 
 ## 事前調査と計測
 
@@ -49,7 +49,7 @@ TR-1 正常cold、TR-2 posterと対象frame/カテゴリ混在、TR-3 部分失�
 - 必須: `cn-check` / `cn-test` / `cn-e2e`、下位blob変更の `rust-test` と関連media scenario、production image / decoder smoke、Compose/Terraform確認、benign実API、`git diff --check` / `oversized-files`。
 - 実装・検証・監査の未実施を成功扱いしない。
 
-### 初期実装の検証（2026-09-17）
+### 初期実装時点の検証（2026-09-17、後続で完了した項目は上記表を参照）
 
 - `category_boolean_survives_low_confidence`: 変更前は70閾値でラベルが落ちて失敗、判定方式を型で分離後に成功。`cargo test -p kukuri-cn-safety` 全suite成功。
 - `media_fetch_bounds_ingress_before_allocating_whole_blob`: 変更前は無上限/永続取得fallbackが1回で失敗、bounded取得へ切替後は0回で成功。既存source resolutionの6 contractも成功。
@@ -181,3 +181,28 @@ GitHub APIで旧URL/現URLのrepository IDがともに `1025894008` であるこ
 CI service accountの既存 `roles/iam.workloadIdentityUser` principalを `kukuri-app/kukuri` へ置換した。
 他のbinding/roleは変更せず、旧名の許可は残さない。VM apply・本番media送信は行っていない。
 runbookの移転時の手順も同期した。CIの再実行で認証とplanの成功を確認してからmergeする。
+
+## 最終ローカルvalidation
+
+- `cn-check`（全CN crate / all-targets clippy、warningsをerror扱い）: 成功。
+- `cn-test`（全CN crateと実PostgreSQL/Valkeyのintegrationを有効化）: 成功、最終実行3分16秒。
+- `cn-e2e`（実PostgreSQL/Valkey/ArcadeDB/irohを使う既存全構成 + provider guard回帰）: 13件成功、最終実行1分30秒。
+- Linuxの実FFmpeg抽出、静止画/動画OpenAI contracts、PG content cache/lease/budget、CLI/operator/readiness、query/worker、
+  原則のgeneral trust 0・appeal訂正保護を上記suiteで確認した。
+- production image build / benign live / real CLI probe、Compose config、Terraform fmt/validate、Terraform CI plan: 成功。
+- `cargo fmt --all -- --check` / `git diff --check` / `oversized-files`: 成功。
+- 下位blob変更の `rust-test` とmedia scenarioはPR #1079で成功し、第2PRではそのpathを変更していない。
+
+全suiteで明らかになったfixture/互換差分も解消した。
+
+1. `query_contracts` / `worker_contracts` のprivate fixtureがPublic・channel_idなしのenvelopeを使っていたため、
+   実clientと同じPrivate・channel_id付き署名を作るよう更新。検索件数・失効時de-index等のassertionは維持。
+2. `objects/not-a-post/state` 等の他domainは従来どおりIgnoredを維持する。投稿入口は生成・署名検証契約と同じ64hex ID。
+   その実post keyにあるcorrupt値・偽object_idは、key側のIDで旧indexをde-indexする。
+   `reference_guard_contracts`、`source_resolution_contracts`、`query_contracts` の15件が成功し、独立差分監査でもblocker 0。
+3. 監査用testの `unwrap` は理由付き `expect` へ変更してclippy規約を満たした。
+   大型baselineはconfig.rsの必要な31行追加を記録し、既存の縮小分も生成commandで下げた。
+
+検証環境の失敗は製品成功と分離した。WSLでWindows worktreeのgitdirを読む際はgit.exeのwrapperを使い、
+Docker credential helperを含むPATHを保持して専用Compose project/portを起動した。最初の環境不備やfixture失敗を成功扱いせず、
+修正後に全suiteを完走した。WSLのtargetは再起動で消える `/tmp` から検証用cacheへ移した。

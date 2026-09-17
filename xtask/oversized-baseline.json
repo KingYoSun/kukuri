@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "lines": 1287,
+      "lines": 1318,
       "path": "crates/cn-operator/src/config.rs"
     },
     {
@@ -9,7 +9,7 @@
       "path": "docs/THIRD_PARTY_NOTICES.md"
     },
     {
-      "lines": 1228,
+      "lines": 1224,
       "path": "crates/harness/src/scenarios/community_node.rs"
     },
     {
@@ -18,11 +18,11 @@
     },
     {
       "lines": 1191,
-      "path": "crates/cn-operator/src/docs.rs"
+      "path": "crates/metaverse-host/src/lib.rs"
     },
     {
-      "lines": 1191,
-      "path": "crates/metaverse-host/src/lib.rs"
+      "lines": 1149,
+      "path": "crates/cn-operator/src/docs.rs"
     },
     {
       "lines": 1141,
@@ -49,16 +49,12 @@
       "path": "crates/metaverse-host/src/tests.rs"
     },
     {
-      "lines": 1051,
+      "lines": 1049,
       "path": "apps/desktop/src/lib/api/commands/runtimeApi.ts"
     },
     {
       "lines": 1033,
       "path": "crates/harness/src/scenarios/desktop_smoke.rs"
-    },
-    {
-      "lines": 1027,
-      "path": "crates/cn-operator/tests/generate.rs"
     },
     {
       "lines": 1025,

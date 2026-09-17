@@ -25,7 +25,10 @@ use kukuri_cn_safety_runtime::{
     MemorySafetyArtifactStore, SafetyArtifactStore, SafetyScanService, VerdictPersistMeta,
 };
 use kukuri_cn_safety_runtime::{SafetyOrchestrator, Secp256k1ModerationEventSigner};
-use kukuri_core::{KukuriKeys, ReplicaId, TopicId, build_post_envelope};
+use kukuri_core::{
+    ChannelId, KukuriKeys, ObjectVisibility, PayloadRef, ReplicaId, TopicId,
+    build_post_envelope_with_payload_in_channel,
+};
 use kukuri_docs_sync::{
     DocOp, DocsSync, MemoryDocsSync, private_channel_replica_id, stable_key, topic_replica_id,
 };
@@ -59,8 +62,34 @@ async fn persist_post(
     topic: &TopicId,
     body: &str,
 ) -> String {
+    persist_post_in_channel(docs, replica, topic, body, None).await
+}
+
+async fn persist_post_in_channel(
+    docs: &MemoryDocsSync,
+    replica: &ReplicaId,
+    topic: &TopicId,
+    body: &str,
+    channel: Option<&str>,
+) -> String {
     let keys = KukuriKeys::generate();
-    let envelope = build_post_envelope(&keys, topic, body, None).expect("envelope");
+    let channel_id = channel.map(ChannelId::new);
+    let envelope = build_post_envelope_with_payload_in_channel(
+        &keys,
+        topic,
+        PayloadRef::InlineText { text: body.into() },
+        vec![],
+        vec![],
+        None,
+        if channel.is_some() {
+            ObjectVisibility::Private
+        } else {
+            ObjectVisibility::Public
+        },
+        channel_id.as_ref(),
+        Vec::new(),
+    )
+    .expect("envelope");
     let object = envelope
         .to_post_object()
         .expect("post object")
@@ -285,7 +314,14 @@ async fn cross_scope_reads_exclude_private_channel_entries() -> Result<()> {
             "1111111111111111111111111111111111111111111111111111111111111111",
         )
         .await?;
-    let private_post = persist_post(&f.docs, &channel_replica, &topic, "hidden async post").await;
+    let private_post = persist_post_in_channel(
+        &f.docs,
+        &channel_replica,
+        &topic,
+        "hidden async post",
+        Some("secret-room"),
+    )
+    .await;
 
     f.pipeline
         .ingest_scope(IndexScopeKind::PublicTopic, "rust", &topic_replica)

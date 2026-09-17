@@ -597,8 +597,8 @@ impl SafetyScanService {
     /// （#1050）。
     ///
     /// `source_fingerprint` は subject の内容識別子（post = state レコードの content hash、
-    /// blob = blob hash）。再利用時は artifact を生成せず、`verdict_id` に保存済み行の id を
-    /// 返す。非 allow の再利用で `subject_author` があれば著者関連付けだけ行う。
+    /// blob = blob hash）。同subjectの再利用では保存済みverdictのidを返し、必要な著者関連付けを行う。
+    /// 別subjectの共通内容cache hitではproviderを呼ばず、自subjectのartifactを生成する（#1060）。
     pub async fn scan_or_reuse(
         &self,
         request: &ProviderScanRequest,
