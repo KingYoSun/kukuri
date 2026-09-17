@@ -437,16 +437,15 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
+      # #1073: Windows profile も Cache Volume を使う（Windows では junction で mount される）。
+      # `cache: rust` は Cargo registry / git と root の target を扱う。配布物を build する
+      # src-tauri 側の target は別 directory なので path で明示する。
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-fast-${{ runner.os }}-${{ github.job }}
-          # #1063: timeout した attempt の依存 build も残し、PR run は main の entry を読むだけにする。
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            . -> target
-            apps/desktop/src-tauri -> target
+          cache: rust
+          path: |
+            ${{ github.workspace }}/apps/desktop/src-tauri/target
 
       - name: Install desktop dependencies
         working-directory: apps/desktop

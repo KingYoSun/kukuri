@@ -6,7 +6,7 @@
 - 2026-09-17 にユーザーが次を承認した: repo を GitHub organization `kukuri-app` へ移管して外部 runner を使う、`kukuri-cn-images` の build / push を外部 runner の VM で動かす、Issue #1073 の Goal / AC を速度優先へ改訂する。Issue 操作・commit・PR 作成・CI 成功後の merge は承認待ちなしで行う。
 - 当初は Blacksmith を採用したが、新規 organization の審査でブロックされたため、同日にユーザーの判断で Namespace へ切り替えた。runner profile はユーザーが作成済みで、Linux は `namespace-profile-kukuri`（Ubuntu 24.04）、Windows は `namespace-profile-kukuri-win`（Windows Server 2022）。
 - AC / INVAR の正本は [Issue #1073](https://github.com/kukuri-app/kukuri/issues/1073)。旧 Scope（2026-09-16、GitHub-hosted のまま 10 GB に収める）は Issue 本文の「Superseded」節に残し、計測結果は本書「修正前の観測」に引き継いだ。
-- repo 移管の副作用（GHCR namespace が `ghcr.io/kingyosun/*` から `ghcr.io/kukuri-app/*` へ変わる、`apps/desktop/src-tauri/tauri.conf.json` の updater endpoint、`crates/cn-operator` の image 既定値、`infra/terraform` の変数、本番 compose の image 参照、docs 内の URL）は別 Issue で扱い、本 Issue の Close 条件に含めない。
+- repo 移管に伴う旧 owner 参照（updater endpoint、GHCR image、runbook）の更新は #1083（PR #1085）で完了済みで、本 Issue の対象外。
 
 ## 修正前の観測（2026-09-16 UTC、GitHub-hosted）
 
@@ -49,7 +49,8 @@ compile 時間は job ログの `Compiling` 行の間隔（120 秒未満）の�
 - **並行と commit**: job は最後に commit された版の fork を受け取る。exit 0 で終わった job の状態が次の親になり（last write wins）、失敗した job の変更は捨てられる。容量を超えると volume はリセットされ、次の job は cache miss になる。
 - **分離**: volume は workspace / runner profile / repository ごとに分かれ、同じ profile・repo の全 job が 1 つを共有する。`runs-on: <profile>;overrides.cache-tag=<名前>` で別 volume にできる。profile の Branch protection で volume を更新できる branch を制限できる（読み取りは全 branch / PR で可能）。
 - **Docker**: Namespace runner では docker build が既定で Remote Builder に向き、layer cache を持つ。`cache-from` / `cache-to` は不要。`docker/build-push-action` をそのまま使う。
-- **Windows**: Cache Volume と `nscloud-cache-action` の Windows 対応は docs に記載が無い。
+- **Windows**: docs に Windows 固有の記載は無いが、`namespace-profile-kukuri-win` の設定画面で Cache Volume（50 GB）と sub toggle を有効にできる。`nscloud-cache-action` のソース（`src/utils.ts`）は Windows では junction で mount し、post step で junction が残っているかを検査する。
+- **`cache: rust` の実パス**（PR run の `linux-rust-static` ログで確認）: `~/.cargo/registry`、`~/.cargo/git`、`./target`、`~/.cargo/.global-cache` の 4 つを mount する。
 
 ## 対応
 
@@ -57,8 +58,8 @@ compile 時間は job ログの `Compiling` 行の間隔（120 秒未満）の�
 | --- | --- |
 | AC-1 | Linux job（`kukuri-fast` 8、`kukuri-nightly` 全 job、`kukuri-cn-images`、`kukuri-visual-baseline`）を `namespace-profile-kukuri`、`windows-fast` を `namespace-profile-kukuri-win` へ |
 | AC-1 / AC-2 | Linux の `Swatinem/rust-cache` を `namespacelabs/nscloud-cache-action@v1`（`cache: rust`）へ。last write wins で別内容の job が互いの成果を消さないよう、build 内容が同じ job 同士だけで cache-tag を共有する: `kukuri-harness`（desktop-ui、desktop-browser、smoke、community-node、additional-scenarios、multi-device）、`kukuri-rust-tests`、`kukuri-rust-static`、`kukuri-cn`、`kukuri-cn-e2e`、`kukuri-app-api-slow`。fast と nightly の同名 job は同じ tag。cargo を使わない `kukuri-cn-images` / `kukuri-visual-baseline` は専用 tag |
-| AC-1 | `windows-fast` は Cache Volume の Windows 対応が未確認のため、#1074 の `Swatinem/rust-cache`（main 限定保存、GitHub backend、2.17 GB）を維持 |
-| AC-3 | fast Linux と nightly から sccache を除去（workflow env、`Setup sccache`、`Show sccache stats`、`windows-fast` の無効化 env）。GitHub backend に残るのは Windows の rust-cache と pnpm の cache だけになる |
+| AC-1 | `windows-fast` も `nscloud-cache-action`（`cache: rust`）へ。配布物を build する `apps/desktop/src-tauri/target` は root の target と別なので `path` で追加する。Windows profile の volume は Linux と別で、job も 1 つなので cache-tag は付けない |
+| AC-3 | fast Linux と nightly から sccache を除去（workflow env、`Setup sccache`、`Show sccache stats`、`windows-fast` の無効化 env）。GitHub backend に残るのは pnpm の cache だけになる |
 | AC-3 | `kukuri-cn-images` の `docker/setup-buildx-action` と `cache-from` / `cache-to`（`type=gha`）を削除し、Namespace の既定 builder を使う |
 | INVAR-1 | 各 job の実行 step、timeout、artifact 名・path・upload 条件は変更なし（diff で確認）。`Setup sccache` / `Show sccache stats` は cache 基盤 step として #1074 の先例どおり削除 |
 | 付随 | 視覚回帰 baseline を比較側と同じ profile で生成するため `kukuri-visual-baseline.yml` も変更し、`docs/runbooks/dev.md` の注記を同期。actionlint 用に `.github/actionlint.yaml` へ profile label を登録 |
@@ -69,7 +70,30 @@ profile 側の前提（ユーザー設定）: `namespace-profile-kukuri` の cac
 
 ## 試行 PR の計測（AC-1 見込み）
 
-PR run の計測後に追記する。確認項目: 全 job が Namespace runner で成功する、`Cache Rust` が volume を mount する、cn-indexer smoke の `load: true` が Remote Builder で動く、視覚回帰が profile の image で一致する（割れた場合は同じ PR で baseline を再生成する）。
+### 1 回目（head `1d4f74e7`、`Kukuri Fast` run 35216854361、cache volume は空）
+
+全 9 job が成功した。この時点の `windows-fast` は `Swatinem/rust-cache` のままで、GitHub backend に cache が無く依存を全 compile している。
+
+| job | GitHub-hosted（main run 35104874597） | Namespace 初回 |
+| --- | --- | --- |
+| `windows-fast` | 48.3 分 | 13.9 分（Doctor 3.9、Tauri check 2.5、package 7.4） |
+| `linux-rust-tests` | 18.0 分 | 13.9 分 |
+| `linux-desktop-ui` | 12.2 分 | 9.4 分 |
+| `linux-desktop-browser` | 14.9 分 | 7.4 分 |
+| `linux-rust-static` | 13.4 分 | 7.0 分 |
+| `linux-cn` | 12.3 分 | 5.3 分 |
+| `linux-cn-e2e` | 8.6 分 | 4.4 分 |
+| `linux-community-node` | 5.5 分 | 3.1 分 |
+| `linux-smoke` | 4.7 分 | 2.7 分 |
+
+- run 全体（最初の job 開始から最後の job 完了まで）は約 16 分。`linux-desktop-ui` は runner 割り当てまで約 3 分待った。
+- `Cache Rust` は 4 path を mount し、post step で全 path が `cached` になった（初回は「Some cache paths missing」）。
+- 視覚回帰は 38 件すべて成功し、runner image の変更で baseline は割れなかった。browser test は 357 件成功。
+- `Kukuri Community Node Images`（run 35216854281）は Namespace の既定 builder で build できた。
+
+### 2 回目（`windows-fast` を Cache Volume へ変更した head）
+
+計測後に追記する。確認項目: `windows-fast` で junction の mount と post step の `cached`、Linux job の cache hit による短縮。
 
 ## CI 計測（AC-1〜AC-3）
 
