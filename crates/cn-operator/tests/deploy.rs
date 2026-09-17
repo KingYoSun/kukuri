@@ -408,6 +408,56 @@ fn config_with_indexer_stack(extra_deploy: &str, extra_features: &str) -> String
 }
 
 #[test]
+fn dedicated_moderation_deploy_requires_secret_and_general_slot() {
+    let yaml = config_with_indexer_stack("", "")
+        .replace(
+            "    unknown_csam:\n      provider: openai-compatible-vlm\n",
+            "",
+        )
+        .replace(
+            "provider: openai-compatible-vlm",
+            "provider: openai-moderation",
+        );
+    assert!(
+        load_and_validate(&yaml)
+            .unwrap_err()
+            .to_string()
+            .contains("vlm_api_key_secret_id")
+    );
+    let valid = format!(
+        "{yaml}  vlm_api_key_secret_id: existing-vlm-key\n  moderation:\n    config_version: rollout-2\n    rpm: 300\n"
+    );
+    let resolved = load_and_validate(&valid).expect("dedicated provider config");
+    let tfvars = generate_tfvars(&resolved).unwrap();
+    assert!(tfvars.contains("rpm = 300"));
+    assert!(tfvars.contains("config_version = \"rollout-2\""));
+    assert!(tfvars.contains("existing-vlm-key"));
+    let docs = generate_all(&resolved);
+    let external = docs
+        .iter()
+        .find(|doc| doc.filename == "external-transmission-notice.md")
+        .unwrap();
+    assert!(external.content.contains("OpenAI Moderation API"));
+    assert!(
+        external
+            .content
+            .contains("動画本体・音声はOpenAIへ送信しない")
+    );
+    assert!(external.content.contains("Project Arachnid Shield"));
+    for invalid in [
+        valid.replace("    general:", "    unknown_csam:"),
+        valid.replace(
+            "provider: openai-moderation",
+            "provider: openai-moderation\n      hosting: self_host",
+        ),
+        valid.replace("rpm: 300", "rpm: 501"),
+        valid.replace("rpm: 300", "api_base_url: http://untrusted.example/v1"),
+    ] {
+        assert!(load_and_validate(&invalid).is_err());
+    }
+}
+
+#[test]
 fn machine_type_defaults_to_e2_medium() {
     let yaml = config_with_deploy("  relay_domain: relay.example-kukuri.net\n", "", false);
     let resolved = load_and_validate(&yaml).unwrap();

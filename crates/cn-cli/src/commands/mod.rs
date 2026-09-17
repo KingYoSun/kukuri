@@ -9,6 +9,7 @@ mod indexing;
 mod legal_hold;
 pub(crate) mod moderation;
 mod readiness;
+mod readiness_openai;
 mod readiness_runtime;
 mod relation;
 mod reports;

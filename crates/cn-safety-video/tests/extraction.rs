@@ -28,6 +28,19 @@ fn samples_are_reproducible_and_cover_the_whole_duration() {
 mod linux {
     use super::*;
     use kukuri_cn_safety::provider::VideoFrameExtractor;
+
+    #[tokio::test]
+    async fn bundled_readiness_decodes_both_containers() {
+        let extractor =
+            kukuri_cn_safety_video::FfmpegVideoExtractor::new(VideoExtractConfig::default())
+                .expect("decoder");
+        let frame = extractor
+            .readiness_probe()
+            .await
+            .expect("synthetic MP4/WebM probe");
+        assert!(frame.bytes.starts_with(&[0xff, 0xd8]));
+        assert!(frame.bytes.len() <= 256 * 1024);
+    }
     use kukuri_cn_safety_video::FfmpegVideoExtractor;
     use std::{path::Path, process::Command, sync::Arc, time::Duration};
 

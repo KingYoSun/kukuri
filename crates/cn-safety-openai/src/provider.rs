@@ -50,6 +50,29 @@ impl OpenAiModerationProvider {
         self
     }
 
+    async fn scan_run(
+        &self,
+        request: &ProviderScanRequest,
+        guard: Option<&dyn kukuri_cn_safety::provider::ScanReferenceGuard>,
+    ) -> Result<ProviderScanResult, ScanError> {
+        let started = Instant::now();
+        let _queue = self.queue.try_acquire().map_err(|_| {
+            self.client.metrics().record_scan(false, 0);
+            ScanError::Unavailable("moderation scan queue full".into())
+        })?;
+        let deadline = started + self.client.config().scan_timeout;
+        let result = match timeout_at(deadline, self.scan_inner(request, deadline, guard)).await {
+            Ok(result) => result,
+            Err(_) => Err(ScanError::Timeout(
+                "moderation scan deadline exceeded".into(),
+            )),
+        };
+        self.client
+            .metrics()
+            .record_scan(result.is_ok(), started.elapsed().as_millis() as u64);
+        result
+    }
+
     async fn scan_inner(
         &self,
         request: &ProviderScanRequest,
@@ -86,7 +109,18 @@ impl OpenAiModerationProvider {
                     .video
                     .as_ref()
                     .ok_or_else(|| ScanError::Unavailable("video extractor missing".into()))?;
-                let extracted = video.extract(&media.bytes).await?;
+                let decode_started = Instant::now();
+                let extraction = video.extract(&media.bytes).await;
+                let (duration, frames) = extraction
+                    .as_ref()
+                    .map(|value| (value.duration_ms, value.frames.len() as u64))
+                    .unwrap_or_default();
+                self.client.metrics().record_video_decode(
+                    duration,
+                    frames,
+                    decode_started.elapsed().as_millis() as u64,
+                );
+                let extracted = extraction?;
                 if extracted.frames.is_empty() || extracted.frames.len() > 8 {
                     return Err(invalid("invalid extracted frame count"));
                 }
@@ -142,6 +176,9 @@ impl OpenAiModerationProvider {
 
 #[async_trait]
 impl SafetyProvider for OpenAiModerationProvider {
+    fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        Some(self.client.metrics())
+    }
     fn supports_content_reuse(&self) -> bool {
         true
     }
@@ -162,14 +199,7 @@ impl SafetyProvider for OpenAiModerationProvider {
         )
     }
     async fn scan(&self, request: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
-        let _queue = self
-            .queue
-            .try_acquire()
-            .map_err(|_| ScanError::Unavailable("moderation scan queue full".into()))?;
-        let deadline = Instant::now() + self.client.config().scan_timeout;
-        timeout_at(deadline, self.scan_inner(request, deadline, None))
-            .await
-            .map_err(|_| ScanError::Timeout("moderation scan deadline exceeded".into()))?
+        self.scan_run(request, None).await
     }
 
     async fn scan_guarded(
@@ -177,14 +207,7 @@ impl SafetyProvider for OpenAiModerationProvider {
         request: &ProviderScanRequest,
         guard: &dyn kukuri_cn_safety::provider::ScanReferenceGuard,
     ) -> Result<ProviderScanResult, ScanError> {
-        let _queue = self
-            .queue
-            .try_acquire()
-            .map_err(|_| ScanError::Unavailable("moderation scan queue full".into()))?;
-        let deadline = Instant::now() + self.client.config().scan_timeout;
-        timeout_at(deadline, self.scan_inner(request, deadline, Some(guard)))
-            .await
-            .map_err(|_| ScanError::Timeout("moderation scan deadline exceeded".into()))?
+        self.scan_run(request, Some(guard)).await
     }
 }
 

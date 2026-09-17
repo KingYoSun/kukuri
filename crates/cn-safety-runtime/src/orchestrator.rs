@@ -159,6 +159,12 @@ impl SafetyOrchestrator {
             .all(|provider| provider.supports_content_reuse())
     }
 
+    pub fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        self.providers
+            .iter()
+            .find_map(|provider| provider.moderation_metrics())
+    }
+
     pub fn cached_results_match(
         &self,
         request: &ProviderScanRequest,
@@ -322,6 +328,12 @@ impl SafetyOrchestratorBuilder {
             .policy
             .unwrap_or_else(SafetyPolicy::public_node_default);
         let scan_config_fingerprint = compute_scan_config_fingerprint(&policy, &self.providers);
+        // Both the subject shortcut and shared content cache belong to this issuer.
+        // A signing-identity rotation must not reuse another node's stored advisories.
+        let scan_config_fingerprint = hex::encode(Sha256::digest(
+            serde_json::to_vec(&["node-scan-v1", &issuer_node_id, &scan_config_fingerprint])
+                .expect("scan identity fields"),
+        ));
         Ok(SafetyOrchestrator {
             providers: self.providers,
             policy,

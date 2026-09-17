@@ -13,14 +13,14 @@
 
 | 作業 | 条件 | 現在の証跡 |
 | --- | --- | --- |
-| T1 データ分類・修正前の再現 | 全AC/INVAR、追加AC-9/10 | ADR 0028 §9に仕様を固定。修正前contractは実行後に追記 |
-| T2 上限付きephemeral取得 | AC-7、INVAR-3/4、TR-6/7 | mediaはPR #1079でmerge済み。本文のbounded取得を第2段階で実装 |
-| T3 動画抽出器 | AC-1/3/5/7、INVAR-1/2/4、TR-1/3/5/7 | PR #1079でmerge済み。Linux実process検証成功 |
-| T4 D1専用provider・共有予算 | AC-2/3/5/6/9、INVAR-1/2/4、TR-1/2/3/7 | adapterはmerge済み。Postgres共有予算とproduction resolverを実装、readiness/配備を継続 |
-| T5 D2共通内容cache・投稿合成 | AC-4/5/6/10、INVAR-2/3/5、TR-3/4/5/6 | 共通cache、lease、投稿別signal、参照guardを実装。統合検証中 |
-| T6 配備・readiness・運用 | AC-7/8/9、INVAR-1/2/4、TR-5/7 | 未実装 |
-| T7 統合・実API検証 | 全AC/INVAR | 未実施 |
-| T8 独立監査・CI・merge照合 | 全AC/INVAR | 第1段階PASS/CI成功/merge照合済み。第2段階は未実施 |
+| T1 データ分類・再現 | 全AC/INVAR | ADR 0028 §9、boolean閾値・取得上限・抽出時刻のred/greenを記録済み |
+| T2 上限付きephemeral取得 | AC-7、INVAR-3/4 | PR #1079で完了。実irohのlocal/remote上限、永続保存0を確認 |
+| T3 動画抽出器 | AC-1/3/5/7 | PR #1079で完了。Linux実decode・色分布・cancel cleanup・seccomp |
+| T4 D1専用provider・共有予算 | AC-2/3/5/6/9 | providerはPR #1079、PostgreSQL共有予算とproduction resolverは第2PR |
+| T5 D2共通内容cache・投稿合成 | AC-4/5/6/10 | 第2PRで実装。memory/PGの再利用・並行・restart・lease fencing・カテゴリ別signal・参照guardのtargeted test成功 |
+| T6 配備・readiness・運用 | AC-7/8/9 | 第2PRで実装。operator/CLI test、合成decoder probe、Compose構文、Terraform validate成功 |
+| T7 統合・実API検証 | 全AC/INVAR | 全CN suite・production image・benign live計測を実行中 |
+| T8 独立監査・CI・merge照合 | 全AC/INVAR | 第1PRはPASS・CI成功・merge済み。第2PRは未完了 |
 
 ## 事前調査と計測
 
@@ -83,3 +83,55 @@ PR [#1079](https://github.com/kukuri-app/kukuri/pull/1079)を `4bc44d40a942339b6
 `omni-moderation-latest` / `omni-moderation-2024-09-26`は500 RPM・10,000 TPM、organizationの当該bucketは10,000 RPD。
 設定の変更・保存は行っていない。初期共有枠400 RPM / 8,000 TPM / 8,000 RPDを採用する。
 アカウント識別子・費用情報・credentialは本記録へ含めない。
+
+## 第1PRの完了
+
+- [PR #1079](https://github.com/kukuri-app/kukuri/pull/1079) は独立監査PASSと必須CI成功後にmerge。
+  監査対象 `be388d9573ccc0f78da8638e0a686c97496cbe34` とmerge `4bc44d40a942339b66e33d23ae0f9373caf11df9` はtree差分0。
+- 独立監査でAPNGの単一frame誤認とWindows sampling path依存を検出し、修正後のdeltaもPASS。
+- `cn-check`、`cn-test`、`rust-test`、`pairwise_dm_offline_text_image_video_delivery_and_local_delete` は成功。
+  第1PRの低層blob/transportの必須検証はここに対応し、第2PRはCN内部・配備のみを変更する。
+
+## 第2PRの境界と検証
+
+構造上の追加は共通内容cache coordinator、PostgreSQL content store/budget、参照guard、専用readiness。
+既存VLMは内容純粋性を保証しないため共有内容cacheへopt-inしない。OpenAIとArachnidだけがopt-inする。
+旧subject verdictの再利用は維持し、node署名IDもscan fingerprintへ含める。
+
+| ID | 固定入口・全caller group → sink | guard / 対応test |
+| --- | --- | --- |
+| P2-1 | worker periodic/restore/key event → `ingest_scope` / `ingest_changed_keys` → `ingest_object_record` | current supported scope、署名envelopeとstate/manifest、withdrawal、送信防止。`reference_guard_contracts` |
+| P2-2 | ingest → `scan_or_reuse_guarded` → subject reuse / content coordinator | lookup前・関連付け前にguard。`verdict_reuse_contracts`、`reference_guard_contracts` |
+| P2-3 | service `scan_or_reuse` / `scan_and_record` / `scan_and_record_for_author` → orchestrator / recording | 未公開の内部service入口。ingestはguard付き入口のみ。既存service/orchestrator/appeal contracts |
+| P2-4 | coordinator → ContentScanStore load/claim/complete/release | 完了provider/capability/coverage構成、owner fencing、320秒lease。`content_cache`、`moderation_content` |
+| P2-5 | OpenAI provider scan/scan_guarded → bounded fetch → decoder → shared client | queue前のbytes取得なし、fetch後・各frame/retry直前の参照guard。`provider_contract` |
+| P2-6 | OpenAI client moderate/moderate_guarded → PgModerationBudget → HTTP send | 本文・静止画・動画・probe・retryの全attemptを同一DB予算で予約。`moderation_content` atomic budget |
+| P2-7 | report/再利用 → `record_signals` → signal/event/verdict/advisory/author persistence | 内容cacheにauthor/scope/appealを含めない。複数categoryは個別signal。`content_cache`、PG advisory test |
+| P2-8 | ingest → index truth store → projection / de-index | association/index直前にもguard。不正stateもkey identityの旧rowを除去。`reference_guard_contracts`、既存ingestion contracts |
+| P2-9 | runtime / validate-config → `resolve_safety_providers_with_pool` | general専用・key必須・Linux decoder/tmpfs必須。legacy resolverとmock production拒否を維持 |
+| P2-10 | CLI readiness → PreparedProbe / ReadinessProbeRecord | 同梱合成MP4/WebM+本文+JPEG。config変更、future/stale時刻、key/decoder欠落でPASS再利用不可。`readiness_reuse_requires_current_configuration_and_time` |
+| P2-11 | operator validation/docs/tfvars → Terraform env/Compose → runtime | 既存secret ID、Tier 1上限、第三者送信開示、tmpfs。`dedicated_moderation_deploy_requires_secret_and_general_slot`、Compose/Terraform |
+| P2-12 | provider metrics → IndexerRuntimeState → status snapshot | 内容を含まないcounterのみ。restartでcounter reset、予算/cacheはDB維持。live probeのcold/reused差分 |
+
+S1 bounded fetchはP2-1/2/5、S2 processはP2-5/10、S3 HTTPはP2-6/10、S4 DBはP2-2/3/4/6/7/10、
+S5 index/advisoryはP2-7/8へ逆引きする。登録表・trait実装・`scan*` / `moderate*` / `persist*` callerを突合し、追加surfaceの未分類0。
+独立監査は固定headでこの対応を再構築する。
+
+- TR-1/2: 実FFmpegとmock provider、複数カテゴリのconfidence、本文＋blob/thumbnailの和集合は既存/追加contract。
+- TR-3: frame途中失敗、401/403、429/retry、cache failure→回復、cancel→claim解放を確認。
+- TR-4: 異なる投稿・著者・service並行miss、同内容のrestart再利用、expired ownerの上書き拒否をmemory/PGで確認。
+- TR-5: provider構成/issuerの変更とcorrupt cache、readiness構成・時刻変更を確認。
+- TR-6: unsupported scope、scan中の送信防止、署名と異なるstate、別の有効参照を確認。
+- TR-7: tmpfs/decoder起動制約、実decode cancel、socket拒否は第1PR。合成readiness decodeを第2PRで追加。
+
+再現と修正:
+
+- `issuer_change_invalidates_subject_and_content_reuse` は修正前に2回目provider呼出0で失敗。
+  node署名IDをsubjectとcontent共通の構成fingerprintへ入れ、1回で成功。
+- malformed stateを再取り込みすると旧index rowが残る失敗を再現。parse失敗をper-entry de-indexへ接続し、
+  正しく型付けした署名不一致stateとcorrupt stateの両方で削除を確認。object内の偽IDを削除対象に使わない。
+- 2カテゴリ結果のsignalが1件に落ちる失敗を再現し、カテゴリ別のID・confidence・appeal状態を保存するよう修正。
+- 通常CIで `live_moderation` はgate未設定のため実API未実行。live結果は別途記録し、mock/skipを実API成功と数えない。
+
+実projectのread-only確認（2026-09-17）ではomni-moderationの500 RPM / 10000 TPM、organization bucketの10000 RPDを確認。
+設定変更は行わず、project ID・請求情報・資格情報は記録しない。初期local予算は400 / 8000 / 8000を維持。

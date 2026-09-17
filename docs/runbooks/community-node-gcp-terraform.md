@@ -2,6 +2,8 @@
 
 最終更新日: 2026-08-07
 
+`openai-moderation` の非秘密設定は `deploy.moderation`、キーは既存の `deploy.vlm_api_key_secret_id` から注入する。詳細は[専用providerの運用](community-node-openai-moderation.md)を参照。
+
 ## 目的
 
 - community node（`cn-user-api` + `cn-iroh-relay` + Postgres + Valkey）を GCP に

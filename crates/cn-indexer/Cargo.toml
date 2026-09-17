@@ -47,6 +47,8 @@ kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-trust = { path = "../cn-trust" }
 
 [dev-dependencies]
+kukuri-cn-safety-openai = { path = "../cn-safety-openai" }
+kukuri-cn-safety-video = { path = "../cn-safety-video" }
 kukuri-test-support = { path = "../test-support" }
 kukuri-cn-safety = { path = "../cn-safety", features = ["mock"] }
 # テストビルドでのみ provider 実装名 `mock` を解決可能にする（cn-core 自身の dev-deps と同じ

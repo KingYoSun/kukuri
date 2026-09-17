@@ -16,6 +16,7 @@ pub enum ModerationInput<'a> {
 }
 
 pub struct ModerationClient {
+    metrics: Arc<kukuri_cn_safety::metrics::ModerationMetrics>,
     config: ModerationConfig,
     credentials: ModerationCredentials,
     http: reqwest::Client,
@@ -45,6 +46,7 @@ impl ModerationClient {
             .build()
             .map_err(|_| invalid("cannot construct moderation HTTP client"))?;
         Ok(Self {
+            metrics: Arc::new(kukuri_cn_safety::metrics::ModerationMetrics::default()),
             queue: Semaphore::new(config.queue_capacity),
             in_flight: Semaphore::new(1),
             config,
@@ -56,6 +58,10 @@ impl ModerationClient {
 
     pub fn config(&self) -> &ModerationConfig {
         &self.config
+    }
+
+    pub fn metrics(&self) -> Arc<kukuri_cn_safety::metrics::ModerationMetrics> {
+        self.metrics.clone()
     }
 
     pub async fn moderate(
@@ -147,6 +153,7 @@ impl ModerationClient {
             if let Some(guard) = guard {
                 guard.check().await?;
             }
+            self.metrics.record_api_attempt();
             let response = self
                 .http
                 .post(format!(

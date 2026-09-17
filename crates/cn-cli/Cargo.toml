@@ -27,6 +27,8 @@ kukuri-cn-safety = { path = "../cn-safety" }
 kukuri-cn-safety-runtime = { path = "../cn-safety-runtime" }
 kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid" }
 kukuri-cn-safety-vlm = { path = "../cn-safety-vlm" }
+kukuri-cn-safety-openai = { path = "../cn-safety-openai" }
+kukuri-cn-safety-video = { path = "../cn-safety-video" }
 
 [dev-dependencies]
 wiremock.workspace = true

@@ -16,6 +16,7 @@ pub mod docs;
 mod docs_moderation_policy;
 pub mod drift;
 pub mod manifest;
+pub mod moderation_config;
 pub mod policy_catalog;
 pub mod policy_descriptor;
 pub mod profile;

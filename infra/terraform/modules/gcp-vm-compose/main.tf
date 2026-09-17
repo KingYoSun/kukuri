@@ -52,6 +52,7 @@ locals {
     safety_provider_general                = var.safety_provider_general
     safety_provider_unknown_csam           = var.safety_provider_unknown_csam
     vlm_api_base_url                       = var.vlm_api_base_url
+    moderation                             = var.moderation
     vlm_model                              = var.vlm_model
     vlm_response_format                    = var.vlm_response_format
     safety_emit_signed_events              = var.safety_emit_signed_events
@@ -152,6 +153,7 @@ locals {
     media_fetch_max_bytes                  = var.media_fetch_max_bytes
     media_fetch_timeout_secs               = var.media_fetch_timeout_secs
     vlm_api_base_url                       = var.vlm_api_base_url
+    moderation                             = var.moderation
     vlm_model                              = var.vlm_model
     vlm_response_format                    = var.vlm_response_format
     vlm_api_timeout_secs                   = var.vlm_api_timeout_secs

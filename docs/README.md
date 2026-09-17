@@ -75,6 +75,7 @@ Issue・PR・セッションの記述だけで「実装済み」「検証成功�
 - Spatial Context entryとauthoritative safe spawn: `docs/adr/0044-spatial-context-entry-safe-spawn.md`
 - Dome offline、Connection draining、Return Home: `docs/adr/0045-dome-offline-draining-return-home.md`
 - community node production rollout / live media verification / recovery: `docs/runbooks/community-node-production-rollout.md`
+- 専用OpenAI Moderation・動画抽出・共有内容cacheの運用: `docs/runbooks/community-node-openai-moderation.md`
 - community node GCP Terraform デプロイ（deployment profile: low-cost / managed-db / ha）: `docs/runbooks/community-node-gcp-terraform.md`（実装は `infra/terraform/`）
 - community node 権利侵害申出の受付・審査・送信防止: `docs/runbooks/community-node-rights-infringement-requests.md`
 - community node 発信者情報開示・案件限定保全: `docs/runbooks/community-node-sender-information-disclosure.md`

@@ -274,6 +274,17 @@ fn render_low_cost_tfvars(config: &ResolvedConfig, deploy: &DeployConfig) -> Str
         "vlm_api_key_secret_id        = {}",
         hcl_string(&optional_secret(&deploy.vlm_api_key_secret_id))
     );
+    let _ = writeln!(
+        out,
+        "moderation = {{ api_base_url = {}, model = {}, config_version = {}, rpm = {}, rpd = {}, tpm = {}, image_tokens = {} }}",
+        hcl_string(&deploy.moderation.api_base_url),
+        hcl_string(&deploy.moderation.model),
+        hcl_string(&deploy.moderation.config_version),
+        deploy.moderation.rpm,
+        deploy.moderation.rpd,
+        deploy.moderation.tpm,
+        deploy.moderation.image_tokens,
+    );
     let _ = writeln!(out);
     let _ = writeln!(
         out,

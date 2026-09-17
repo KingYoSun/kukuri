@@ -20,6 +20,7 @@ struct Counter {
     calls: AtomicUsize,
     fail: AtomicBool,
     multiple: AtomicBool,
+    pause: AtomicBool,
 }
 #[async_trait]
 impl SafetyProvider for Counter {
@@ -34,6 +35,9 @@ impl SafetyProvider for Counter {
     }
     async fn scan(&self, _: &ProviderScanRequest) -> Result<ProviderScanResult, ScanError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.pause.load(Ordering::SeqCst) {
+            std::future::pending::<()>().await;
+        }
         tokio::time::sleep(Duration::from_millis(20)).await;
         let mut result = ProviderScanResult::completed(
             self.name(),
@@ -53,11 +57,57 @@ impl SafetyProvider for Counter {
         Ok(result)
     }
 }
+
+#[tokio::test]
+async fn cancellation_releases_claim_without_caching_partial_scan() {
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let provider = Arc::new(Counter::default());
+    provider.pause.store(true, Ordering::SeqCst);
+    let scan = Arc::new(service(store.clone(), provider.clone()));
+    let task = {
+        let scan = scan.clone();
+        tokio::spawn(async move {
+            scan.scan_or_reuse(&post("cancelled", "same text"), Some("alice"), "first")
+                .await
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while provider.calls.load(Ordering::SeqCst) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("scan started");
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    assert!(
+        store
+            .stored_verdict_for(SubjectKind::Post, "cancelled")
+            .is_none()
+    );
+    provider.pause.store(false, Ordering::SeqCst);
+    let recovered = tokio::time::timeout(
+        Duration::from_secs(2),
+        scan.scan_or_reuse(&post("recovered", "same text"), Some("bob"), "second"),
+    )
+    .await
+    .expect("cancelled claim released")
+    .expect("recovery");
+    assert!(recovered.report.verdict.is_labeled_allow());
+    assert_eq!(provider.calls.load(Ordering::SeqCst), 2);
+}
 fn service(store: Arc<MemorySafetyArtifactStore>, provider: Arc<Counter>) -> SafetyScanService {
+    service_for_issuer(store, provider, "node-a")
+}
+fn service_for_issuer(
+    store: Arc<MemorySafetyArtifactStore>,
+    provider: Arc<Counter>,
+    issuer: &str,
+) -> SafetyScanService {
     let mut policy = SafetyPolicy::public_node_default();
     policy.require_known_csam = false;
     let orchestrator = SafetyOrchestrator::builder(
-        "node-a",
+        issuer,
         Arc::new(SystemScanClock::new()),
         Arc::new(UuidEventIdGenerator::new()),
     )
@@ -66,12 +116,35 @@ fn service(store: Arc<MemorySafetyArtifactStore>, provider: Arc<Counter>) -> Saf
     .build()
     .expect("orchestrator");
     SafetyScanService::builder(Arc::new(orchestrator), store)
-        .without_signed_events("node-a")
+        .without_signed_events(issuer)
         .build()
         .expect("service")
 }
 fn post(id: &str, text: &str) -> ProviderScanRequest {
     ProviderScanRequest::for_subject(SubjectKind::Post, id).with_text(text)
+}
+
+#[tokio::test]
+async fn issuer_change_invalidates_subject_and_content_reuse() {
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let first = Arc::new(Counter::default());
+    let request = post("same-post", "same body");
+    service_for_issuer(store.clone(), first, "node-a")
+        .scan_or_reuse(&request, Some("alice"), "same-state")
+        .await
+        .expect("first");
+    let second = Arc::new(Counter::default());
+    let result = service_for_issuer(store, second.clone(), "node-b")
+        .scan_or_reuse(&request, Some("alice"), "same-state")
+        .await
+        .expect("second");
+    assert_eq!(second.calls.load(Ordering::SeqCst), 1);
+    assert!(
+        result
+            .advisories
+            .iter()
+            .all(|advisory| advisory.issuer_node_id == "node-b")
+    );
 }
 
 #[tokio::test]

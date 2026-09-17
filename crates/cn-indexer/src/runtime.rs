@@ -194,6 +194,7 @@ async fn run(config: IndexerConfig) -> Result<()> {
     )?;
     match (safety, node, blob_service) {
         (Some(service), Some(node), Some(blob_service)) => {
+            state.set_moderation_metrics(service.moderation_metrics());
             info!(
                 issuer_node_id = %service.issuer_node_id(),
                 "safety scan service constructed"

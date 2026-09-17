@@ -550,6 +550,10 @@ impl SafetyScanService {
         &self.issuer_node_id
     }
 
+    pub fn moderation_metrics(&self) -> Option<Arc<kukuri_cn_safety::metrics::ModerationMetrics>> {
+        self.orchestrator.moderation_metrics()
+    }
+
     /// 構築時に確定した scan 構成の fingerprint（#1050）。
     pub fn scan_config_fingerprint(&self) -> &str {
         self.orchestrator.scan_config_fingerprint()

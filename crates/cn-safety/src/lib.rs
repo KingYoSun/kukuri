@@ -26,6 +26,7 @@ pub mod advisory;
 pub mod assessment;
 pub mod capability;
 pub mod event;
+pub mod metrics;
 pub mod policy;
 pub mod provider;
 pub mod signal;

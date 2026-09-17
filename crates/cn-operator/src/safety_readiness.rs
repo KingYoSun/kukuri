@@ -305,6 +305,17 @@ fn check_classifier_providers_resolvable(safety: &SafetyConfig) -> ReadinessChec
             continue;
         };
         let normalized = entry.provider.trim().replace('_', "-");
+        if normalized == "openai-moderation" {
+            if slot != "general" {
+                return fail(
+                    "classifier_providers_resolvable",
+                    "openai-moderation is only supported in general; no unknown-CSAM capability"
+                        .into(),
+                );
+            }
+            resolved.push(format!("{slot}={normalized}"));
+            continue;
+        }
         if !RESOLVABLE_CLASSIFIER_PROVIDERS.contains(&normalized.as_str()) {
             return fail(
                 "classifier_providers_resolvable",

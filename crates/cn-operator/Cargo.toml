@@ -30,6 +30,7 @@ kukuri-cn-safety-arachnid = { path = "../cn-safety-arachnid", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+url.workspace = true
 tokio = { workspace = true, optional = true }
 
 [dev-dependencies]

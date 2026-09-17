@@ -461,11 +461,14 @@ impl IngestPipeline {
                 Ok(IngestOutcome::Indexed) => summary.indexed += 1,
                 Ok(IngestOutcome::SkippedNonAllow) => summary.skipped_non_allow += 1,
                 Ok(IngestOutcome::Deindexed) => summary.deindexed += 1,
-                Ok(IngestOutcome::Ignored) => {}
                 Err(error) => {
-                    if let Ok(object) = serde_json::from_slice::<PostObjectView>(&record.value) {
-                        self.deindex_object(scope_kind, scope_id, &object.object_id)
-                            .await?;
+                    if let Some(id) = record
+                        .key
+                        .strip_prefix("objects/")
+                        .and_then(|key| key.strip_suffix("/state"))
+                        .filter(|id| !id.is_empty() && !id.contains('/'))
+                    {
+                        self.deindex_object(scope_kind, scope_id, id).await?;
                     }
                     // 単一 entry の失敗で scope 全体を止めない。fail-closed（投影しない）側に倒す。
                     warn!(
@@ -490,13 +493,11 @@ impl IngestPipeline {
         context: &ScopeContext,
         stats: &mut ScanStats,
     ) -> Result<IngestOutcome> {
-        let object: PostObjectView = match serde_json::from_slice(&record.value) {
-            Ok(object) => object,
-            Err(error) => {
-                debug!(key = %record.key, error = %error, "record is not a post object; ignoring");
-                return Ok(IngestOutcome::Ignored);
-            }
-        };
+        let object: PostObjectView =
+            serde_json::from_slice(&record.value).context("invalid post object state")?;
+        if record.key != format!("objects/{}/state", object.object_id) {
+            bail!("post object identity does not match its key");
+        }
 
         if context
             .withdrawn_object_ids
@@ -746,7 +747,6 @@ enum IngestOutcome {
     Indexed,
     SkippedNonAllow,
     Deindexed,
-    Ignored,
 }
 
 /// 本文 text に derived 検索タグを相乗りさせた投影用 text を組み立てる。

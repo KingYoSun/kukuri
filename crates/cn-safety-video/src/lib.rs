@@ -26,6 +26,18 @@ pub struct FfmpegVideoExtractor {
 }
 
 impl FfmpegVideoExtractor {
+    /// Decode only bundled synthetic fixtures; readiness never retrieves user content.
+    pub async fn readiness_probe(&self) -> Result<FetchedMedia, ScanError> {
+        let mp4 = self.extract(include_bytes!("probes/benign.mp4")).await?;
+        let webm = self.extract(include_bytes!("probes/benign.webm")).await?;
+        if mp4.frames.len() != 1 || webm.frames.len() != 1 {
+            return Err(invalid("decoder probe frame count mismatch"));
+        }
+        mp4.frames
+            .into_iter()
+            .next()
+            .ok_or_else(|| invalid("decoder probe has no frame"))
+    }
     pub fn new(config: VideoExtractConfig) -> Result<Self, ScanError> {
         config.validate()?;
         let mut digest = Sha256::new();

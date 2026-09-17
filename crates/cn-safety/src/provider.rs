@@ -231,6 +231,9 @@ pub trait ScanReferenceGuard: Send + Sync {
 /// 実装例: mock provider（本 crate）、#391 Project Arachnid Shield、一般 moderation provider。
 #[async_trait]
 pub trait SafetyProvider: Send + Sync {
+    fn moderation_metrics(&self) -> Option<std::sync::Arc<crate::metrics::ModerationMetrics>> {
+        None
+    }
     async fn scan_guarded(
         &self,
         request: &ProviderScanRequest,
