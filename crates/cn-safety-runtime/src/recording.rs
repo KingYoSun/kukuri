@@ -1,7 +1,7 @@
 //! Persist each advisory category independently so lookup/appeal retains its own signal.
 use crate::{PersistedSignal, SafetyArtifactStore, SafetyScanReport, content_advisories_for};
 use anyhow::{Context, Result};
-use kukuri_cn_safety::{ContentAdvisory, ProviderScanRequest};
+use kukuri_cn_safety::{ContentAdvisory, ProviderScanRequest, SubjectKind};
 
 #[derive(Default)]
 pub(crate) struct RecordedSignals {
@@ -76,4 +76,42 @@ pub(crate) async fn record_signals(
         }
     }
     Ok(recorded)
+}
+
+/// index 可能な新しい判定を subject の現在の判定とし、そこに無い advisory-only category の
+/// scanner 由来 signal を失効させる（#1109 / ADR 0028 §8.14）。
+///
+/// advisory 照会（signal 由来）を verdict 行の `advisory_labels`（index read 由来）と揃える。
+/// 非 allow（hold / exclude / 失敗）の判定では何もしない。失効時刻は新しい判定の `scanned_at`。
+pub(crate) async fn expire_superseded_advisories(
+    store: &dyn SafetyArtifactStore,
+    report: &SafetyScanReport,
+    subject: Option<(SubjectKind, &str)>,
+    issuer: &str,
+    guard: Option<&dyn crate::ScanReferenceGuard>,
+) -> Result<()> {
+    let Some((kind @ (SubjectKind::Post | SubjectKind::Blob), subject_id)) = subject else {
+        return Ok(());
+    };
+    if !report.verdict.is_indexable() {
+        return Ok(());
+    }
+    let mut current = Vec::new();
+    for label in &report.verdict.advisory_labels {
+        if !current.contains(&label.category) {
+            current.push(label.category);
+        }
+    }
+    crate::reference_guard::check(guard).await?;
+    store
+        .expire_superseded_advisory_signals(
+            issuer,
+            crate::artifacts::risk_target_for(kind),
+            subject_id,
+            &current,
+            &report.verdict.scanned_at,
+        )
+        .await
+        .context("failed to expire superseded advisory signals")?;
+    Ok(())
 }

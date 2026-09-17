@@ -27,8 +27,8 @@ use uuid::Uuid;
 
 use kukuri_cn_safety::event::{ModerationEventBody, SignedModerationEvent};
 use kukuri_cn_safety::verdict::SafetyLabel;
-use kukuri_cn_safety::{AppealStatus, RiskSignalTarget, SafetyCategory, SafetyRiskSignal};
-use kukuri_cn_safety_runtime::verify_signed_event;
+use kukuri_cn_safety::{AppealStatus, Basis, RiskSignalTarget, SafetyCategory, SafetyRiskSignal};
+use kukuri_cn_safety_runtime::{superseded_advisory_categories, verify_signed_event};
 
 /// 配布クエリの受け手区分。`local` はどの audience にも配布しない。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -475,6 +475,56 @@ pub(crate) async fn insert_operator_corrected_risk_signal(
     .fetch_one(&mut **tx)
     .await?;
     risk_signal_from_row(&row)
+}
+
+/// 再 scan の現在の判定に無い advisory-only category の scanner 由来 signal を失効させる
+/// （#1109 / ADR 0028 §8.14）。失効させた件数を返す。
+///
+/// operator 確定の行（#1058）、`appeal_status` が `none` 以外の行、appeal 通報から参照される行
+/// （棄却 = 判定維持を含む）は対象外。行ロック後に WHERE を再評価するため、同時に進む
+/// 申し立て・operator 編集が先に確定すればその行は失効させない。
+pub async fn expire_superseded_advisory_signals(
+    pool: &PgPool,
+    issuer_node_id: &str,
+    target: RiskSignalTarget,
+    target_id: &str,
+    current_categories: &[SafetyCategory],
+    expires_at: &str,
+) -> Result<u64> {
+    if issuer_node_id.trim().is_empty() || target_id.trim().is_empty() {
+        bail!("risk signal issuer_node_id and target_id must not be empty");
+    }
+    DateTime::parse_from_rfc3339(expires_at)
+        .with_context(|| format!("invalid expires_at `{expires_at}` (expected RFC3339)"))?;
+    let superseded = superseded_advisory_categories(current_categories)
+        .iter()
+        .map(to_db_enum)
+        .collect::<Result<Vec<_>>>()?;
+    if superseded.is_empty() {
+        return Ok(0);
+    }
+    let result = sqlx::query(
+        "UPDATE cn_safety.risk_signals s
+         SET expires_at = $5
+         WHERE s.issuer_node_id = $1 AND s.target = $2 AND s.target_id = $3
+           AND s.category = ANY($4)
+           AND s.basis = $6
+           AND s.expires_at IS NULL
+           AND COALESCE(s.appeal_status, 'none') = 'none'
+           AND s.operator_adjusted_at IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM cn_admin.reports r WHERE r.appeal_risk_signal_id = s.id
+           )",
+    )
+    .bind(issuer_node_id)
+    .bind(to_db_enum(&target)?)
+    .bind(target_id)
+    .bind(&superseded)
+    .bind(expires_at)
+    .bind(to_db_enum(&Basis::ClassifierScore)?)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
 }
 
 /// content target の risk signal を著者へ関連付ける（既にあれば何もしない）。

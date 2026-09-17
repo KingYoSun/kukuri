@@ -11,8 +11,8 @@ use sqlx::PgPool;
 
 use kukuri_cn_safety::provider::{MediaFetcher, SubjectKind};
 use kukuri_cn_safety::{
-    ContentAdvisory, RiskSignalTarget, SafetyProvider, SafetyRiskSignal, SafetyVerdict,
-    SignedModerationEvent,
+    ContentAdvisory, RiskSignalTarget, SafetyCategory, SafetyProvider, SafetyRiskSignal,
+    SafetyVerdict, SignedModerationEvent,
 };
 use kukuri_cn_safety_runtime::{
     PersistedSignal, SafetyArtifactStore, SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig,
@@ -20,8 +20,8 @@ use kukuri_cn_safety_runtime::{
 };
 
 use crate::safety_events::{
-    attribute_risk_signal_subject_author, persist_risk_signal_deduplicated,
-    persist_signed_moderation_event,
+    attribute_risk_signal_subject_author, expire_superseded_advisory_signals,
+    persist_risk_signal_deduplicated, persist_signed_moderation_event,
 };
 use crate::scan_verdicts::{get_scan_verdict, update_scan_verdict_advisories, upsert_scan_verdict};
 
@@ -101,6 +101,25 @@ impl SafetyArtifactStore for PgSafetyArtifactStore {
         author: &str,
     ) -> Result<()> {
         attribute_risk_signal_subject_author(&self.pool, target, target_id, author).await
+    }
+
+    async fn expire_superseded_advisory_signals(
+        &self,
+        issuer_node_id: &str,
+        target: RiskSignalTarget,
+        target_id: &str,
+        current_categories: &[SafetyCategory],
+        expires_at: &str,
+    ) -> Result<u64> {
+        expire_superseded_advisory_signals(
+            &self.pool,
+            issuer_node_id,
+            target,
+            target_id,
+            current_categories,
+            expires_at,
+        )
+        .await
     }
 }
 

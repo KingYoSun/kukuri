@@ -12,8 +12,8 @@ use kukuri_cn_safety::provider::{
 };
 use kukuri_cn_safety::verdict::{ReasonCode, SafetyAction};
 use kukuri_cn_safety::{
-    AdvisorySubjectKind, GeneralAction, MockSigner, RiskSignalTarget, SafetyCategory, SafetyLabel,
-    SafetyPolicy, SafetyProviderCapability, SafetyVerdict, Severity,
+    AdvisorySubjectKind, AppealStatus, GeneralAction, MockSigner, RiskSignalTarget, SafetyCategory,
+    SafetyLabel, SafetyPolicy, SafetyProviderCapability, SafetyVerdict, Severity,
 };
 use kukuri_cn_safety_runtime::{
     EventIdGenerator, MemorySafetyArtifactStore, RescanReason, ReuseDecision, ReuseInputs,
@@ -724,4 +724,119 @@ async fn reused_labeled_allow_restores_advisories_without_artifacts() {
     assert_eq!(fourth.advisories[0].signal_id, signal_id);
     assert_eq!(store.signals().len(), 1);
     assert_eq!(store.events().len(), 1);
+}
+
+// --- #1109: 現在の判定に無い advisory signal の失効 ---
+
+fn label_policy() -> SafetyPolicy {
+    SafetyPolicy {
+        require_known_csam: false,
+        ..SafetyPolicy::public_node_default()
+    }
+}
+
+fn blob_request(hash: &str) -> ProviderScanRequest {
+    ProviderScanRequest::for_subject(SubjectKind::Blob, hash).with_media_hint(hash)
+}
+
+fn active_categories(store: &MemorySafetyArtifactStore, target_id: &str) -> Vec<SafetyCategory> {
+    store
+        .signals()
+        .into_iter()
+        .filter(|(_, signal)| signal.target_id == target_id && signal.expires_at.is_none())
+        .map(|(_, signal)| signal.category)
+        .collect()
+}
+
+/// TR-1（blob subject）: 内容が変わった再 scan が allow・label なしなら、blob の nsfw signal は
+/// 新しい判定の時刻で失効し、行は残る。
+#[tokio::test]
+async fn fresh_allow_rescan_expires_superseded_blob_advisory_signal() {
+    let hash = "a".repeat(64);
+    let provider = CountingProvider::new(
+        "general",
+        vec![SafetyProviderCapability::GeneralMediaModeration],
+        nsfw_result("general", 84),
+    );
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let service = service_with(provider.clone(), label_policy(), store.clone());
+
+    let first = service
+        .scan_or_reuse(&blob_request(&hash), Some("author-a"), "blob-v1")
+        .await
+        .expect("labeled scan");
+    assert_eq!(first.advisories.len(), 1);
+    assert_eq!(active_categories(&store, &hash), vec![SafetyCategory::Nsfw]);
+
+    provider.set_result(clean_result("general", &[]));
+    let second = service
+        .scan_or_reuse(&blob_request(&hash), Some("author-a"), "blob-v2")
+        .await
+        .expect("clean rescan");
+    assert_eq!(second.disposition, ScanDisposition::Fresh);
+    assert!(second.advisories.is_empty());
+    assert!(active_categories(&store, &hash).is_empty());
+    let signals = store.signals();
+    assert_eq!(signals.len(), 1, "expired, not deleted");
+    assert_eq!(signals[0].1.target, RiskSignalTarget::BlobCid);
+    assert_eq!(signals[0].1.expires_at.as_deref(), Some(SCANNED_AT));
+    assert_eq!(store.events().len(), 1, "no event for the expiry");
+}
+
+/// TR-5: 保存済み verdict を再利用する ingest は provider を呼ばず、signal にも触れない。
+#[tokio::test]
+async fn reused_verdict_does_not_touch_signals() {
+    let provider = CountingProvider::new(
+        "general",
+        vec![SafetyProviderCapability::GeneralMediaModeration],
+        nsfw_result("general", 84),
+    );
+    let store = Arc::new(MemorySafetyArtifactStore::new());
+    let service = service_with(provider.clone(), label_policy(), store.clone());
+    service
+        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+        .await
+        .expect("labeled scan");
+
+    provider.set_result(clean_result("general", &[]));
+    let again = service
+        .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+        .await
+        .expect("reuse");
+    assert_eq!(again.disposition, ScanDisposition::Reused);
+    assert_eq!(provider.calls(), 1);
+    assert_eq!(
+        active_categories(&store, "post-1"),
+        vec![SafetyCategory::Nsfw]
+    );
+}
+
+/// TR-3（memory）: 申し立て中・認容済みの signal は再 scan で失効させない。
+#[tokio::test]
+async fn fresh_allow_rescan_keeps_appealed_advisory_signals() {
+    for status in [AppealStatus::Disputed, AppealStatus::Cleared] {
+        let provider = CountingProvider::new(
+            "general",
+            vec![SafetyProviderCapability::GeneralMediaModeration],
+            nsfw_result("general", 84),
+        );
+        let store = Arc::new(MemorySafetyArtifactStore::new());
+        let service = service_with(provider.clone(), label_policy(), store.clone());
+        service
+            .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-1")
+            .await
+            .expect("labeled scan");
+        let (signal_id, _, _) = store.signals_with_ids().remove(0);
+        assert!(store.set_signal_appeal_status(&signal_id, status));
+
+        provider.set_result(clean_result("general", &[]));
+        service
+            .scan_or_reuse(&post_request("post-1"), Some("author-a"), "state-hash-2")
+            .await
+            .expect("clean rescan");
+        let signals = store.signals();
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].1.expires_at, None, "{status:?} must stay");
+        assert_eq!(signals[0].1.appeal_status, Some(status));
+    }
 }

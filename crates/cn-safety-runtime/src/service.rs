@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use kukuri_cn_safety::provider::{ProviderScanRequest, SubjectKind};
 use kukuri_cn_safety::{
     AdvisorySubjectKind, AppealStatus, Basis, ContentAdvisory, GeneralAction,
-    ModerationEventSigner, RiskSignalTarget, SafetyPolicy, SafetyProvider, SafetyRiskSignal,
-    SafetyVerdict, SignedModerationEvent, Visibility, issue_signed_event,
+    ModerationEventSigner, RiskSignalTarget, SafetyCategory, SafetyPolicy, SafetyProvider,
+    SafetyRiskSignal, SafetyVerdict, SignedModerationEvent, Visibility, issue_signed_event,
 };
 
 use crate::artifacts::risk_target_for;
@@ -223,6 +223,32 @@ pub trait SafetyArtifactStore: Send + Sync {
         target_id: &str,
         author: &str,
     ) -> Result<()>;
+
+    /// 再 scan の現在の判定に無い advisory-only category の scanner 由来 signal を失効させる
+    /// （#1109 / ADR 0028 §8.14）。失効させた件数を返す。
+    ///
+    /// 対象は issuer / target / target_id が一致し、category が nsfw / objectionable のうち
+    /// `current_categories` に無く、basis が `ClassifierScore` で、未失効・`appeal_status` が
+    /// `None`・operator 確定の印が無く、appeal 通報から参照されない行。`expires_at` を刻むだけで、
+    /// 行の削除・他の列の変更はしない。
+    async fn expire_superseded_advisory_signals(
+        &self,
+        issuer_node_id: &str,
+        target: RiskSignalTarget,
+        target_id: &str,
+        current_categories: &[SafetyCategory],
+        expires_at: &str,
+    ) -> Result<u64>;
+}
+
+/// 失効対象になり得る advisory-only category のうち、現在の判定に無いもの（#1109）。
+pub fn superseded_advisory_categories(
+    current_categories: &[SafetyCategory],
+) -> Vec<SafetyCategory> {
+    [SafetyCategory::Nsfw, SafetyCategory::Objectionable]
+        .into_iter()
+        .filter(|category| category.is_advisory_only() && !current_categories.contains(category))
+        .collect()
 }
 
 #[derive(Clone, Debug)]
@@ -499,6 +525,33 @@ impl SafetyArtifactStore for MemorySafetyArtifactStore {
         }
         Ok(())
     }
+
+    /// memory store は operator 確定の印と appeal 通報を持たないため、`appeal_status` だけで保護する。
+    async fn expire_superseded_advisory_signals(
+        &self,
+        issuer_node_id: &str,
+        target: RiskSignalTarget,
+        target_id: &str,
+        current_categories: &[SafetyCategory],
+        expires_at: &str,
+    ) -> Result<u64> {
+        let superseded = superseded_advisory_categories(current_categories);
+        let mut signals = self.signals.lock().expect("signals mutex poisoned");
+        let mut expired = 0;
+        for entry in signals.iter_mut().filter(|entry| {
+            entry.issuer_node_id == issuer_node_id
+                && entry.signal.target == target
+                && entry.signal.target_id == target_id
+                && superseded.contains(&entry.signal.category)
+                && entry.signal.basis == Basis::ClassifierScore
+                && entry.signal.expires_at.is_none()
+                && entry.signal.appeal_status.unwrap_or_default() == AppealStatus::None
+        }) {
+            entry.signal.expires_at = Some(expires_at.to_string());
+            expired += 1;
+        }
+        Ok(expired)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -732,6 +785,14 @@ impl SafetyScanService {
             request,
             &self.issuer_node_id,
             subject_author,
+            guard,
+        )
+        .await?;
+        crate::recording::expire_superseded_advisories(
+            self.store.as_ref(),
+            &report,
+            subject,
+            &self.issuer_node_id,
             guard,
         )
         .await?;

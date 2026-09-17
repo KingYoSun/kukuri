@@ -279,6 +279,8 @@ foundation（#409 / PR #414）が残した §6 の未決事項を #416 で決定
 - `Disputed` / `Cleared` / `expires_at` の扱い（§6.2）は不変。nsfw / objectionable は元から寄与 0 なので、
   `Cleared` になっても評価値は動かず、basis の状態表示だけが変わる。
 - #1050 が所有する重複 signal の圧縮後も、寄与 0 の契約は signal 件数に依存しない。
+- 再 scan が現在の判定から外した scanner 由来の nsfw / objectionable signal は失効する（#1109、ADR 0028 §8.14）。
+  評価値は変わらず、失効行は basis から外れる。
 
 ### 7.4 contract / scenario
 - 追加: `general_advisory_contributes_zero_to_trust`（ADR 0028 §8.11 と共有）、

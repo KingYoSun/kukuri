@@ -88,6 +88,7 @@ enum FailingStoreOperation {
     Verdict,
     Signal,
     Event,
+    Expiry,
 }
 
 struct FailingSafetyArtifactStore {
@@ -155,6 +156,20 @@ impl SafetyArtifactStore for FailingSafetyArtifactStore {
         _author: &str,
     ) -> Result<()> {
         Ok(())
+    }
+
+    async fn expire_superseded_advisory_signals(
+        &self,
+        _issuer_node_id: &str,
+        _target: RiskSignalTarget,
+        _target_id: &str,
+        _current_categories: &[SafetyCategory],
+        _expires_at: &str,
+    ) -> Result<u64> {
+        if matches!(self.operation, FailingStoreOperation::Expiry) {
+            bail!("advisory expiry rejected by contract double");
+        }
+        Ok(0)
     }
 }
 
@@ -259,6 +274,31 @@ async fn runtime_verdict_persistence_failure_is_returned() {
             .chain()
             .any(|cause| cause.to_string().contains("persist scan verdict state"))
     );
+}
+
+/// #1109: index 可能な再 scan の advisory 失効に失敗したら、verdict を書かずに失敗を返す
+/// （保存済み verdict が古いまま残り、次の ingest で再 scan される）。
+#[tokio::test]
+async fn runtime_advisory_expiry_failure_is_returned() {
+    let provider = MockSafetyProvider::known_csam("mock-known-csam");
+    let store = Arc::new(FailingSafetyArtifactStore {
+        operation: FailingStoreOperation::Expiry,
+    });
+    let service = SafetyScanService::builder(orchestrator("issuer-node", provider), store)
+        .without_signed_events("issuer-node")
+        .build()
+        .unwrap();
+
+    let error = service
+        .scan_and_record(&post_request("post-clean"))
+        .await
+        .unwrap_err();
+
+    assert!(error.chain().any(|cause| {
+        cause
+            .to_string()
+            .contains("expire superseded advisory signals")
+    }));
 }
 
 #[tokio::test]
