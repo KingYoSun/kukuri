@@ -35,7 +35,7 @@
 | AC-6 | 未達（#1107） | advisory 付き投稿はタイムラインで成人向け代替表示になり、OFF のままスクロールした古い投稿も代替表示になった。一方、ON→OFF 切替時の表示済み画像のちらつき、表示 OFF のままでの不定期なちらつき（ON にすると止まる）、通常画像投稿のスケルトン残留を確認した。ちらつく投稿 `d16efa12…`（advisory なし）は、旧 signal が残る `6f0b…` / `4956…` と同じ blob `4c8fd3bf…` を添付しており、投稿単位の advisory による blob のゲートと、advisory なしの投稿の表示が入れ替わっていると推定した。代替表示の UI 改善要望は #1108 |
 | AC-7 | 達成（Linux）。Windows は #1105 | Linux client は更新後に legal bundle version 6 の再同意を求め、CN の文書（外部送信・moderation-policy version 2、snapshot `391a5f54…`）の再同意も 1 回で完了した。Windows は、開発ビルドが同じ app data に version 6 の同意（2026-09-16 16:54 UTC、app_version 0.2.4）を記録済みのため再提示されなかった。同意画面の表示改善は #1106 |
 | AC-8 | 本記録 | |
-| AC-9 | 達成 | 19:22 JST の本文投稿 `ff0f9d00…` は変更通知で 1 件だけ取り込まれた（`scanned=1 indexed=1 scans_fresh=1`）。添付付き投稿（19:23、19:37）は `changed keys are not object-scoped … reason=manifests/media` で scope 全体へ倒れた（runbook §5.6 の仕様どおり）。`event_whole_scope_fallbacks` の増加はこの添付付き投稿の分だけ |
+| AC-9 | 達成 | 19:22 JST の本文投稿 `ff0f9d00…` は変更通知で 1 件だけ取り込まれた（`scanned=1 indexed=1 scans_fresh=1`）。添付付き投稿（19:23、19:37）は `changed keys are not object-scoped … reason=manifests/media` で scope 全体へ倒れた（runbook §5.6 の仕様どおり）。本文だけの投稿で `not object-scoped` の log は出ていない |
 | AC-10（#1090） | 達成 | 反映直後は general 1 件、test 0 件。投稿者の client が接続すると 10:22 UTC 以降に general 15 件、test 5 件へ回復し、その後の pass で減少なし（10:40 時点で合計 21 件）。`deindexed=0`、`failed to resolve post body` 0 件。`temporarily failed to ingest object record` は client 接続前の 25 件（本文取得不可で、索引済み entry を保持） |
 | AC-11（#1093） | 達成 | decoder を事前起動せず、image 取得直後の初回 `readiness --force-probe` で `ready=true fail=0 unknown=0`。general は「MP4/WebM decode、認証、本文/画像応答の解析に成功」。`readiness_probe_cache` の detail に秘密値・応答本文なし |
 | INVAR-1 | 維持 | 非 allow・critical の索引 0（readiness の `非許可・重大の表出=0`）。CHECK 制約は変更なし |
