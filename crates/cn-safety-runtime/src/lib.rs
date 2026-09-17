@@ -54,7 +54,7 @@ pub use service::{
     MemorySafetyArtifactStore, SafetyArtifactStore, SafetyRuntimeConfig,
     SafetyRuntimeProviderEntry, SafetyRuntimeProvidersConfig, SafetyScanOutcome, SafetyScanService,
     SafetyScanServiceBuilder, build_safety_scan_service, content_advisories_for,
-    resolve_safety_policy,
+    resolve_safety_policy, superseded_advisory_categories,
 };
 pub use signer::{
     SAFETY_ISSUER_NODE_ID_ENV, SAFETY_SIGNING_KEY_ENV, Secp256k1ModerationEventSigner,

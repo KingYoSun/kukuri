@@ -168,10 +168,11 @@ pub use safety_appeals::{
 };
 pub use safety_events::{
     DistributionAudience, PersistedRiskSignal, StoredModerationEvent, StoredRiskSignal,
-    attribute_risk_signal_subject_author, get_risk_signal, get_signed_moderation_event,
-    list_distributable_moderation_events, list_distributable_risk_signals, list_risk_signals,
-    list_risk_signals_for_target, list_risk_signals_for_user, list_signed_moderation_events,
-    persist_risk_signal, persist_risk_signal_deduplicated, persist_risk_signal_with_author,
+    attribute_risk_signal_subject_author, expire_superseded_advisory_signals, get_risk_signal,
+    get_signed_moderation_event, list_distributable_moderation_events,
+    list_distributable_risk_signals, list_risk_signals, list_risk_signals_for_target,
+    list_risk_signals_for_user, list_signed_moderation_events, persist_risk_signal,
+    persist_risk_signal_deduplicated, persist_risk_signal_with_author,
     persist_signed_moderation_event,
 };
 pub use safety_runtime::{

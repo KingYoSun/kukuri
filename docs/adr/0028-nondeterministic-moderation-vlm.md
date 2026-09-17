@@ -11,7 +11,7 @@ critical route（CSAM / CSE / grooming）の fail-closed、spam / malware / phis
 `Basis::ClassifierScore` の不昇格、no permanent blob storage は変更しない。
 
 ## Date
-2026-06-30（実装追補: 2026-07-30、改訂: 2026-09-15）
+2026-06-30（実装追補: 2026-07-30、改訂: 2026-09-15、追補: 2026-09-17）
 
 ## Base Branch
 `main`
@@ -61,6 +61,8 @@ community node の moderation のうち **非決定論的 moderation（VLM / cla
     - `general_action_operator_tunable_stricter_only`
     - `labeled_allow_emits_risk_label_event_and_signal`
     - `labeled_allow_text_does_not_short_circuit_media_scan`
+  - 2026-09-17 追加（#1109、§8.14）: `rescan_allow_without_labels_expires_stale_advisory_signal`、
+    `rescan_does_not_expire_protected_signals`、`expire_superseded_advisory_signals_migration`
 - 必須 scenario:
   - critical risk タグが閾値超の高 confidence → fail-closed（自 node の index / discovery / recommendation に出ない）。advisory は visibility 規則に従い network 配布可
   - 誤検知は issuer node への異議申し立て → operator が `Cleared` → 配布済み advisory に伝播し trust 寄与が戻る
@@ -378,6 +380,38 @@ scenario は Feature Data Classification の「2026-09-15 追加」3 件を正�
 - `Basis::ClassifierScore` は confirmed に昇格しない。cross-node pull は confirmed 絶対成分のみ。
 - no permanent blob storage。VLM 入力は一時 fetch。
 - ラベル無し（self-label も advisory も無い）投稿は通常表示（ADR 0046 の fail-open の限界は不変）。
+
+### 8.14 再 scan 後の advisory signal の整合（#1109、2026-09-17）
+
+一括照会（risk signal 由来）と index read の `content_advisories`（verdict 行由来）は、同じ subject について
+同じ現在の判定を返す。provider / policy 構成の変更後に旧構成の signal が残り、照会だけが advisory を返す
+食い違いを次の規則で解消する。
+
+- provider を呼んだ再 scan（別 subject の内容 cache 再利用を含む）が index 可能な verdict を返したら、それを
+  subject の現在の判定とする。同じ issuer・target・target_id の nsfw / objectionable signal のうち、その
+  verdict の `advisory_labels` に無い category の行へ、新しい判定の `scanned_at` を `expires_at` として刻む。
+  残る category の行は #1050 の集約更新に従う。
+- 構成変更による再 scan と同一構成の再 scan は区別しない。同一構成・同一内容は保存済み verdict の再利用で
+  provider を呼ばず、signal にも触れない。
+- hold / exclude / 失敗の再 scan では失効させない（subject は index されず、signal は従来どおり集約される）。
+- 失効させない行: operator 確定の印がある行（§7.3、#1058）、`appeal_status` が `Disputed` / `Cleared` の行、
+  appeal 通報から参照される行（棄却 = 判定維持を含む）、critical・spam / malware / phishing、
+  `ClassifierScore` 以外の basis。これらが残る subject では照会が advisory を返し続ける（operator・審査の
+  判断を scanner の判定より優先する）。
+- 行は削除しない。signed moderation event は不変で追加発行もしない（§7.3）。配布済み advisory は既存の
+  `expires_at` 失効契約（配布クエリと trust 供給から除外）で伝わる。nsfw / objectionable は元から trust 寄与 0
+  のため評価値は変わらず、利用者向け trust read の basis から失効行が外れる。
+- 一括照会は verdict を join しない。signal を真実源とする読み口（`Cleared` と失効の除外）を保ち、書き込み側で
+  signal を現在の判定へ揃える。
+- 規則より前に再 scan 済みの subject は、migration `202609170003_expire_superseded_advisory_signals.sql` が
+  同じ規則で揃える（verdict 行が `allow` で自 subject の advisory に同じ category が無く、signal が verdict 行の
+  最終更新以前に保存された行）。
+- post 行に同梱した参照 blob の advisory は、その post の再 ingest で再計算する（従来どおり）。
+- contract: `rescan_allow_without_labels_expires_stale_advisory_signal`、
+  `rescan_keeps_only_current_advisory_categories`、`rescan_does_not_expire_protected_signals`、
+  `non_indexable_rescan_keeps_advisory_signals`、`reused_verdict_does_not_touch_signals`、
+  `expire_superseded_advisory_signals_migration`。
+- 判断・inventory・検証は [作業記録](../progress/2026-09-17-1109-advisory-rescan-consistency.md) を参照する。
 
 ## 9. OpenAI Moderation・動画抽出・内容hash再利用（#1060）
 

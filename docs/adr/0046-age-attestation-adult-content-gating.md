@@ -77,7 +77,8 @@ content advisory（ADR 0028 §8.6）を第 2 の源**として合成する。adv
 - 代替表示は発行 node、category、confidence、basis を説明でき、異議申し立て（`POST /v1/report` の
   `appeal.risk_signal_id`）へ導線を持つ。断定表現（「成人向けと認定」）にせず「Community Node の推定」と示す。
 - 一括照会（仮名 `POST /v1/advisories/lookup`）は認証 + 同意済み client から可視 post id / blob hash を受け、
-  その node 自身が発行した advisory のみ返す（`advisory_lookup_returns_only_configured_node_signals`）。送信する
+  その node 自身が発行した advisory のみ返す（`advisory_lookup_returns_only_configured_node_signals`）。照会と
+  見つけるは同じ subject について同じ現在の判定を返す（再 scan 後の整合は ADR 0028 §8.14）。送信する
   識別子は可視 post id / blob hash に限り、本文や social graph を含めない。外部送信表示
   （`docs/legal/external-transmission-notice.md` / `docs/legal/app-data-flow-inventory.md`）へ行を追加する。
 
