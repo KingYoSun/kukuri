@@ -37,6 +37,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any("libgcrypt20" in command and "--no-upgrade" not in command for command in installs),
                         "refresh the runner's preinstalled libgcrypt20 before collecting exact matching source")
 
+    def test_release_verify_installs_every_fast_cn_system_dependency(self):
+        # linux-verify reruns the CN tests, including real ffmpeg video extraction (#1060).
+        def packages(workflow_name, job_name):
+            steps = workflow(workflow_name)["jobs"][job_name]["steps"]
+            step = next(step for step in steps if step.get("name") == "Install Linux system dependencies")
+            words = shlex.split(step["run"])
+            return set(words[words.index("install") + 1:]) - {"-y"}
+
+        missing = packages("kukuri-fast.yml", "linux-cn") - packages("kukuri-release.yml", "linux-verify")
+        self.assertEqual(missing, set(), "release linux-verify must install the Fast CN test dependencies")
+
     def test_publish_requires_every_platform_and_validation(self):
         jobs = workflow("kukuri-release.yml")["jobs"]
 
