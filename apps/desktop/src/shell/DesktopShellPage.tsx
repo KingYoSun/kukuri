@@ -271,8 +271,7 @@ export function DesktopShellPage({
     translate,
     locale,
     theme,
-    profileAvatarPreviewUrl,
-    gatedMediaHashes: gatedAdultMediaHashes,
+    profileAvatarPreviewUrl, gatedMediaHashes: gatedAdultMediaHashes,
   });
 
   const {
