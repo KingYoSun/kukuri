@@ -23,6 +23,7 @@ ADR 0002 (`docs/adr/0002-feature-data-classification-template.md`) に基づく�
 - version 4 は、管理主体、実データフロー、外部送信、診断情報、P2P copy の削除限界、日本語正文と参考訳を明記する重要変更である(#854)。外部送信の突合は `docs/legal/app-data-flow-inventory.md` と `docs/legal/external-transmission-notice.md` を参照。
 - version 5 は、主体定義と責任範囲、投稿者責任、適切な権利主体への限定的許諾、鍵の中央復旧不能、Community Node 別規約、通報・利用制限、サービス変更・中断・終了、OSS ライセンスとの関係、責任制限、日本法・合意管轄、変更通知を全面改訂する重要変更である(#856)。
 - version 6 は、利用規約 第3条 4 項に成人向け表現の第 2 のラベル源（利用者が設定した Community Node の推定）を追加し、プライバシーポリシーと外部送信表示に推定の照会で送る識別子を追記する重要変更である(#1056、ADR 0046 §6.4)。
+- 各記録には記録時の build の種別 `build_profile`（配布版 `release`、開発ビルド `development`）を残す(#1105)。同意判定には使わない。#1105 より前の記録には無い。開発ビルドは配布版と別の app data dir を使うため、配布版の consent ファイルへ書き込まない（`docs/runbooks/dev.md`）。
 - 同意するまで `DesktopRuntime` を構築せず、iroh endpoint の bind / discovery を開始しない（fail-closed = IP 取得前に同意）。
 
 ## 初回表示と言語選択（#917）

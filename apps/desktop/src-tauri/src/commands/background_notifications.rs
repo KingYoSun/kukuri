@@ -80,10 +80,8 @@ pub struct OsNotificationBackground {
 
 impl OsNotificationBackground {
     pub fn new(app: &AppHandle) -> Self {
-        let dir = app
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
+        let dir =
+            crate::state::base_app_data_dir(app).unwrap_or_else(|_| PathBuf::from("."));
         let settings_path = dir.join("os-notification-settings.json");
         let cursor_path = dir.join("os-notification-cursor.json");
 

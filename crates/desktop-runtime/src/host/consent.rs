@@ -24,6 +24,9 @@ pub struct AppConsentDocumentRecord {
     pub accepted_at: i64,
     pub language: String,
     pub app_version: String,
+    /// 記録した build の種別(`AppBuildProfile::as_str`)。#1105 より前の記録には無い。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_profile: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +35,9 @@ pub struct AgeAttestationRecord {
     pub attested_at: i64,
     pub language: String,
     pub app_version: String,
+    /// 記録した build の種別(`AppBuildProfile::as_str`)。#1105 より前の記録には無い。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_profile: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

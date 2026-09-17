@@ -325,6 +325,7 @@ mod tests {
                     accepted_at: 1,
                     language: "ja".to_string(),
                     app_version: "0.1.8".to_string(),
+                    build_profile: None,
                 })
                 .collect(),
             age_attestations: vec![AgeAttestationRecord {
@@ -332,6 +333,7 @@ mod tests {
                 attested_at: 1,
                 language: "ja".to_string(),
                 app_version: "0.1.8".to_string(),
+                build_profile: None,
             }],
         };
         save_app_consent_store(&db_path, &accepted).expect("save accepted consent");
