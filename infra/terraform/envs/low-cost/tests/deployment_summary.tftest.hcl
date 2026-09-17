@@ -124,8 +124,8 @@ run "relation_analyze_timer_survives_startup_rerun" {
     relation_analyze_interval_minutes = 45
   }
   assert {
-    condition     = strcontains(nonsensitive(module.vm.startup_script), "OnBootSec=15min\nOnActiveSec=15min\nOnUnitActiveSec=45min\n")
-    error_message = "The regenerated relation analyze timer must schedule a run after a startup rerun past the boot window (#1099)."
+    condition     = strcontains(nonsensitive(module.vm.startup_script), "OnBootSec=15min\nOnUnitActiveSec=45min\nRandomizedDelaySec=60\n[Install]\n")
+    error_message = "The relation analyze timer must keep its interval without a persistent stamp, so a startup rerun past the boot window runs it immediately (#1099)."
   }
   assert {
     condition     = strcontains(nonsensitive(module.vm.startup_script), "systemctl enable --now kukuri-relation-analyze.timer\n")

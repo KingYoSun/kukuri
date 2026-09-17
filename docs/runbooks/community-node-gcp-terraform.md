@@ -332,8 +332,8 @@ systemctl status kukuri-relation-analyze.service # relation analyze の last suc
 journalctl -u kukuri-relation-analyze.service -n 50
 ```
 
-startup は relation analyze の service / timer を再生成する。再生成後の初回は timer 起動の 15 分後に予定され、
-以後は前回実行から `relation_analyze_interval_minutes` ごとに続く（#1099）。`NEXT` が `-` の場合や
+startup は relation analyze の service / timer を再生成する。boot から 15 分以上経ってからの再実行では、
+再生成した timer が起動直後に 1 回実行し、以後は前回実行から `relation_analyze_interval_minutes` ごとに続く（#1099）。`NEXT` が `-` の場合や
 手動で解析する場合は `sudo systemctl start kukuri-relation-analyze.service` を使う
 （`docker-compose run` だけでは timer の記録が残らない）。
 

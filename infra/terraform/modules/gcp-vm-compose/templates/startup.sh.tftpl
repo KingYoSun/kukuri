@@ -254,9 +254,9 @@ UNIT
 # --- systemd timer: relation graph の定期 batch 解析（#615） ---
 # oneshot unit は同一 unit の並行起動をしないため、実行が interval を超えても overlap しない。
 # last success / failure は `systemctl status kukuri-relation-analyze` / journalctl で確認する。
-# readiness timer と同じく、冒頭でunitを削除・再生成するため前回起動記録は残らない。boot後15分を
-# 過ぎてstartupを再実行した場合もOnActiveSecで初回を決め、以後はOnUnitActiveSecで継続させる
-# （停止するとreadinessのrelation_analysis_recentが不合格になり公開面が閉じる。#1099）。
+# Persistentを付けないため、boot後15分を過ぎてstartupを再実行すると、再生成したtimerは起動直後に
+# 1回実行し、以後はOnUnitActiveSecで継続する。Persistent=trueを付ける場合はreadiness timerと同じく
+# OnActiveSecが必要（停止するとreadinessのrelation_analysis_recentが不合格になり公開面が閉じる。#1099）。
 cat > /etc/systemd/system/kukuri-relation-analyze.service <<UNIT
 [Unit]
 Description=kukuri community node relation graph analysis
@@ -270,7 +270,6 @@ cat > /etc/systemd/system/kukuri-relation-analyze.timer <<UNIT
 Description=kukuri community node relation graph analysis timer
 [Timer]
 OnBootSec=15min
-OnActiveSec=15min
 OnUnitActiveSec=${relation_analyze_interval_minutes}min
 RandomizedDelaySec=60
 [Install]
@@ -280,9 +279,10 @@ UNIT
 # --- systemd timer: public read surface readiness activation（#616 / #612） ---
 # activationの有効期限（既定15分）より短い5分間隔で再判定する。oneshotの失敗時も
 # timerは次回再試行し、CLIが旧activationをrevokeするためunsafeなsurfaceは残らない。
-# 冒頭でunitを削除・再生成するため、serviceの前回起動記録は残らない。OnBootSecは
-# boot後2分を過ぎると再計算されないので、startupを再実行した場合はOnActiveSec（timer
-# 起動からの経過）で初回を決め、以後はOnUnitActiveSecで5分ごとに継続させる（#1097）。
+# 冒頭でunitを削除・再生成するため、serviceの前回起動記録は残らない。Persistent=trueでは
+# stampから前回のtrigger時刻が戻り、boot後2分を過ぎたOnBootSecは実行済みとして扱われるので、
+# startupを再実行した場合はOnActiveSec（timer起動からの経過）で初回を決め、以後は
+# OnUnitActiveSecで5分ごとに継続させる（#1097 / #1099）。
 cat > /etc/systemd/system/kukuri-readiness.service <<UNIT
 [Unit]
 Description=kukuri community node public readiness activation
