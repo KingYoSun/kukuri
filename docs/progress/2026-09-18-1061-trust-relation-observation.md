@@ -48,6 +48,13 @@
   対象ごとに最新 1 件へ集約するので、通常の再送では起きない。
 - 1 対象あたり評価に使う active 観測は新しい順に 200 件まで。
 
+## PR2 への引き継ぎ（PR1 独立監査の指摘）
+
+- 既存の同意ダイアログは提示した文書をすべてローカル同意記録へ書く（`useCommunityNodeConsentFlow.ts` →
+  `record_community_node_local_consents`）。サーバ同期は必須文書だけ（`policy_slugs = []`）なので現状は外部へ効かないが、
+  PR2 ではこのローカル記録を提供トグルの状態として扱わず、一括受諾の対象から任意文書を外す。
+
 ## 検証記録
 
-- PR1: 実行結果は PR 本文に記録する。
+- PR1（[#1125](https://github.com/kukuri-app/kukuri/pull/1125)）: 実行結果は PR 本文に記録する。独立監査（commit `6fbab3e4`）は
+  PASS・blocker 0。non-blocker のうち ADR の一括評価 path の記載違いは同 PR で修正した。

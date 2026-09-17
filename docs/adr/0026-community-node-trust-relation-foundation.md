@@ -372,7 +372,7 @@ R = clamp(-1, 0, R_base - penalty_scale × penalty)                # penalty_sca
   - `reasons`: `risk_signals`（T が負）/ `related_users_block_or_mute`（R が負）。数値・observer は含めない。
 - `hide_threshold` は **node-local な表示 policy の parameter** であり、§6.2「断定閾値を置かない」を変更しない。
   CN は利用者を troll と断定するラベルを返さず、クライアントは折りたたみと再表示・例外設定を提供する。
-- 一括 read `POST /v1/trust/users/evaluations`（最大 100 件、viewer 認証必須）は target ごとに `trust` と `evaluation` を返す。
+- 一括 read `POST /v1/trust/evaluations`（最大 100 件、viewer 認証必須）は target ごとに `trust` と `evaluation` を返す。
 - parameter の env: `COMMUNITY_NODE_TRUST_RELATION_MIN_WEIGHT`、`_RELATION_TOP_K`、`_RELATION_PENALTY_SCALE`、
   `_BLOCK_STRENGTH`、`_MUTE_STRENGTH`、`_HIDE_THRESHOLD`、`_EVALUATION_TTL_SECONDS`（接頭辞 `COMMUNITY_NODE_TRUST`）。
 
