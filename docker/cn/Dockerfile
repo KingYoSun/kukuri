@@ -3,15 +3,18 @@ FROM rust:${RUST_VERSION}-bookworm AS builder
 
 WORKDIR /workspace
 
-ARG TARGET_PACKAGE
+# #1122: 4 つの image が同じ builder stage を共有し、共通の依存 crate を 1 回だけ
+# compile する。package ごとに cargo を分けて呼ぶのは、まとめて指定すると feature が
+# 統合されて binary が変わりうるため。
+ARG TARGET_PACKAGES
 ARG CARGO_BUILD_JOBS=2
 
 COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 COPY xtask ./xtask
 COPY crates ./crates
 
-RUN test -n "$TARGET_PACKAGE"
-RUN cargo build --release -p "$TARGET_PACKAGE"
+RUN test -n "$TARGET_PACKAGES"
+RUN set -eu; for package in $TARGET_PACKAGES; do cargo build --release -p "$package"; done
 
 FROM debian:bookworm-slim AS runtime
 
