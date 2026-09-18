@@ -6,6 +6,7 @@
 - Issue は 2026-09-17 r2 で、#1090（一時的な取込み失敗で索引済み投稿を保持）と #1093（#1091 の本番確認）を同じ反映へ加えた。
 - 一般 moderation は同日の v0.2.5 反映で OpenAI Moderation（`omni-moderation-latest`）へ切替済み（[v0.2.5 の記録](2026-09-17-v0.2.5-preview.1-release-rollout.md)）。
 - 確認中に見つかった問題は #1097 / #1105 / #1106 / #1107 / #1108 / #1109 に起票した。AC-6 は #1107 の不具合により未達。
+- 2026-09-18 に v0.2.6-preview.1（#1105 / #1107 / #1108 / #1109 の修正を含む）の反映後に AC-6 を再確認した（下記「v0.2.6 での再確認」）。表示は達成したが、表示 OFF の client が advisory 付き画像の bytes を projection 反映の経路で取得・永続化しており、取得ゲートは未達（#1152）。
 
 ## 反映
 
@@ -49,3 +50,44 @@
 - 旧 provider の signal の残存（#1109）: 旧 VLM が 2026-09-15 に発行した nsfw high の signal 2 件（confidence 84）は、OpenAI の再 scan で allow・advisory なしになった後も有効なままである。タイムラインの advisory 照会はこの 2 件を返すため、「見つける」（verdict 由来）と表示が食い違う。
 - client の表示（#1107、#1108）、同意画面（#1106）、開発ビルドの app data 共有（#1105）。
 - 旧 VLM の `unknown_csam` 行が `readiness_probe_cache` に残っている（04:44 UTC の pass、現在の slot 構成では参照されない）。
+
+## v0.2.6 での再確認（2026-09-18）
+
+反映の記録は [v0.2.6-preview.1 の記録](2026-09-18-v0.2.6-preview.1-release-rollout.md)。CN は source `4b751946`、client は Windows NSIS／Linux Deb とも 0.2.6。
+
+### #1109 の本番反映
+
+- migration `202609170003` の適用時刻（03:16:02 UTC）で、旧 VLM の nsfw high signal 2 件（`6f0b…`、`4956…`）の `expires_at` が設定された。appeal・operator 調整の対象外で、行は削除されていない。
+- 有効な signal は `3d8d3cb1…` の画像 `f6a38ae2…` の nsfw／objectionable（low）の 2 件だけになった。`6f0b…`／`4956…`／`d16efa12…`／`3d8d3cb1…` はいずれも `allow`・非 critical で索引にある。
+
+### 新規の advisory 付き投稿
+
+- 閲覧側（Linux、アカウント `e8700632…`、成人向け表示 OFF）を停止した状態で、投稿者（Windows、アカウント `bcdde13a…`）が画像投稿 `184508a5…`（画像 `5ca47f2e…`、3,449,739 bytes）を general へ行った（13:43 JST）。
+- CN は 04:47:30 UTC に post／blob とも `allow`・policy v3、advisory `adult`（nsfw、confidence 100、`classifier_score`）を付け、索引した。signal は 1 件（low）。OpenAI の `api_attempts=2`、`scans_failed=0`。
+- 投稿直後の変更通知では、indexer の取得先 peer が直前に終了した Linux client（`13c1ee7e…`）だけで、本文を取得できず `temporarily failed to ingest object record` になった。投稿者の Windows client は bootstrap に登録済み（TTL 90 秒で更新）だったが、取得先 peer は全件見直しのときにだけ更新されるため、次の pass（04:47）で取得・索引された。`last_index_lag_secs=227`（runbook §5.6 の「数十秒以内」を超えた）。
+- 索引直後（04:47:43 UTC）の `risk_signals` 5 件（うち有効 3）、`signed_moderation_events` 613 件、索引 22 件は、general の 2 pass（04:52、04:57、いずれも `scans_fresh=0`・`scans_reused=23`）後の 04:58:28 UTC でも同数。
+
+### client 実機（AC-6）
+
+運営者が Linux client で確認した結果:
+
+| 項目 | 結果 |
+| --- | --- |
+| 新規投稿と `3d8d3cb1…` がタイムライン・見つけるの両方で代替表示（枠上の短い表示、クリックで詳細 dialog） | 達成 |
+| 同じ画像 `4c8fd3bf…` を使う advisory なしの投稿（`6f0b…`／`4956…`／`d16efa12…`）が通常表示でちらつかない | 達成 |
+| 通常画像のスケルトン残留なし | 達成 |
+| 表示 ON→OFF の切替でちらつきなし | 達成 |
+| 表示 OFF の間に advisory 付き画像の bytes を取得しない | **未達（#1152）** |
+
+- Linux client は 13:48:05 JST に起動し、13:48:07 に `5ca47f2e…` の `.data` を blob store へ永続保存した。表示を ON にしたのは 13:49:08 で、そのときの `get_blob_media_payload` は既にローカルにあるため `fetch hit` だった。13:48:07 前後の画面表示用の取得に `5ca47f2e…` は無い。
+- 原因は、投稿 projection 反映時の添付状態確認（`best_effort_blob_cache_status` → `IrohBlobService::blob_status`）がローカルに無い blob を `fetch_blob` で remote 取得・永続化すること。成人向けゲートは `blob_media_payload` にだけあり、この経路を通らない。self-label の成人向け media も同じ経路で取得される。
+- 前日の `f6a38ae2…` も表示 OFF の Linux client に 19:37:59 JST（CN の advisory 付与の 5 秒前）に保存されていた。
+
+### AC-7（Windows）
+
+#1105 の修正は既存の app data を移動しない。Windows の配布版には開発ビルドが記録した version 6 の同意（2026-09-16）が残っており、再同意は表示されない。今後の開発ビルドは `<identifier>.dev` を使うため、同じ混入は起きない。AC-7 は Linux の実機確認で達成とする。
+
+### 判定
+
+- AC-6 は表示について達成、取得ゲートについて未達。#1152 の修正後に、表示 OFF の client が新しい advisory 付き画像の bytes を保存しないことを再確認する。
+- それ以外の AC・INVAR の状態は前回と同じ。
