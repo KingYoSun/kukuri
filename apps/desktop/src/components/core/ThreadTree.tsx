@@ -121,6 +121,7 @@ export function ThreadTree({
             ) : null}
             <div className='thread-tree-body'>
             <PostCard
+              enableLinkPreview
               view={view}
               onOpenAuthor={onOpenAuthor}
               onOpenThread={onOpenThread}

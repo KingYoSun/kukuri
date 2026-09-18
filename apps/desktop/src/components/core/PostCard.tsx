@@ -8,6 +8,7 @@ import type {
   CommunityNodeManifestFetch,
   ContentProvenance,
   CustomReactionAssetView,
+  LinkPreviewFetcher,
   ReactionKeyInput,
   ReactionKeyView,
   RecentReactionView,
@@ -39,6 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { AuthorAvatar } from './AuthorAvatar';
 import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
+import { LinkPreviewCard } from './LinkPreviewCard';
 import { PostMedia } from './PostMedia';
 import { PostReactionChip } from './PostReactionChip';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
@@ -102,6 +104,8 @@ type PostCardProps = {
   // 通報画面を開いた時に観測元ノードの最新 manifest を取得する。未指定なら候補は作らない(#696)。
   onFetchReportManifest?: (baseUrl: string) => Promise<CommunityNodeManifestFetch>;
   onMuteReportAuthor?: (authorPubkey: string) => Promise<void> | void;
+  enableLinkPreview?: boolean;
+  linkPreviewFetcher?: LinkPreviewFetcher;
 };
 
 function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput | null {
@@ -145,6 +149,8 @@ export function PostCard({
   onCopyReportContact,
   onFetchReportManifest,
   onMuteReportAuthor,
+  enableLinkPreview = false,
+  linkPreviewFetcher,
 }: PostCardProps) {
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
@@ -208,6 +214,14 @@ export function PostCard({
           : null;
   const primaryContent = showRepostAsPrimary && repostSource ? repostSource.content : post.content;
   const hasPrimaryContent = !isUnavailableText && primaryContent.trim().length > 0;
+  const linkPreviewEligible =
+    enableLinkPreview &&
+    post.channel_id == null &&
+    !view.adultContentGated &&
+    !isWithdrawn &&
+    !isUnavailableText &&
+    localState === null &&
+    hasPrimaryContent;
   const reactionSummary = post.reaction_summary ?? [];
   const myReactionKeys = useMemo(
     () => new Set((post.my_reactions ?? []).map((reaction) => reaction.normalized_reaction_key)),
@@ -413,6 +427,7 @@ export function PostCard({
               onActivateReference={onActivateReference}
               mentionAuthors={view.mentionAuthors}
               onOpenMention={onOpenAuthor}
+              externalLinks
             />
           ) : null}
         </div>
@@ -470,6 +485,7 @@ export function PostCard({
                   onActivateReference={onActivateReference}
                   mentionAuthors={view.mentionAuthors}
                   onOpenMention={onOpenAuthor}
+                  externalLinks
                 />
               </div>
             ) : replyPreview.attachments.length > 0 ? (
@@ -514,6 +530,7 @@ export function PostCard({
               onActivateReference={onActivateReference}
               mentionAuthors={view.mentionAuthors}
               onOpenMention={onOpenAuthor}
+              externalLinks
             />
           </strong>
         ) : null}
@@ -545,6 +562,11 @@ export function PostCard({
             view.repostSourceAuthor
           )
         ) : null}
+        <LinkPreviewCard
+          content={primaryContent}
+          enabled={linkPreviewEligible}
+          fetcher={linkPreviewFetcher}
+        />
       </div>
       {readOnly && publishedTopicId ? (
         <div className='topic-diagnostic topic-diagnostic-secondary'>

@@ -910,6 +910,7 @@ export function CommunityIndexWorkspace({
             return (
             <li key={key}>
               <PostCard
+                enableLinkPreview
                 view={view}
                 readOnly={!view.actionPost}
                 mediaObjectUrls={mediaObjectUrls}

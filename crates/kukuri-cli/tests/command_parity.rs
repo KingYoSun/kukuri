@@ -125,6 +125,8 @@ fn exclusion_allowed(tauri: &str, kind: &str) -> bool {
             "commands::developer_logs::set_developer_mode_enabled"
                 | "commands::developer_logs::read_desktop_logs"
         ),
+        // #1174: GUIでviewport内に表示した公開投稿だけの一時link preview。
+        "gui_content_preview" => tauri == "commands::link_preview::fetch_link_preview",
         _ => false,
     }
 }
@@ -163,13 +165,10 @@ fn baseline_inventory_is_classified_once() {
     let manifest = manifest();
     assert_eq!(
         manifest.baseline,
-        "c4616fc706b94150ac6c2ac06aec68bc1c2b0f5a"
+        "d372c91bdc963bda07308a359fe3baeca8e06150"
     );
-    assert_eq!(
-        manifest.scope_revision,
-        "2026-09-14-1020-dome-management-v1"
-    );
-    assert_eq!(manifest.entries.len(), 160);
+    assert_eq!(manifest.scope_revision, "2026-09-19-1174-url-ogp-v1");
+    assert_eq!(manifest.entries.len(), 161);
     check_inventory(&registrations(TAURI_SOURCE), &manifest.entries).expect("全入口の分類");
 }
 

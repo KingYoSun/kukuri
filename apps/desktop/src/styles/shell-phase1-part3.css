@@ -901,6 +901,24 @@
   overflow-wrap: anywhere;
 }
 
+.smart-external-link {
+  color: var(--accent-foreground);
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+.smart-external-link:hover {
+  color: var(--accent);
+}
+
+.smart-external-link:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .smart-reference-chip {
   display: inline-flex;
   align-items: center;

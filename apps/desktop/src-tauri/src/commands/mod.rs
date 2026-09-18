@@ -6,6 +6,7 @@ pub mod device_backup;
 pub mod direct_messages;
 pub mod external_url;
 pub mod identity;
+pub mod link_preview;
 pub mod live_game;
 pub mod os_notification;
 pub mod posts;

@@ -129,6 +129,7 @@ mod tests {
             for command in [
                 "create_post",
                 "fetch_community_node_policies",
+                "fetch_link_preview",
                 "get_pending_device_restore_frontend_state",
                 "acknowledge_pending_device_restore_frontend_state",
                 "set_developer_mode_enabled",
@@ -190,6 +191,11 @@ mod tests {
             "fetch_community_node_policies",
             &DesktopStartupStatus::Ready
         ));
+        assert!(!command_allowed("fetch_link_preview", &consent_required));
+        assert!(command_allowed(
+            "fetch_link_preview",
+            &DesktopStartupStatus::Ready
+        ));
     }
 
     #[test]
@@ -214,6 +220,7 @@ mod tests {
             "preview_device_backup_command",
             "list_accounts",
             "check_app_update",
+            "fetch_link_preview",
             "download_app_update",
             "install_app_update",
             "set_developer_mode_enabled",

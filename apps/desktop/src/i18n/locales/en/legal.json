@@ -32,13 +32,14 @@
   "documents": {
     "terms": {
       "title": "Terms of Service",
-      "changeSummary": "Version 7 adds that posts may be collapsed based on the trust evaluation of a community node you selected, and that you can optionally share your blocks and mutes to support that evaluation.",
+      "changeSummary": "Version 8 adds that the app may contact the destination and OGP image host to show a preview of an external URL in a public post.",
       "sections": [
         {
           "heading": "What kukuri is",
           "paragraphs": [
             "kukuri is a decentralized application built on a P2P foundation. The operator is {{controllerName}} and the contact address is {{contact}}. The operator's legal name and address will be provided without delay on request to that address.",
-            "The operator controls only the distribution, updates, information, and Community Node capabilities it provides. A central authority that governs the entire network does not structurally exist."
+            "The operator controls only the distribution, updates, information, and Community Node capabilities it provides. A central authority that governs the entire network does not structurally exist.",
+            "After consent, the app may contact the destination and an image host specified by that page to preview the first external URL in a public post. URLs in private channels and DMs are not fetched automatically."
           ]
         },
         {
@@ -169,7 +170,7 @@
     },
     "privacy": {
       "title": "Privacy Policy",
-      "changeSummary": "Version 7 adds what is sent when trust evaluations are requested, and how optionally shared blocks and mutes are handled.",
+      "changeSummary": "Version 8 adds what may be sent for public-post link previews, what is not sent, and the temporary local retention.",
       "sections": [
         {
           "heading": "Controller and basic approach",
@@ -193,8 +194,9 @@
           ]
         },
         {
-          "heading": "Automatic update checks and diagnostic reports",
+          "heading": "Link previews, automatic update checks, and diagnostic reports",
           "paragraphs": [
+            "After consent, when an eligible settled public post enters the viewport, the app may contact the destination of its first URL and an OGP image host to show a preview. They can observe your IP address, HTTP/TLS request metadata, and the URL path and query. Cookies, authorization, Referer, account/topic/post identifiers, and other post text are not sent. Private channels, DMs, and collapsed content are not fetched automatically, and preview data does not survive an app restart.",
             "After consent, the app checks GitHub Releases automatically at startup and every 30 minutes, and when you request a check. GitHub and network providers can observe your IP address and HTTP/TLS request metadata.",
             "A diagnostic report can include app version, platform/user agent, connectivity state, peer and topic counts, and Node URL/session/error information. Copying or exporting does not send it automatically. Secret keys, auth tokens, private capabilities, invitations, DM bodies, and local database paths are excluded by default."
           ]
@@ -209,7 +211,7 @@
         {
           "heading": "Consent and change history",
           "paragraphs": [
-            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 6 describes what is sent when looking up adult material estimates."
+            "The app asks you to accept the terms and this policy before starting network connections. A material update increments the document version and requires renewed consent before networking resumes. Version 8 describes what may be sent for public-post link previews."
           ]
         }
       ]

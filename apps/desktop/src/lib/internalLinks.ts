@@ -1,4 +1,5 @@
 import type { ChannelAccessTokenKind } from '@/lib/api';
+import { findNextExternalUrl } from '@/lib/externalUrls';
 import { parseHashRouteLocation } from '@/shell/routes';
 
 export type TopicLinkReference = {
@@ -70,6 +71,10 @@ export type SmartTextSegment =
   | {
       kind: 'reference';
       reference: InternalSmartReference;
+    }
+  | {
+      kind: 'external_url';
+      href: string;
     }
   | MentionSegment;
 
@@ -361,7 +366,18 @@ function findNextReference(
   const accessPreviewMatch = CHANNEL_ACCESS_PREVIEW_PATTERN.exec(remaining);
   const topicMatch = TOPIC_PATTERN.exec(remaining);
   const mentionMatch = MENTION_PATTERN_SINGLE.exec(remaining);
+  const externalUrl = findNextExternalUrl(value, offset);
   const candidates = [
+    externalUrl
+      ? {
+          index: externalUrl.index,
+          text: externalUrl.href,
+          segment: {
+            kind: 'external_url' as const,
+            href: externalUrl.href,
+          },
+        }
+      : null,
     accessPreviewMatch
       ? {
           index: offset + accessPreviewMatch.index,
