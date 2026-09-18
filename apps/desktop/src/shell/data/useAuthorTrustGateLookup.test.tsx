@@ -134,7 +134,7 @@ test('an expired evaluation is looked up again without opening the post first', 
   await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
   expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
 
-  // 期限を過ぎたら照会し直す。応答が届くまでは前の判断のままにする。
+  // 期限を過ぎたら照会し直す（応答を待つあいだの扱いは猶予の test で確認する）。
   expiresAt = fresh;
   await advance(AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS);
   expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);

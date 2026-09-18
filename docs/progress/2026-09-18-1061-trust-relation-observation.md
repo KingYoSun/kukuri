@@ -76,7 +76,7 @@
 | --- | --- | --- |
 | AC-3 / AC-6 / AC-7 / INV-4 / TR-4 / TR-5 / TR-7 | `CommunityNodeConfig.trust_node_priority`（設定済み node に正規化、空なら機能オフ）と `trust_gate_support.rs` の `evaluate_author_trust_gates`。優先順に一括評価を読み、viewer・対象・期限を照合して最初の有効値を採る。失敗・401・期限切れは次の選択済み node へ進み、全滅なら未評価（折りたたまない）。cache は (node, target) 単位で、設定・同意・認証の変更で世代を進めて捨てる | `trust_gates.rs` 8 件（優先順・未選択 0 件・失敗 fallback・viewer/期限の照合・cache と設定変更・restart 復元・social state 不変・破損した優先順位からの復元） |
 | AC-4 / INVAR-1 / INVAR-4 / INV-5 / INV-6 | `resolvePostTrustGate`（著者と引用元）、`AuthorTrustGateNotice`（理由・採用 CN・表示する・作者を開く）、live / game 一覧の同じ案内、作者詳細の「この作者を常に表示する」、設定画面の採用順位 UI | `DesktopShellPage.authorTrustGate.test.tsx` 4 件、`authorTrustGates.test.ts` 3 件、`CommunityNodeTrustPriorityField.test.tsx` 3 件、[ui-review record](../ui-reviews/2026-09-18-1061-author-trust-gate.md) |
-| AC-5 | 判断は評価の期限まで使い、期限切れは照会し直して応答で差し替える（応答までは前の判断のままで、折りたたんだ投稿を一瞬開かせない）。照会に失敗したら判断を捨てる（fail-open）。node の状態を読み終えるまで照会しない。採用順位・認証・必須同意が変わったら全部捨てる。作者ごとの例外は設定・解除の時点で表示へ反映する | `useAuthorTrustGateLookup.test.tsx` 7 件、`DesktopShellPage.authorTrustGate.test.tsx` の例外 test |
+| AC-5 | 判断は評価の期限まで使い、期限切れは照会し直して応答で差し替える（応答までは前の判断のままで、折りたたんだ投稿を一瞬開かせない。作り直せなければ期限から最大 60 秒で捨てる）。照会に失敗したら判断を捨てる（fail-open）。node の状態を読み終えるまで照会しない。採用順位・認証・必須同意が変わったら全部捨てる。作者ごとの例外は設定・解除の時点で表示へ反映する | `useAuthorTrustGateLookup.test.tsx` 7 件、`DesktopShellPage.authorTrustGate.test.tsx` の例外 test |
 | 法務 | legal bundle を version 7 へ（利用規約 第3条に第 5・6 項、プライバシーポリシーと外部送信表示に「信頼評価の照会」「ブロック・ミュートの提供」の送信項目・送らない情報・取消時の削除要求、データフロー突合表に行を追加、i18n 本文とミラーと同意 fixture を同期）。2026-09-18 のユーザー判断どおり PR2 分と合わせて 1 回で上げる | Tauri の法務 bundle テスト（必須句に version 7 分を追加）、`App.test.tsx`、Playwright の同意 fixture |
 
 ### PR3 独立監査（commit `ed71c6ec`）の指摘と対応
