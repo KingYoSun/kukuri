@@ -119,6 +119,7 @@ async fn tester_feedback_runtime(
     )
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),

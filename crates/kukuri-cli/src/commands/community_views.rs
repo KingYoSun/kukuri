@@ -57,6 +57,16 @@ pub(super) fn policies() -> Value {
     )
 }
 
+/// #1061: 著者 1 人分の表示判断。
+pub(super) fn author_trust_gate() -> Value {
+    view(
+        json!({"author_pubkey": string(), "hidden": boolean(), "node_base_url": nullable(string()),
+        "reasons": array(json!({"type": "string", "enum": ["risk_signals", "related_users_block_or_mute"]})),
+        "expires_at": nullable(string()), "always_visible": boolean()}),
+        &[],
+    )
+}
+
 /// 公開 policy カタログの文書 1 件。
 pub(super) fn policy_document() -> Value {
     view(

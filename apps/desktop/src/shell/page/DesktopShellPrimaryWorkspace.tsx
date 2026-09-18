@@ -7,6 +7,8 @@ import { CommunityIndexWorkspace } from '@/components/core/CommunityIndexWorkspa
 import type { CommunityIndexingTarget } from '@/components/core/CommunityIndexingRequestDialog';
 import { MetaverseRoomPanel } from '@/components/extended/MetaverseRoomPanel';
 import type { CommunityNodePanelView } from '@/components/settings/types';
+import { AuthorTrustGateNotice } from '@/components/core/AuthorTrustGateNotice';
+import { useAuthorTrustGateReveal } from '@/components/core/useAuthorTrustGateReveal';
 import { GameRoomPanel } from '@/components/extended/GameRoomPanel';
 import type { MetaverseRoomActions } from '@/components/extended/metaverse/MetaverseRoomActions';
 import { ProfileConnectionsPanel } from '@/components/extended/ProfileConnectionsPanel';
@@ -253,6 +255,7 @@ export function DesktopShellPrimarySurface({
     timelinesByKey,
     joinedChannelsByTopic,
     liveSessionsByScopeKey,
+    authorTrustGates,
     livePanelStateByScopeKey,
     livePendingBySessionId,
     gameRoomsByScopeKey,
@@ -304,6 +307,7 @@ export function DesktopShellPrimarySurface({
       timelinesByKey: s.timelinesByKey,
       joinedChannelsByTopic: s.joinedChannelsByTopic,
       liveSessionsByScopeKey: s.liveSessionsByScopeKey,
+      authorTrustGates: s.authorTrustGates,
       livePanelStateByScopeKey: s.livePanelStateByScopeKey,
       livePendingBySessionId: s.livePendingBySessionId,
       gameRoomsByScopeKey: s.gameRoomsByScopeKey,
@@ -311,6 +315,8 @@ export function DesktopShellPrimarySurface({
       gameDrafts: s.gameDrafts,
     }))
   );
+  // #1061: 配信一覧の折りたたみと、この一覧だけの「表示する」。
+  const liveTrustGate = useAuthorTrustGateReveal(authorTrustGates);
   const setGameTitle = useDesktopShellFieldSetter('gameTitle');
   const setGameDescription = useDesktopShellFieldSetter('gameDescription');
   const setGameParticipantsInput = useDesktopShellFieldSetter('gameParticipantsInput');
@@ -624,7 +630,21 @@ export function DesktopShellPrimarySurface({
                 <p className='empty-state'>{t('live:empty')}</p>
               ) : null}
               <ul className='post-list'>
-                {surfaceLiveSessionListItems.map(({ session, isOwner, pending }) => (
+                {surfaceLiveSessionListItems.map(({ session, isOwner, pending }) => {
+                  // #1061: 採用 CN の評価で主催者が非表示推奨なら、配信を折りたたむ。
+                  const trustGate = liveTrustGate.gateFor(session.host_pubkey);
+                  if (trustGate) {
+                    return (
+                      <li key={session.session_id}>
+                        <AuthorTrustGateNotice
+                          gate={trustGate}
+                          onReveal={() => liveTrustGate.reveal(trustGate.authorPubkey)}
+                          onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
+                        />
+                      </li>
+                    );
+                  }
+                  return (
                   <li key={session.session_id}>
                     <article
                       className={`post-card${
@@ -709,7 +729,8 @@ export function DesktopShellPrimarySurface({
                       </div>
                     </article>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </Card>
           </div>
@@ -725,6 +746,8 @@ export function DesktopShellPrimarySurface({
             participantsInput={gameParticipantsInput}
             createPending={gameCreatePending}
             rooms={scoreGameRooms}
+            trustGates={authorTrustGates}
+            onOpenAuthor={(pubkey) => void openAuthorDetail(pubkey)}
             drafts={surfaceGameDraftViews}
             savingByRoomId={gameSavingByRoomId}
             localAuthorPubkey={syncStatus.local_author_pubkey}

@@ -289,7 +289,12 @@ export type CommunityNodeNodeConfig = { base_url: string, resolved_urls?: Commun
  */
 content_advisory_enabled?: boolean | null, };
 
-export type CommunityNodeConfig = { nodes: Array<CommunityNodeNodeConfig>, };
+export type CommunityNodeConfig = { nodes: Array<CommunityNodeNodeConfig>, 
+/**
+ * #1061: 信頼値による表示判断で採用する node の優先順位（上位から採る）。
+ * 空なら、この機能による非表示を行わない。設定済み node に限る。
+ */
+trust_node_priority?: Array<string> | null, };
 
 export type CommunityNodeAuthState = { authenticated: boolean, expires_at?: number | null, };
 
@@ -587,6 +592,38 @@ revocation_pending: boolean,
  */
 pending_count: number, };
 
+export type AuthorTrustGate = { author_pubkey: string, 
+/**
+ * この機能で投稿を折りたたむか。未評価・例外設定では false。
+ */
+hidden: boolean, 
+/**
+ * 判断に使った CN。未評価なら None。
+ */
+node_base_url?: string | null, 
+/**
+ * 評価が下がった理由の種類（CN が返す種類のみ。observer も件数も含まない）。
+ */
+reasons: Array<TrustEvaluationReason>, 
+/**
+ * 採用した評価の期限（RFC3339）。
+ */
+expires_at?: string | null, 
+/**
+ * 利用者が「常に表示する」を設定している著者か。
+ */
+always_visible: boolean, };
+
+export type AuthorTrustGateRequest = { author_pubkeys: Array<string>, };
+
+export type AuthorTrustGateResult = { gates: Array<AuthorTrustGate>, };
+
+export type SetAuthorTrustDisplayExceptionRequest = { author_pubkey: string, 
+/**
+ * true にすると、信頼値による折りたたみをこの著者には適用しない。
+ */
+always_visible: boolean, };
+
 export type EnableCommunityNodeObservationSharingRequest = { base_url: string, policy_version: number, policy_snapshot_revision?: string | null, language: string, 
 /**
  * 既存のブロック / ミュートも送るか（既定は送らない）。
@@ -832,7 +869,11 @@ export type SetCommunityNodeConfigNode = { base_url: string,
  */
 content_advisory_enabled?: boolean | null, };
 
-export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, };
+export type SetCommunityNodeConfigRequest = { nodes: Array<SetCommunityNodeConfigNode>, 
+/**
+ * #1061: 信頼値の採用順位。未指定は保存済みの順位を維持する。
+ */
+trust_node_priority?: Array<string> | null, };
 
 export type SetCommunityNodeInviteCodeRequest = { base_url: string, invite_code?: string | null, };
 

@@ -6,7 +6,8 @@ use kukuri_cn_protocol::{CommunityNodePoliciesResponse, IndexingStatusResponse};
 use crate::community_node::{
     CommunityNodeContentAdvisoryLookupError, CommunityNodeContentAdvisoryLookupRequest,
     CommunityNodeContentAdvisoryLookupResult, CommunityNodeIndexingStatusRequest,
-    default_content_advisory_enabled, without_observation_sharing_document,
+    default_content_advisory_enabled, normalize_trust_node_priority,
+    without_observation_sharing_document,
 };
 use tracing::warn;
 
@@ -166,7 +167,19 @@ impl DesktopRuntime {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let next_config = normalize_community_node_config(CommunityNodeConfig { nodes })?;
+        let base_urls: Vec<String> = nodes.iter().map(|node| node.base_url.clone()).collect();
+        // #1061: 未指定なら保存済みの順位を維持し、設定済み node に無いものは落とす。
+        let trust_node_priority = normalize_trust_node_priority(
+            request
+                .trust_node_priority
+                .as_deref()
+                .unwrap_or(current_config.trust_node_priority.as_slice()),
+            base_urls.as_slice(),
+        );
+        let next_config = normalize_community_node_config(CommunityNodeConfig {
+            nodes,
+            trust_node_priority,
+        })?;
         for removed_node in current_config.nodes.iter().filter(|current| {
             next_config
                 .nodes
@@ -201,6 +214,7 @@ impl DesktopRuntime {
         *self.community_node_config.lock().await = next_config.clone();
         self.content_advisory_issuer_cache.lock().await.clear();
         self.community_node_sessions.lock().await.clear();
+        self.invalidate_author_trust_gate_cache().await;
         *self.community_node_reconnect_state.lock().await = Default::default();
         self.apply_runtime_connectivity_assist().await?;
         self.apply_effective_seed_peers().await?;
@@ -234,6 +248,7 @@ impl DesktopRuntime {
         save_community_node_config(&self.db_path, &CommunityNodeConfig::default())?;
         *self.community_node_config.lock().await = CommunityNodeConfig::default();
         self.content_advisory_issuer_cache.lock().await.clear();
+        self.invalidate_author_trust_gate_cache().await;
         self.community_node_rendezvous_seed_peers
             .lock()
             .await
@@ -495,6 +510,7 @@ impl DesktopRuntime {
             base_url: base_url.clone(),
         })
         .await?;
+        self.invalidate_author_trust_gate_cache().await;
         self.deactivate_community_node_connectivity(base_url.as_str())
             .await?;
         let node = self.require_community_node(base_url.as_str()).await?;

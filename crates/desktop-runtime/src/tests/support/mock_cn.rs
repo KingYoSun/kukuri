@@ -9,6 +9,7 @@ pub(crate) async fn apply_relay_backed_community_node_seed_peers(
     seed_local_community_node_consents(runtime, base_url, 1);
     mark_community_node_session_ready_for_test(runtime, base_url).await;
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.to_string(),

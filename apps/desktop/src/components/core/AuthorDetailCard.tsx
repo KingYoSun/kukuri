@@ -43,6 +43,8 @@ type AuthorDetailCardProps = {
   onToggleBlock?: (authorPubkey: string, blocking: boolean) => void;
   onOpenDirectMessage?: (authorPubkey: string) => void;
   communityNodeAdvisory?: ReactNode;
+  /// #1061: 信頼値による折りたたみの例外設定（作者詳細から設定・解除する）。
+  trustDisplayException?: ReactNode;
   onSubmitReport?: (
     request: SubmitCommunityNodeReportRequest
   ) => Promise<SubmitCommunityNodeReportResult>;
@@ -58,6 +60,7 @@ export function AuthorDetailCard({
   onToggleBlock,
   onOpenDirectMessage,
   communityNodeAdvisory,
+  trustDisplayException,
   onSubmitReport,
   onCopyReportContact,
   onFetchReportManifest,
@@ -252,6 +255,7 @@ export function AuthorDetailCard({
               </div>
             </div>
           ) : null}
+          {trustDisplayException}
           {communityNodeAdvisory}
           {author && onSubmitReport ? (
             <ReportRoutingDialog

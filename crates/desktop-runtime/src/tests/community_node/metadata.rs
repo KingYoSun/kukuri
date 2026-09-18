@@ -51,6 +51,7 @@ async fn community_node_status_refresh_updates_bootstrap_seed_peers() {
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -142,6 +143,7 @@ async fn community_node_session_maintenance_updates_bootstrap_seed_peers() {
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -228,6 +230,7 @@ async fn community_node_metadata_refresh_heartbeats_before_bootstrap_sync_even_w
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -360,6 +363,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_before_nex
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -469,6 +473,7 @@ async fn community_node_ready_transition_refreshes_bootstrap_metadata_only_once_
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -545,6 +550,7 @@ async fn community_node_status_retries_bootstrap_metadata_when_seed_peers_are_em
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -662,6 +668,7 @@ async fn refresh_community_node_metadata_refreshes_registration_before_bootstrap
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -760,6 +767,7 @@ async fn refresh_community_node_metadata_requeues_heartbeat_when_runtime_connect
     )
     .expect("persist community-node token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(
@@ -955,6 +963,7 @@ async fn manual_refresh_stops_before_protected_requests_on_snapshot_update() {
     )
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.clone(),
             Some(

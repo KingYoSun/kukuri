@@ -133,7 +133,19 @@
     "withdrawnPost": "この投稿は投稿者により撤回されました。",
     "adultContentHidden": "この投稿は投稿者により成人向けとして申告されています。設定で成人向け表現の表示を有効にすると表示されます。",
     "advisoryContentHidden": "この投稿は、設定済みのコミュニティノードにより成人向けの可能性があると推定されています。設定で成人向け表現の表示を有効にすると表示されます。",
-    "advisoryDetailsPost": "成人向けの投稿: 詳細はクリック"
+    "advisoryDetailsPost": "成人向けの投稿: 詳細はクリック",
+    "authorTrustGate": {
+      "summary": "この投稿は、採用しているコミュニティノードの評価により折りたたんでいます。",
+      "repostSourceSummary": "引用元の作者について、採用しているコミュニティノードの評価により折りたたんでいます。",
+      "reasonsLabel": "理由: {{reasons}}",
+      "node": "判断したノード: {{node}}",
+      "reveal": "表示する",
+      "openAuthor": "作者を開く",
+      "reasons": {
+        "risk_signals": "リスク判定",
+        "related_users_block_or_mute": "関係の近い利用者のブロック・ミュート"
+      }
+    }
   },
   "feedback": {
     "copiedToClipboard": "クリップボードにコピーしました。"

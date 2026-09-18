@@ -45,6 +45,7 @@ mod session_runtime_support;
 mod session_state_support;
 mod tester_feedback_support;
 mod token_storage_support;
+mod trust_gate_support;
 mod trust_observation_support;
 mod trust_relation_support;
 
@@ -91,6 +92,11 @@ pub use tester_feedback_support::{
     CommunityNodeTesterFeedbackError, CommunityNodeTesterFeedbackSubmission,
 };
 pub(crate) use token_storage_support::*;
+pub use trust_gate_support::{
+    AuthorTrustGate, AuthorTrustGateRequest, AuthorTrustGateResult,
+    SetAuthorTrustDisplayExceptionRequest,
+};
+pub(crate) use trust_gate_support::{CachedAuthorTrustEvaluation, normalize_trust_node_priority};
 #[cfg(test)]
 pub(crate) use trust_observation_support::load_trust_observation_pending_count;
 pub(crate) use trust_observation_support::without_observation_sharing_document;
@@ -171,6 +177,11 @@ impl Default for CommunityNodeNodeConfig {
 pub struct CommunityNodeConfig {
     #[serde(default)]
     pub nodes: Vec<CommunityNodeNodeConfig>,
+    /// #1061: 信頼値による表示判断で採用する node の優先順位（上位から採る）。
+    /// 空なら、この機能による非表示を行わない。設定済み node に限る。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>"))]
+    pub trust_node_priority: Vec<String>,
 }
 
 // CN HTTP response 型は kukuri-cn-protocol の共有定義を使う(WP-B17)。
@@ -203,6 +214,9 @@ impl SetCommunityNodeConfigNode {
 #[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct SetCommunityNodeConfigRequest {
     pub nodes: Vec<SetCommunityNodeConfigNode>,
+    /// #1061: 信頼値の採用順位。未指定は保存済みの順位を維持する。
+    #[serde(default)]
+    pub trust_node_priority: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -173,5 +173,10 @@
     "noOwnPosts": "还没有公开帖子。",
     "openOriginalTopic": "打开原始主题",
     "originTopic": "原始主题"
+  },
+  "authorTrustDisplay": {
+    "label": "始终显示该用户",
+    "description": "不再根据你采用的社区节点的评估折叠该用户的帖子。此设置仅限本设备，不会改变屏蔽或静音。",
+    "failed": "无法更改设置。"
   }
 }

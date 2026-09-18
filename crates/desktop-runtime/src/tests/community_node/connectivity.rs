@@ -179,6 +179,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     let base_url = "https://community.example.com";
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.to_string(),
             Some(
@@ -196,6 +197,7 @@ async fn community_node_connectivity_assist_backfills_public_timeline_with_relay
     seed_local_community_node_consents(&runtime_a, base_url, 1);
     mark_community_node_session_ready_for_test(&runtime_a, base_url).await;
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.to_string(),
             Some(
@@ -340,6 +342,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     let base_url = "https://community.example.com";
 
     *runtime_a.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.to_string(),
             Some(
@@ -356,6 +359,7 @@ async fn external_relay_endpoint_only_seed_peers_backfill_desktop_public_timelin
     };
     seed_local_community_node_consents(&runtime_a, base_url, 1);
     *runtime_b.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig::new(
             base_url.to_string(),
             Some(
@@ -686,6 +690,7 @@ async fn runtime_starts_with_unreachable_community_node_and_recovers_via_manual_
     save_community_node_config(
         &db_a,
         &CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig::new(
                 community_base_url.to_string(),
                 Some(

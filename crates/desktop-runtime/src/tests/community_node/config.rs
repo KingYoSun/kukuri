@@ -14,6 +14,7 @@ async fn persisted_community_node_connectivity_is_not_applied_without_local_cons
     )
     .expect("seed peer");
     let persisted = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: "https://community.example.com".to_string(),
@@ -74,6 +75,7 @@ async fn startup_does_not_apply_persisted_community_node_connectivity_before_pre
     save_community_node_config(
         &db_path,
         &CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: base_url.to_string(),
@@ -155,6 +157,7 @@ async fn connectivity_apply_ignores_local_consent_without_verified_ready_session
     .expect("runtime");
     seed_local_community_node_consents(&runtime, base_url, 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.to_string(),
@@ -207,6 +210,7 @@ async fn connectivity_apply_keeps_only_the_node_with_verified_ready_session() {
     seed_local_community_node_consents(&runtime, unverified_base_url, 1);
     mark_community_node_session_ready_for_test(&runtime, verified_base_url).await;
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![
             CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
@@ -281,6 +285,7 @@ async fn withdrawing_community_node_consent_removes_transport_assist() {
     .expect("runtime");
     seed_local_community_node_consents(&runtime, base_url, 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.to_string(),
@@ -365,6 +370,7 @@ async fn community_node_connectivity_filter_is_scoped_per_node() {
     let pending_base_url = "https://pending.example.com";
     seed_local_community_node_consents(&runtime, consented_base_url, 1);
     let config = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![
             CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
@@ -412,6 +418,7 @@ async fn community_node_connectivity_filter_is_scoped_per_node() {
 #[test]
 fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
     let config = normalize_community_node_config(CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![
             CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
@@ -464,6 +471,7 @@ fn community_node_config_normalizes_base_urls_and_connectivity_urls() {
 #[test]
 fn community_node_config_preserves_public_kukuri_urls() {
     let config = normalize_community_node_config(CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: "https://api.kukuri.app/".into(),
@@ -534,6 +542,7 @@ async fn local_community_node_seed_peer_keeps_addr_hint_when_relay_urls_exist() 
     .await
     .expect("runtime");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: "https://api.example.com".to_string(),
@@ -565,6 +574,7 @@ fn stored_community_node_config_restores_cached_connectivity_union() {
     save_community_node_config(
         &db_path,
         &CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://community.example.com".into(),
@@ -643,6 +653,7 @@ async fn runtime_preloads_distribution_community_node_only_when_config_file_is_m
         DiscoveryConfig::static_peer_default(),
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
@@ -682,6 +693,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_clears_config() {
         DiscoveryConfig::static_peer_default(),
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
@@ -711,6 +723,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
     save_community_node_config(
         &db_path,
         &CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://user-selected.example.com".to_string(),
@@ -727,6 +740,7 @@ async fn runtime_does_not_restore_distribution_node_after_user_replaces_config()
         DiscoveryConfig::static_peer_default(),
         DhtDiscoveryOptions::disabled(),
         Some(CommunityNodeConfig {
+            trust_node_priority: Vec::new(),
             nodes: vec![CommunityNodeNodeConfig {
                 content_advisory_enabled: true,
                 base_url: "https://distribution.example.com".to_string(),
@@ -776,6 +790,7 @@ fn legacy_config_without_content_advisory_field_defaults_to_enabled() {
 #[test]
 fn duplicate_nodes_keep_content_advisory_disabled() {
     let config = normalize_community_node_config(CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![
             CommunityNodeNodeConfig {
                 content_advisory_enabled: false,
@@ -812,6 +827,7 @@ async fn set_community_node_config_keeps_or_updates_content_advisory_adoption() 
 
     let saved = runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
             nodes: vec![SetCommunityNodeConfigNode {
                 content_advisory_enabled: Some(false),
                 base_url: first.to_string(),
@@ -823,6 +839,7 @@ async fn set_community_node_config_keeps_or_updates_content_advisory_adoption() 
 
     let saved = runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
             nodes: vec![
                 SetCommunityNodeConfigNode {
                     content_advisory_enabled: None,
@@ -849,6 +866,7 @@ async fn set_community_node_config_keeps_or_updates_content_advisory_adoption() 
 
     let saved = runtime
         .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
             nodes: vec![SetCommunityNodeConfigNode {
                 content_advisory_enabled: Some(true),
                 base_url: first.to_string(),

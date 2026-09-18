@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react';
 
 import { AuthorAvatar } from '@/components/core/AuthorAvatar';
 import { AuthorDetailCard } from '@/components/core/AuthorDetailCard';
+import { AuthorTrustDisplayExceptionField } from '@/components/core/AuthorTrustDisplayExceptionField';
 import { CommunityNodeAdvisoryPanel } from '@/components/core/CommunityNodeAdvisoryPanel';
 import { AuthorIdentityButton } from '@/components/core/AuthorIdentityButton';
 import { ComposerDraftPreviewList } from '@/components/core/ComposerDraftPreviewList';
@@ -708,6 +709,8 @@ export function DesktopShellDetailSurfaceStack({
       threadsById: s.threadsById,
     }))
   );
+  // #1061: 著者ごとの例外を設定・解除したとき、表示中の判断を差し替える。
+  const setAuthorTrustGates = useDesktopShellFieldSetter('authorTrustGates');
   const effectiveThreadId = surfaceKind === 'thread' && entityId ? entityId : selectedThread;
   const effectiveAuthorPubkey =
     surfaceKind === 'profile' && entityId ? entityId : selectedAuthorPubkey;
@@ -851,6 +854,22 @@ export function DesktopShellDetailSurfaceStack({
         onSubmitReport={submitReport}
         onCopyReportContact={(value) => void copyTextToClipboard(value)}
         onFetchReportManifest={fetchReportManifest}
+        trustDisplayException={
+          effectiveAuthorPubkey ? (
+            <AuthorTrustDisplayExceptionField
+              authorPubkey={effectiveAuthorPubkey}
+              loadAlwaysVisible={async (pubkey) =>
+                (await api.listAuthorTrustDisplayExceptions()).includes(pubkey)
+              }
+              setAlwaysVisible={async (pubkey, alwaysVisible) => {
+                const gate = await api.setAuthorTrustDisplayException(pubkey, alwaysVisible);
+                // #1061: 例外は判断を作り直す。表示中の投稿へ即時に反映する(AC-5)。
+                setAuthorTrustGates((current) => ({ ...current, [gate.author_pubkey]: gate }));
+                return gate.always_visible;
+              }}
+            />
+          ) : null
+        }
         communityNodeAdvisory={
           <CommunityNodeAdvisoryPanel
             api={api}

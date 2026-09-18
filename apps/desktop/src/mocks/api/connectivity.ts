@@ -31,6 +31,9 @@ type ConnectivityMock = Pick<
   | 'readCommunityNodeTrustUser'
   | 'readCommunityNodeRelationUser'
   | 'listCommunityNodeRelationNeighbors'
+  | 'evaluateAuthorTrustGates'
+  | 'setAuthorTrustDisplayException'
+  | 'listAuthorTrustDisplayExceptions'
   | 'getCommunityNodeObservationSharing'
   | 'enableCommunityNodeObservationSharing'
   | 'disableCommunityNodeObservationSharing'
@@ -108,6 +111,7 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
 
   const relationOptoutNodes = new Set<string>();
   const observationSharingNodes = new Set<string>();
+  const trustDisplayExceptions = new Set<string>();
   // #975: node 別の索引申請簿。submit した申請を status 読取りが返す(mock 内 memory のみ)。
   const indexingRequestsByNode = new Map<string, IndexingRequestView[]>();
   // 索引対象は seed に依存せず固定する(Storybook の確認面用)。browser seed の general は対象外のままにし、
@@ -127,10 +131,15 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
     async getCommunityNodeStatuses() {
       return runtime.communityNodeStatuses;
     },
-    async setCommunityNodeConfig(nodes) {
+    async setCommunityNodeConfig(nodes, trustNodePriority) {
       const previousNodes = new Map(runtime.communityNodeConfig.nodes.map((node) => [node.base_url, node]));
       const previousStatuses = new Map(runtime.communityNodeStatuses.map((status) => [status.base_url, status]));
       runtime.communityNodeConfig = {
+        trust_node_priority: (
+          trustNodePriority ??
+          runtime.communityNodeConfig.trust_node_priority ??
+          []
+        ).filter((baseUrl) => nodes.some((node) => node.base_url === baseUrl)),
         nodes: nodes.map((node) => {
           const previous = previousNodes.get(node.base_url);
           const contentAdvisoryEnabled =
@@ -397,6 +406,33 @@ export function createConnectivityMock(runtime: MockRuntime): ConnectivityMock {
         new Set(Object.values(postsByTopic).flatMap((posts) => posts.map((post) => post.author_pubkey)))
       );
       return { viewer_pubkey: 'mock-viewer', neighbors };
+    },
+    async evaluateAuthorTrustGates(request) {
+      return {
+        gates: request.author_pubkeys.map((author_pubkey) => ({
+          author_pubkey,
+          hidden: false,
+          node_base_url: null,
+          reasons: [],
+          expires_at: null,
+          always_visible: trustDisplayExceptions.has(author_pubkey),
+        })),
+      };
+    },
+    async setAuthorTrustDisplayException(authorPubkey, alwaysVisible) {
+      if (alwaysVisible) trustDisplayExceptions.add(authorPubkey);
+      else trustDisplayExceptions.delete(authorPubkey);
+      return {
+        author_pubkey: authorPubkey,
+        hidden: false,
+        node_base_url: null,
+        reasons: [],
+        expires_at: null,
+        always_visible: alwaysVisible,
+      };
+    },
+    async listAuthorTrustDisplayExceptions() {
+      return [...trustDisplayExceptions];
     },
     async getCommunityNodeObservationSharing(baseUrl) {
       return observationSharingStatus(baseUrl, observationSharingNodes.has(baseUrl));

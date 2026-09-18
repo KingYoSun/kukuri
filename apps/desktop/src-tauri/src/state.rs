@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 6);
+        assert_eq!(LEGAL_BUNDLE_VERSION, 7);
         assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
@@ -521,6 +521,9 @@ mod tests {
             // #1056: 成人向け表現の第 2 のラベル源(設定した Community Node の推定)。
             "Community Node が推定したラベル",
             "推定を採用する Community Node",
+            // #1061: 信頼評価による折りたたみ(第 5 項)とブロック・ミュートの任意提供(第 6 項)。
+            "信頼評価に基づいて",
+            "任意の同意文書",
             "投稿コンテンツの権利帰属",
             "必要な権利または許諾",
             "投稿者の責任",
@@ -558,6 +561,9 @@ mod tests {
             // #1056: 推定の照会で送る識別子と、送らない情報。
             "成人向け表現の推定の照会",
             "添付ファイルの識別子",
+            // #1061: 信頼評価の照会とブロック・ミュートの提供で送る項目。
+            "信頼評価の照会",
+            "ブロック・ミュートの提供",
         ] {
             assert!(
                 PRIVACY.contains(required_clause),
@@ -565,7 +571,13 @@ mod tests {
             );
         }
         // #1056: 外部送信表示にも推定の照会の送信先・項目を載せる(AC-5)。
-        for required_clause in ["成人向け表現の推定の照会", "添付ファイルの識別子"] {
+        for required_clause in [
+            "成人向け表現の推定の照会",
+            "添付ファイルの識別子",
+            // #1061: 信頼評価の照会の送信先・項目(AC-5)。
+            "信頼評価の照会",
+            "ブロック・ミュートの提供",
+        ] {
             assert!(
                 EXTERNAL_TRANSMISSION.contains(required_clause),
                 "external transmission notice must contain `{required_clause}`"

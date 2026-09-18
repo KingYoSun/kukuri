@@ -177,6 +177,7 @@ async fn admission_runtime(db_path: &Path, nodes: Vec<String>) -> DesktopRuntime
         seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     }
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: nodes
             .into_iter()
             .map(|base_url| CommunityNodeNodeConfig {
@@ -238,7 +239,10 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
     .expect("persist invite code before removal");
 
     runtime
-        .set_community_node_config(SetCommunityNodeConfigRequest { nodes: Vec::new() })
+        .set_community_node_config(SetCommunityNodeConfigRequest {
+            trust_node_priority: None,
+            nodes: Vec::new(),
+        })
         .await
         .expect("remove node config");
     assert_eq!(
@@ -248,6 +252,7 @@ async fn removing_or_clearing_node_config_deletes_its_invite_code() {
     );
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),

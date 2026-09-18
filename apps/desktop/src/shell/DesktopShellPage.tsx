@@ -983,6 +983,7 @@ export function DesktopShellPage({
         handleImportPeer={shellActions.handleImportPeer}
         handleSaveDiscoverySeeds={shellActions.handleSaveDiscoverySeeds}
         handleSaveCommunityNodes={shellActions.handleSaveCommunityNodes}
+        handleSetCommunityNodeTrustPriority={shellActions.handleSetCommunityNodeTrustPriority}
         handleClearCommunityNodes={shellActions.handleClearCommunityNodes}
         handleAuthenticateCommunityNode={shellActions.handleAuthenticateCommunityNode}
         handleSetCommunityNodeInviteCode={shellActions.handleSetCommunityNodeInviteCode}

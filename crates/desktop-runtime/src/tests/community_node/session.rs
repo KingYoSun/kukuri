@@ -45,6 +45,7 @@ async fn consented_node_bootstraps_session_on_maintenance_tick() {
     });
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),
@@ -142,6 +143,7 @@ async fn status_getter_is_read_only_and_does_not_bootstrap_session() {
     });
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),
@@ -243,6 +245,7 @@ async fn near_expiry_token_triggers_proactive_community_node_reauthentication() 
     )
     .expect("persist near-expiry token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),
@@ -342,6 +345,7 @@ async fn node_without_local_consent_is_never_contacted() {
     )
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),
@@ -497,6 +501,7 @@ async fn community_node_status_does_not_require_restart_when_verified_connectivi
     .expect("persist community-node token");
     seed_local_community_node_consents(&runtime, base_url.as_str(), 1);
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![node.clone()],
     };
     mark_community_node_session_ready_for_test(&runtime, base_url.as_str()).await;
@@ -608,6 +613,7 @@ async fn policy_update_is_not_silently_reaccepted() {
     )
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),
@@ -725,6 +731,7 @@ async fn saved_token_does_not_bypass_same_version_snapshot_preflight() {
     )
     .expect("persist token");
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: base_url.clone(),

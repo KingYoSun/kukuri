@@ -133,7 +133,19 @@
     "withdrawnPost": "此帖子已被发帖用户撤回。",
     "adultContentHidden": "该帖子被发布者标记为成人内容。在设置中启用成人内容显示后即可查看。",
     "advisoryContentHidden": "您配置的 Community Node 推测该帖子可能包含成人内容。在设置中启用成人内容显示后即可查看。",
-    "advisoryDetailsPost": "成人帖子：点击查看详情"
+    "advisoryDetailsPost": "成人帖子：点击查看详情",
+    "authorTrustGate": {
+      "summary": "根据你采用的社区节点的评估，此帖子已折叠。",
+      "repostSourceSummary": "根据你采用的社区节点的评估，被引用帖子的发帖人已折叠。",
+      "reasonsLabel": "原因：{{reasons}}",
+      "node": "评估节点：{{node}}",
+      "reveal": "显示",
+      "openAuthor": "打开该用户",
+      "reasons": {
+        "risk_signals": "风险判定",
+        "related_users_block_or_mute": "与你关系较近的用户的屏蔽和静音"
+      }
+    }
   },
   "feedback": {
     "copiedToClipboard": "已复制到剪贴板。"

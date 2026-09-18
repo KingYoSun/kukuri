@@ -90,6 +90,7 @@ async fn sync_status_observer_emits_only_changed_snapshot_parts_and_stops_on_shu
     }
 
     *runtime.community_node_config.lock().await = CommunityNodeConfig {
+        trust_node_priority: Vec::new(),
         nodes: vec![CommunityNodeNodeConfig {
             content_advisory_enabled: true,
             base_url: "http://127.0.0.1:9".to_string(),

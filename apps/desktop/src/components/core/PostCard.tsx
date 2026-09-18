@@ -15,6 +15,7 @@ import type {
   SubmitCommunityNodeReportResult,
 } from '@/lib/api';
 import { planAppealReportRouting, planReportRouting } from '@/lib/api/reportRouting';
+import { usePostTrustGateCollapse } from './usePostTrustGateCollapse';
 import { PostAdvisoryDetailsDialog, PostGatedContent } from './PostAdvisoryNotice';
 import { usePostAdvisoryDetails } from './usePostAdvisoryDetails';
 import { useReportManifests } from './useReportManifests';
@@ -147,6 +148,8 @@ export function PostCard({
   const { t } = useTranslation(['common', 'profile']);
   const { post, context } = view;
   const actionPost = view.actionPost ?? post;
+  // #1061: 信頼値による折りたたみ（「表示する」はこの投稿だけに効く）。
+  const trustGateCollapse = usePostTrustGateCollapse(view.trustGate, onOpenAuthor);
   const [repostMenuOpen, setRepostMenuOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportSubject, setReportSubject] = useState<ReportRoutingSubject>({
@@ -985,6 +988,8 @@ export function PostCard({
       ) : null}
     </article>
   );
+
+  if (trustGateCollapse) return trustGateCollapse;
 
   return (
     <div className={showReplyContext && !view.adultContentGated ? 'post-reply-group post-layout-safe' : 'post-layout-safe'}>
