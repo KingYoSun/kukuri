@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -30,24 +31,42 @@ const TAG = /v\d+\.\d+\.\d+-preview\.\d+/g;
 // 配布物の名前 (kukuri_0.2.6_x64-setup.exe、kukuri-cli_0.2.6_x86_64-... など) の版の部分。
 const ASSET = /(kukuri(?:-cli)?_)\d+\.\d+\.\d+(_)/g;
 
+/**
+ * CSS・JS は内容のハッシュを付けた URL で参照する。Cloudflare の配信キャッシュは
+ * `/assets/` を数時間保持するため、同じ URL のままだと deploy 後も古い CSS が返る。
+ * HTML はキャッシュされないので、ハッシュが変われば新しいファイルが取得される。
+ */
+const VERSIONED = ['assets/site.css', 'assets/site.js'].map((asset) => {
+  // 改行コードは checkout の環境（Windows は CRLF）で変わるので、そろえてからハッシュを取る。
+  const text = readFileSync(path.join(LP, 'public', asset), 'utf8').replace(/\r\n/g, '\n');
+  const hash = createHash('sha256').update(text).digest('hex').slice(0, 10);
+  const escaped = asset.replace(/[.]/g, '\\.');
+  return { pattern: new RegExp(`/${escaped}(\\?v=[0-9a-f]+)?"`, 'g'), replacement: `/${asset}?v=${hash}"` };
+});
+
 const check = process.argv.includes('--check');
 let mismatches = 0;
 
 for (const page of PAGES) {
   const file = path.join(LP, page);
   const before = readFileSync(file, 'utf8');
-  const after = before
+  let after = before
     .replace(TAG, release.tag)
     .replace(ASSET, (_, head, tail) => `${head}${release.version}${tail}`);
+  for (const { pattern, replacement } of VERSIONED) {
+    after = after.replace(pattern, replacement);
+  }
 
   if (before === after) {
-    process.stdout.write(`ok: ${page} は ${release.tag} に一致\n`);
+    process.stdout.write(`ok: ${page} は ${release.tag} と CSS・JS の現在の内容に一致\n`);
     continue;
   }
-  const stale = new Set([...(before.match(TAG) ?? []), ...(before.match(ASSET) ?? [])]);
   if (check) {
     mismatches += 1;
-    process.stderr.write(`mismatch: ${page} に release.json と違う版がある: ${[...stale].join(', ')}\n`);
+    process.stderr.write(
+      `mismatch: ${page} に release.json と違う版、または古い CSS・JS の参照がある。` +
+        `node apps/lp/scripts/sync-release.mjs で反映する\n`
+    );
   } else {
     writeFileSync(file, after, 'utf8');
     process.stdout.write(`updated: ${page} -> ${release.tag}\n`);
