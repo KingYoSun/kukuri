@@ -1,4 +1,9 @@
-import type { ChangeEventHandler, FormEventHandler, KeyboardEventHandler } from 'react';
+import type {
+  ChangeEventHandler,
+  ClipboardEventHandler,
+  FormEventHandler,
+  KeyboardEventHandler,
+} from 'react';
 import { useId, useRef } from 'react';
 
 import { X } from 'lucide-react';
@@ -8,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { clipboardImageFiles } from '@/lib/attachments';
 
 import { AuthorAvatar } from './AuthorAvatar';
 import { ComposerDraftPreviewList } from './ComposerDraftPreviewList';
@@ -49,6 +55,7 @@ type ComposerPanelProps = {
   onSubmit: FormEventHandler<HTMLFormElement>;
   attachmentInputKey: number;
   onAttachmentSelection: ChangeEventHandler<HTMLInputElement>;
+  onPasteImageFiles?: (files: File[]) => void | Promise<void>;
   draftMediaItems: ComposerDraftMediaView[];
   onRemoveDraftAttachment: (itemId: string) => void;
   composerError?: string | null;
@@ -77,6 +84,7 @@ export function ComposerPanel({
   onSubmit,
   attachmentInputKey,
   onAttachmentSelection,
+  onPasteImageFiles,
   draftMediaItems,
   onRemoveDraftAttachment,
   composerError,
@@ -129,6 +137,17 @@ export function ComposerPanel({
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   };
+  const onComposerPaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (attachmentsDisabled || !onPasteImageFiles) {
+      return;
+    }
+    const images = clipboardImageFiles(event.clipboardData);
+    if (images.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    void onPasteImageFiles(images);
+  };
 
   return (
     <form className='composer' onSubmit={onSubmit}>
@@ -180,6 +199,7 @@ export function ComposerPanel({
             onChange(event);
             onMentionSelectionChange();
           }}
+          onPaste={onComposerPaste}
           onKeyDown={onComposerKeyDown}
           onKeyUp={onMentionSelectionChange}
           onClick={onMentionSelectionChange}

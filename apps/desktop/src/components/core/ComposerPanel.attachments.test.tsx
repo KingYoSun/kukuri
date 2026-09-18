@@ -22,6 +22,7 @@ async function setup(locale = 'ja') {
   const props = {
     value: 'draft', onChange: vi.fn(), onSubmit: vi.fn((event) => event.preventDefault()),
     attachmentInputKey: 0, onAttachmentSelection: vi.fn(), draftMediaItems: [] as ComposerDraftMediaView[],
+    onPasteImageFiles: vi.fn(),
     onRemoveDraftAttachment: vi.fn(), audienceLabel: 'Public', onClearReply: vi.fn(),
     attachmentsDisabled: false, composerError: null as string | null,
   };
@@ -32,6 +33,44 @@ async function setup(locale = 'ja') {
   };
   return { ...view, props, update, i18n };
 }
+
+test('clipboard images are handled as attachments while ordinary text paste stays native', async () => {
+  const view = await setup();
+  const textarea = screen.getByRole('textbox');
+  const image = new File(['image'], 'clipboard.png', { type: 'image/png' });
+
+  expect(
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: 'file', type: image.type, getAsFile: () => image }],
+        files: [image],
+      },
+    })
+  ).toBe(false);
+  expect(view.props.onPasteImageFiles).toHaveBeenCalledWith([image]);
+  expect(view.props.onAttachmentSelection).not.toHaveBeenCalled();
+
+  expect(
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }],
+        files: [],
+      },
+    })
+  ).toBe(true);
+  expect(view.props.onPasteImageFiles).toHaveBeenCalledTimes(1);
+
+  view.update({ attachmentsDisabled: true });
+  expect(
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: 'file', type: image.type, getAsFile: () => image }],
+        files: [image],
+      },
+    })
+  ).toBe(true);
+  expect(view.props.onPasteImageFiles).toHaveBeenCalledTimes(1);
+});
 
 test('Japanese attachment control owns visible copy and follows locale changes with a draft', async () => {
   const view = await setup();

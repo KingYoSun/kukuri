@@ -67,6 +67,7 @@ type DesktopShellColumnWorkspaceProps = {
     target: ColumnDraftTarget,
     event: ChangeEvent<HTMLInputElement>
   ) => Promise<void>;
+  onColumnAttachmentPaste: (target: ColumnDraftTarget, files: File[]) => Promise<void>;
   onRemoveColumnAttachment: (target: ColumnDraftTarget, itemId: string) => void;
   onSubmitColumnDraft: (
     target: ColumnDraftTarget,
@@ -108,6 +109,7 @@ export function DesktopShellColumnWorkspace({
   onVisibleColumnsChange,
   mentionCandidates,
   onColumnAttachmentSelection,
+  onColumnAttachmentPaste,
   onRemoveColumnAttachment,
   onSubmitColumnDraft,
   onEndLiveSession,
@@ -400,6 +402,7 @@ export function DesktopShellColumnWorkspace({
       onActivate: () => activate(column.id, true),
       onOpenKeyboardHelp,
       onAttachmentSelection: onColumnAttachmentSelection,
+      onAttachmentPaste: onColumnAttachmentPaste,
       onRemoveAttachment: onRemoveColumnAttachment,
       onSubmit: onSubmitColumnDraft,
     };

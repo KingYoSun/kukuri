@@ -17,6 +17,7 @@ function renderFooter(active = true) {
   const store = createDesktopShellStore();
   const onActivate = vi.fn();
   const onSubmit = vi.fn(async () => undefined);
+  const onAttachmentPaste = vi.fn(async () => undefined);
   render(
     <DesktopShellStoreContext.Provider value={store}>
       <ColumnComposerFooter
@@ -25,13 +26,14 @@ function renderFooter(active = true) {
         locale='en'
         onActivate={onActivate}
         onAttachmentSelection={vi.fn(async () => undefined)}
+        onAttachmentPaste={onAttachmentPaste}
         onRemoveAttachment={vi.fn()}
         onSubmit={onSubmit}
         target={target}
       />
     </DesktopShellStoreContext.Provider>
   );
-  return { store, onActivate, onSubmit };
+  return { store, onActivate, onAttachmentPaste, onSubmit };
 }
 
 describe('ColumnComposerFooter', () => {
@@ -85,6 +87,23 @@ describe('ColumnComposerFooter', () => {
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(view.onSubmit).not.toHaveBeenCalled();
   });
+
+  it('forwards pasted images with the addressed Draft target', async () => {
+    const user = userEvent.setup();
+    const view = renderFooter();
+    await user.click(screen.getByRole('button', { name: /Post to Mutuals/ }));
+    const image = new File(['image'], 'clipboard.png', { type: 'image/png' });
+
+    expect(
+      fireEvent.paste(screen.getByPlaceholderText('Write a post'), {
+        clipboardData: {
+          items: [{ kind: 'file', type: image.type, getAsFile: () => image }],
+          files: [image],
+        },
+      })
+    ).toBe(false);
+    expect(view.onAttachmentPaste).toHaveBeenCalledWith(target, [image]);
+  });
 });
 
 // #964: Esc は投稿作成を閉じるだけで、下書き・返信先は store に残し、focus を開始元へ戻す。
@@ -106,6 +125,7 @@ describe('ColumnComposerFooter keyboard dismissal (#964)', () => {
           mentionCandidates={mentionCandidates}
           onActivate={vi.fn()}
           onAttachmentSelection={vi.fn(async () => undefined)}
+          onAttachmentPaste={vi.fn(async () => undefined)}
           onRemoveAttachment={vi.fn()}
           onSubmit={onSubmit}
           target={target}
@@ -196,6 +216,7 @@ describe('ColumnComposerFooter keyboard dismissal (#964)', () => {
           onActivate={vi.fn()}
           onOpenKeyboardHelp={onOpenKeyboardHelp}
           onAttachmentSelection={vi.fn(async () => undefined)}
+          onAttachmentPaste={vi.fn(async () => undefined)}
           onRemoveAttachment={vi.fn()}
           onSubmit={vi.fn(async () => undefined)}
           target={target}

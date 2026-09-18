@@ -89,6 +89,7 @@
     "failedToClearDirectMessages": "清空私信失败",
     "failedToDeleteDirectMessage": "删除私信失败",
     "failedToFetchConsentStatus": "获取同意状态失败",
+    "failedToPrepareImageAttachment": "准备图片附件失败",
     "failedToGenerateVideoPoster": "生成视频预览失败",
     "failedToImportPeer": "添加连接对象失败",
     "failedToLoadAuthor": "加载用户信息失败",
