@@ -31,8 +31,12 @@ export type CaptureResult = {
   platform: { os: string; browser: string; browserVersion: string };
 };
 
+/**
+ * 1 カットの出力先。同じ場面を言語・テーマ違いで撮っても互いに上書きしないよう、
+ * `<sceneId>/<cutId>/<locale>-<theme>/` に分ける。
+ */
 export function captureDir(target: CaptureTarget): string {
-  return path.join(CAPTURE_ROOT, target.sceneId, target.cutId);
+  return path.join(CAPTURE_ROOT, target.sceneId, target.cutId, `${target.locale}-${target.theme}`);
 }
 
 export function prepareCaptureDir(target: CaptureTarget): string {
@@ -72,7 +76,16 @@ export function finalizeVideo(rawPath: string, dir: string): string {
   return target;
 }
 
-export function writeManifest(target: CaptureTarget, result: CaptureResult): string {
+export type ManifestOptions = {
+  /** Remotion へ渡す props の字幕。無音で理解できるようにするため、動画では原則入れる。 */
+  caption?: string | null;
+};
+
+export function writeManifest(
+  target: CaptureTarget,
+  result: CaptureResult,
+  options: ManifestOptions = {}
+): string {
   const dir = captureDir(target);
   const videoAbs = result.videoRelative ? path.join(PROMO_ARTIFACT_ROOT, result.videoRelative) : null;
   const stillAbs = result.stillRelative ? path.join(PROMO_ARTIFACT_ROOT, result.stillRelative) : null;
@@ -113,7 +126,7 @@ export function writeManifest(target: CaptureTarget, result: CaptureResult): str
   const propsPath = path.join(dir, 'props.json');
   writeFileSync(
     propsPath,
-    `${JSON.stringify({ manifest, caption: null, demoBadge: true, fps: 30 }, null, 2)}\n`,
+    `${JSON.stringify({ manifest, caption: options.caption ?? null, demoBadge: true, fps: 30 }, null, 2)}\n`,
     'utf8'
   );
 

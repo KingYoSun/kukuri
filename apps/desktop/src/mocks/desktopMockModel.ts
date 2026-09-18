@@ -46,6 +46,12 @@ export type DesktopMockApiOptions = {
   authorSocialViews?: Record<string, Partial<AuthorSocialView>>;
   myProfileError?: string | null;
   invitePreview?: PrivateChannelInvitePreview;
+  /**
+   * mock 上で新しく作った投稿の created_at の基準 (Unix 秒)。未指定なら 0 で、
+   * 従来どおり連番がそのまま created_at になる。告知素材の撮影 (#1039) が、
+   * 撮影中に作った投稿を seed の投稿と同じ日時帯に並べるために使う。
+   */
+  clockBase?: number;
 };
 
 export function parseMockChannelAccessTokenPreview(

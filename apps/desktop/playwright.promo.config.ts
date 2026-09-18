@@ -30,6 +30,8 @@ export default defineConfig({
   reporter: 'list',
   // Playwright 自身の artifact も既存の test-results から分ける。
   outputDir: path.resolve(import.meta.dirname, '../../promo-artifacts/playwright-output'),
+  // 撮影後に原素材全体の索引 (captures/index.json) を書く。
+  globalTeardown: './tests/promo/writeCaptureIndex.ts',
   timeout: 120_000,
   use: {
     baseURL,
