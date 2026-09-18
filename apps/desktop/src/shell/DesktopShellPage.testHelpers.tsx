@@ -378,9 +378,21 @@ export async function openPublishDialog(user: ReturnType<typeof userEvent.setup>
   return getActiveColumn('Timeline');
 }
 
-export async function publishPost(user: ReturnType<typeof userEvent.setup>, content: string) {
+export async function publishPost(
+  user: ReturnType<typeof userEvent.setup>,
+  content: string,
+  // 'paste' は本文を 1 回の入力で渡す。打鍵ごとに App 全体が再描画されるため、
+  // 入力そのものを検証しない長い scenario で負荷時の所要時間を抑える(#1165)。
+  { input = 'type' }: { input?: 'type' | 'paste' } = {}
+) {
   const dialog = await openPublishDialog(user);
-  await user.type(within(dialog).getByPlaceholderText('Write a post'), content);
+  const composer = within(dialog).getByPlaceholderText('Write a post');
+  if (input === 'paste') {
+    await user.click(composer);
+    await user.paste(content);
+  } else {
+    await user.type(composer, content);
+  }
   await user.click(within(dialog).getByRole('button', { name: 'Post' }));
   await waitFor(() => {
     expect(within(dialog).queryByPlaceholderText('Write a post')).not.toBeInTheDocument();

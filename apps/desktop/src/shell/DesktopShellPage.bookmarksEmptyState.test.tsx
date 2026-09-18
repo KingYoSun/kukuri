@@ -1,12 +1,18 @@
 // #994: ブックマーク view は初回取得中に loading を示し、取得成功 0 件のときだけ始め方の案内を出す。
 // 失敗時は再試行を出し、案内の CTA は同じ Column をフィードへ戻すだけで bookmark API を呼ばない(INVAR-1)。
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { createDesktopMockApi } from '@/mocks/desktopApiMock';
 import { App } from '@/App';
-import { getTimelineViewTabs, selectTimelineView, setViewportWidth } from './DesktopShellPage.testHelpers';
+import type { BookmarkedPostView } from '@/lib/api';
+import {
+  createDeferred,
+  getTimelineViewTabs,
+  selectTimelineView,
+  setViewportWidth,
+} from './DesktopShellPage.testHelpers';
 
 const DEMO_TOPIC_HASH = '#/timeline?topic=kukuri%3Atopic%3Ageneral';
 
@@ -22,7 +28,9 @@ function timelineColumn() {
 test('shows loading first, then the guidance with the Bookmark chip, and the CTA returns to the feed', async () => {
   const user = userEvent.setup();
   const api = createDesktopMockApi();
-  const listSpy = vi.spyOn(api, 'listBookmarkedPosts');
+  // 取得を test 側で保留し、loading の観測を取得完了のタイミングに依存させない(#1165)。
+  const pending = createDeferred<BookmarkedPostView[]>();
+  const listSpy = vi.spyOn(api, 'listBookmarkedPosts').mockReturnValue(pending.promise);
   const bookmarkSpy = vi.spyOn(api, 'bookmarkPost');
   render(<App api={api} />);
   await waitFor(() => {
@@ -33,6 +41,7 @@ test('shows loading first, then the guidance with the Bookmark chip, and the CTA
   // 初回取得中: 空文言を出さず loading を示す(false empty の禁止)。
   expect(within(timelineColumn()).getByRole('status', { name: 'Loading bookmarks…' })).toBeInTheDocument();
   expect(within(timelineColumn()).queryByText('No bookmarked posts yet.')).not.toBeInTheDocument();
+  await act(async () => pending.resolve([]));
 
   const guidance = await within(timelineColumn()).findByTestId('bookmarks-empty-state');
   expect(guidance).toHaveAttribute('role', 'status');
