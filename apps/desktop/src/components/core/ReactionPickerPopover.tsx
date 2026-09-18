@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import { Search, SmilePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,12 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type {
   CustomReactionAssetView,
   ReactionKeyInput,
@@ -20,6 +14,7 @@ import type {
 } from '@/lib/api';
 
 import { type PostCardView } from './types';
+import { ReactionTooltipButton } from './ReactionTooltipButton';
 
 const CURATED_EMOJI_OPTIONS = [
   { emoji: '👍', key: 'thumbs-up' },
@@ -97,23 +92,6 @@ function reactionKeyInputFromView(reaction: ReactionKeyView): ReactionKeyInput |
     return { kind: 'custom_asset', asset: reaction.custom_asset };
   }
   return null;
-}
-
-function ReactionTooltipButton({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactElement;
-}) {
-  return (
-    <TooltipProvider delayDuration={180}>
-      <Tooltip>
-        <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 }
 
 function assetSearchLabel(asset: CustomReactionAssetView): string {

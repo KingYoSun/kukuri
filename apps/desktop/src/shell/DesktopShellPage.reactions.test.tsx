@@ -230,7 +230,13 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
 
   render(<App api={api} />);
 
-  const remoteReactionImage = await screen.findByAltText(remoteReactionAsset.search_key);
+  const remoteReactionChip = await screen.findByRole('button', {
+    name: `${remoteReactionAsset.search_key} 1`,
+  });
+  const remoteReactionImage = remoteReactionChip.querySelector('img');
+  if (!(remoteReactionImage instanceof HTMLImageElement)) {
+    throw new Error('remote reaction image not found');
+  }
   expect(remoteReactionImage.getAttribute('src')).toContain('blob:mock-');
   await waitFor(() => {
     expect(getBlobMediaPayload).toHaveBeenCalledWith(
@@ -246,11 +252,6 @@ test('visible custom reactions auto-fetch media before save, and saved reactions
   await waitFor(() => {
     expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
   });
-
-  const remoteReactionChip = remoteReactionImage.closest('button');
-  if (!(remoteReactionChip instanceof HTMLButtonElement)) {
-    throw new Error('remote reaction chip not found');
-  }
 
   fireEvent.contextMenu(remoteReactionChip);
   await user.click(screen.getByRole('menuitem', { name: 'Save' }));

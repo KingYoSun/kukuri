@@ -40,6 +40,7 @@ import { AuthorAvatar } from './AuthorAvatar';
 import { AuthorIdentityButton } from './AuthorIdentityButton';
 import { MediaViewerDialog } from './MediaViewerDialog';
 import { PostMedia } from './PostMedia';
+import { PostReactionChip } from './PostReactionChip';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
 import {
   ReportRoutingDialog,
@@ -731,58 +732,31 @@ export function PostCard({
               <div className='post-reaction-summary'>
                 {reactionSummary.map((reaction) => {
                   const reactionKey = reactionKeyInputFromView(reaction);
+                  const customAsset = reaction.custom_asset ?? null;
                   const previewUrl =
-                    reaction.custom_asset &&
-                    typeof mediaObjectUrls[reaction.custom_asset.blob_hash] === 'string'
-                      ? mediaObjectUrls[reaction.custom_asset.blob_hash]
+                    customAsset && typeof mediaObjectUrls[customAsset.blob_hash] === 'string'
+                      ? mediaObjectUrls[customAsset.blob_hash]
                       : null;
                   return (
-                    <span key={reaction.normalized_reaction_key} className='post-reaction-chip-wrap'>
-                      <button
-                        className={`post-reaction-chip${
-                          myReactionKeys.has(reaction.normalized_reaction_key)
-                            ? ' post-reaction-chip-active'
-                            : ''
-                        }`}
-                        type='button'
-                        onClick={() => {
-                          if (reactionKey && onToggleReaction) {
-                            onToggleReaction(actionPost, reactionKey);
-                          }
-                        }}
-                        onContextMenu={(event) => {
-                          if (!reaction.custom_asset) {
-                            return;
-                          }
-                          setReactionMenuAsset(reaction.custom_asset);
-                          setReactionMenuPosition(contextActionMenuPositionFromPointer(event));
-                        }}
-                        onKeyDown={(event) => {
-                          if (!reaction.custom_asset) return;
-                          const position = contextActionMenuPositionFromKeyboard(event);
-                          if (position) {
-                            setReactionMenuAsset(reaction.custom_asset);
-                            setReactionMenuPosition(position);
-                          }
-                        }}
-                      >
-                        {previewUrl ? (
-                          <img
-                            className='post-reaction-chip-image'
-                            src={previewUrl}
-                            alt={
-                              reaction.custom_asset?.search_key ??
-                              reaction.emoji ??
-                              reaction.normalized_reaction_key
+                    <PostReactionChip
+                      key={reaction.normalized_reaction_key}
+                      reaction={reaction}
+                      active={myReactionKeys.has(reaction.normalized_reaction_key)}
+                      previewUrl={previewUrl}
+                      onToggle={
+                        reactionKey && onToggleReaction
+                          ? () => onToggleReaction(actionPost, reactionKey)
+                          : undefined
+                      }
+                      onOpenContextMenu={
+                        customAsset
+                          ? (position) => {
+                              setReactionMenuAsset(customAsset);
+                              setReactionMenuPosition(position);
                             }
-                          />
-                        ) : null}
-                        <span>
-                          {reaction.emoji ?? reaction.custom_asset?.search_key ?? '?'}
-                        </span>
-                        <span>{reaction.count}</span>
-                      </button>
-                    </span>
+                          : undefined
+                      }
+                    />
                   );
                 })}
               </div>

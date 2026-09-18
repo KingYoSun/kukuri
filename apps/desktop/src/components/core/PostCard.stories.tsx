@@ -145,6 +145,89 @@ export const ImageReady: Story = {
   },
 };
 
+export const CustomReactionSummary: Story = {
+  args: {
+    view: createView({
+      post: {
+        ...basePost,
+        reaction_summary: [
+          {
+            reaction_key_kind: 'emoji',
+            normalized_reaction_key: 'emoji:👍',
+            emoji: '👍',
+            custom_asset: null,
+            count: 8,
+          },
+          {
+            reaction_key_kind: 'custom_asset',
+            normalized_reaction_key: 'custom_asset:party-parrot',
+            emoji: null,
+            custom_asset: {
+              asset_id: 'party-parrot',
+              owner_pubkey: 'b'.repeat(64),
+              blob_hash: 'party-parrot-blob',
+              search_key: 'party-parrot-with-a-long-name',
+              mime: 'image/png',
+              bytes: 128,
+              width: 128,
+              height: 128,
+            },
+            count: 4,
+          },
+          {
+            reaction_key_kind: 'custom_asset',
+            normalized_reaction_key: 'custom_asset:preview-pending',
+            emoji: null,
+            custom_asset: {
+              asset_id: 'preview-pending',
+              owner_pubkey: 'c'.repeat(64),
+              blob_hash: 'preview-pending-blob',
+              search_key: 'preview-pending',
+              mime: 'image/png',
+              bytes: 128,
+              width: 128,
+              height: 128,
+            },
+            count: 2,
+          },
+        ],
+        my_reactions: [
+          {
+            reaction_key_kind: 'custom_asset',
+            normalized_reaction_key: 'custom_asset:party-parrot',
+            emoji: null,
+            custom_asset: {
+              asset_id: 'party-parrot',
+              owner_pubkey: 'b'.repeat(64),
+              blob_hash: 'party-parrot-blob',
+              search_key: 'party-parrot-with-a-long-name',
+              mime: 'image/png',
+              bytes: 128,
+              width: 128,
+              height: 128,
+            },
+          },
+        ],
+      },
+    }),
+  },
+  render: ({ view }) => (
+    <div className='w-[min(42rem,calc(100vw-2rem))]'>
+      <PostCard
+        view={view}
+        onOpenAuthor={() => undefined}
+        onOpenThread={() => undefined}
+        onReply={() => undefined}
+        onToggleReaction={() => undefined}
+        mediaObjectUrls={{
+          'party-parrot-blob':
+            'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="%2300b3a4"/><circle cx="16" cy="16" r="8" fill="%23ffd36e"/></svg>',
+        }}
+      />
+    </div>
+  ),
+};
+
 // #1055: Community Node の content advisory による代替表示。断定せず推定であることと、
 // 発行元 / 分類 / 確信度 / 根拠を示し、異議申し立てへの導線を持つ(ADR 0046 §6.3)。
 // #1108: 一覧には枠と短いラベルだけを出し、説明は枠を開いた詳細 dialog に置く。
