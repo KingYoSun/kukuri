@@ -120,6 +120,22 @@ cd apps/desktop && npx pnpm@10.16.1 exec playwright test --config=playwright.pro
 
 静止画は動きを止め、入力欄のカーソルを隠し、画面が落ち着いてから撮る。そのため同じ fixture・設定で撮り直すと、静止画はバイト単位で同じになる（#1039 で 3 回撮影して 18 カットすべて一致を確認した）。操作の録画は実時間で動くので、撮り直すと細部が変わる。
 
+### 実機の静止画を取り込む
+
+配布版の実機など、Playwright 以外で撮った静止画（PNG / WebP）は、由来を付けて原素材として取り込む。
+
+1. 画像を `promo-artifacts/captures/<sceneId>/<cutId>/<locale>-<theme>/` に置く。
+2. 由来を `tools/promo/device-captures/<sceneId>.<locale>-<theme>.json` に書く。画像は git に入れず、この spec だけを commit する。
+3. 取り込む。
+
+```bash
+cd tools/promo && node scripts/import-still.mjs device-captures/s9-dome-teaser.ja-dark.json
+```
+
+スクリプトは画像の寸法と SHA-256 を読み、Playwright の撮影と同じ形の `manifest.json` と `props.json` を書く。spec に `sha256` があれば照合し、違う画像なら失敗する。取り込めるのは `sourceMode` が `device` の素材だけ。
+
+開発者モードを有効にした素材は、Dome 予告の場面（`s9-dome-teaser`）の実機素材だけを認める。ほかの場面に紛れていると、撮影後の索引（`captures/index.json`）の作成が失敗する。
+
 ### 撮影が途中で失敗したとき
 
 そのまま同じコマンドを再実行する。対象ディレクトリは作り直されるため、古い素材が新しい撮影として残ることはない。`video.webm` が空の場合は撮影が失敗として報告され、manifest は書かれない。
