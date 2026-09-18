@@ -89,3 +89,17 @@ node apps/lp/scripts/sync-release.mjs --check
 6. 再 deploy する（上の「Cloudflare Pages へ公開する」）。
 
 `--check` は、HTML に `release.json` と違う版が 1 つでも残っていれば失敗する。
+
+## CSS・JS を変えたとき
+
+Cloudflare の配信キャッシュは `/assets/` を数時間保持する（2026-09-18 の確認で `max-age=14400`）。同じ URL のままだと、deploy 後も古い CSS・JS が返り続ける。HTML はキャッシュされないので、HTML から CSS・JS を内容のハッシュ付きの URL（`/assets/site.css?v=<ハッシュ>`）で参照し、変更のたびに URL が変わるようにしている。
+
+`site.css` か `site.js` を変えたら、deploy の前に反映スクリプトを流す。ハッシュの付け直しも同じスクリプトが行う。
+
+```bash
+node apps/lp/scripts/sync-release.mjs
+```
+
+`--check` は、ハッシュが今の内容と合っていなければ失敗する。ハッシュは改行をそろえてから取るので、Windows と Linux の checkout で同じ値になる。
+
+画像（`assets/screens/`）は URL にハッシュを付けていない。画像を差し替えたときは、Cloudflare のダッシュボードの Caching → Configuration → Custom Purge で、差し替えた画像の URL を purge する。
