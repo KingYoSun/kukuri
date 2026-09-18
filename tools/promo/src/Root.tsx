@@ -1,5 +1,6 @@
 import { Composition } from 'remotion';
 
+import { Ogp } from './compositions/Ogp';
 import { SceneClip } from './compositions/SceneClip';
 import { SceneStill } from './compositions/SceneStill';
 import { DEFAULT_FPS, clipDurationInFrames, parseSceneProps } from './props';
@@ -29,6 +30,15 @@ export function RemotionRoot() {
         calculateMetadata={calculateMetadata}
         width={1600}
         height={1000}
+        fps={DEFAULT_FPS}
+        durationInFrames={1}
+      />
+      <Composition
+        id='Ogp'
+        component={Ogp}
+        defaultProps={{}}
+        width={1200}
+        height={630}
         fps={DEFAULT_FPS}
         durationInFrames={1}
       />

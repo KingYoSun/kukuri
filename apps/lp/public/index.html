@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kukuri — 話題からつながる、あなたの端末が起点のSNS</title>
+  <meta name="description" content="気になる話題を選び、公開で語り、同じ話題の中で小さな輪へ移る。アカウントを識別する鍵は、あなたの端末にだけ置かれます。Windows / Linux 向け Builder Preview。">
+  <link rel="canonical" href="https://kukuri.app/">
+  <link rel="alternate" hreflang="ja" href="https://kukuri.app/">
+  <link rel="alternate" hreflang="en" href="https://kukuri.app/en/">
+  <link rel="alternate" hreflang="x-default" href="https://kukuri.app/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="kukuri">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:url" content="https://kukuri.app/">
+  <meta property="og:title" content="kukuri — 話題からつながる、あなたの端末が起点のSNS">
+  <meta property="og:description" content="話題を選び、公開で語り、同じ話題の中で小さな輪へ。Windows / Linux 向け Builder Preview。">
+  <meta property="og:image" content="https://kukuri.app/assets/screens/ogp-ja.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="kukuri のデモ画面。話題ごとのカラムに会話が並ぶ。">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="/assets/icon-256.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <script src="/assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へ移動</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/"><img src="/assets/icon-256.png" alt="" width="32" height="32">kukuri</a>
+      <nav class="header-nav" aria-label="ページ内">
+        <a class="nav-section" href="#scenes">できること</a>
+        <a class="nav-section" href="#preview">試し方</a>
+        <a class="nav-section" href="#faq">FAQ</a>
+        <a class="lang-switch" href="/en/" hreflang="en" lang="en">English</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ① Hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow">Builder Preview</span>
+          <h1 id="hero-title">話題からつながる、<wbr>あなたの端末が起点のSNS</h1>
+          <p class="lead">気になる話題を選び、公開で語り、同じ話題の中で小さな輪へ移る。アカウントを識別する鍵は、あなたの端末にだけ置かれます。</p>
+
+          <div class="cta-row download-actions" data-download-group>
+            <a class="button button-primary" data-os-target="windows" href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri_0.2.5_x64-setup.exe">Windows版をダウンロード</a>
+            <a class="button button-secondary" data-os-target="linux" href="#preview">Linux版をダウンロード</a>
+          </div>
+          <div class="handoff" role="region" aria-label="PCで開く">
+            <p>kukuri は Windows と Linux のデスクトップアプリです。このページを PC で開いてダウンロードしてください。</p>
+            <button class="button button-primary" type="button" data-handoff data-copied="リンクをコピーしました。PC で開いてください。" data-shared="共有しました。PC で開いてください。">PCで開くためのリンクを送る</button>
+            <p class="handoff-status" aria-live="polite"></p>
+          </div>
+          <p><a href="https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-user-quickstart.md">3分で試す手順を見る</a></p>
+          <p class="note">テスター向けの Builder Preview（v0.2.5-preview.3）です。一般向けの安定版ではありません。</p>
+          <p class="note" data-mac-note hidden>macOS 版はありません。Windows 10 / 11 または Linux（x86_64）でお試しください。</p>
+        </div>
+        <figure class="shot">
+          <img src="/assets/screens/hero-ja.png" width="1600" height="1000" alt="kukuri のデモ画面。左から、話題「dev」のタイムライン、プロフィール、コミュニティインデックスの検索のカラムが並ぶ。タイムラインには、デモ参加者の会話が並んでいる。">
+        </figure>
+      </div>
+    </section>
+
+    <!-- ② 3 場面 -->
+    <section id="scenes" aria-labelledby="scenes-title">
+      <div class="wrap">
+        <h2 id="scenes-title">話題から始まって、会話が続き、小さな輪へ</h2>
+        <p class="lead">3 つの場面は、既定で使える機能だけでできています。登場する人物と会話はデモです。</p>
+        <div class="scenes">
+          <article class="scene">
+            <span class="step">1</span>
+            <figure class="shot shot-crop focus-left">
+              <img src="/assets/screens/scene1-ja.png" width="1600" height="1000" loading="lazy" alt="話題「general」のタイムラインのデモ画面。カラム上部で話題を切り替えられる。">
+            </figure>
+            <h3>話題を選ぶ</h3>
+            <p>最初から用意された話題を開くか、コミュニティインデックスで話題と投稿を検索します。検索を提供するのは、あなたが同意したコミュニティノードです。</p>
+          </article>
+          <article class="scene">
+            <span class="step">2</span>
+            <figure class="shot shot-crop focus-left">
+              <img src="/assets/screens/scene2-ja.png" width="1600" height="1000" loading="lazy" alt="話題「dev」で、デモ参加者のみなととふたばが会話しているタイムラインのデモ画面。最初の投稿にリアクションが付いている。">
+            </figure>
+            <h3>公開で会話する</h3>
+            <p>投稿し、返信し、スレッドで続けます。リアクション、リポスト、引用、ブックマークも同じ画面で行えます。</p>
+          </article>
+          <article class="scene">
+            <span class="step">3</span>
+            <figure class="shot shot-crop focus-center">
+              <img src="/assets/screens/scene3-ja.png" width="1600" height="1000" loading="lazy" alt="プライベートチャンネルを作る画面のデモ。チャンネル名「カラム配置の相談（デモ）」を入力し、公開範囲に「招待限定」を選んでいる。">
+            </figure>
+            <h3>同じ話題の中で、小さな輪へ</h3>
+            <p>タイムライン上部の「プライベートチャンネル」から作成・参加します。話題を離れずに、招待限定・相互フォロー限定・相互フォロー+のいずれかの範囲で話せます。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ③ 選べること -->
+    <section aria-labelledby="choices-title">
+      <div class="wrap">
+        <h2 id="choices-title">選べること</h2>
+        <p class="lead">初期値のまま始められて、必要なところだけ変えられます。</p>
+        <div class="table-scroll" role="region" aria-labelledby="choices-title" tabindex="0">
+          <table>
+            <thead>
+              <tr><th scope="col">選べるもの</th><th scope="col">初期値</th><th scope="col">変えるとどうなるか</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">コミュニティノード</th><td>配布時の候補が 1 件（同意前は未使用）</td><td>同意したノードだけが接続支援・検索・moderation を提供します。同意しなければ使いません。</td></tr>
+              <tr><th scope="row">プライベートチャンネルの公開範囲</th><td>招待限定</td><td>相互フォロー限定、相互フォロー+に変えると、参加できる相手の条件が変わります。</td></tr>
+              <tr><th scope="row">テーマ</th><td>dark</td><td>light に変えると、明るい配色に切り替わります。</td></tr>
+              <tr><th scope="row">表示言語</th><td>OS の表示言語（未保存時）</td><td>日本語 / English / 简体中文を選べます。保存した言語は次回起動でも優先されます。</td></tr>
+              <tr><th scope="row">成人向け表示</th><td>非表示</td><td><code>設定 → 安全</code> で許可すると、成人向けラベル付きの投稿が表示されます。</td></tr>
+              <tr><th scope="row">開発者モード</th><td>無効</td><td><code>設定 → 開発者</code> で有効にすると、実験中の機能と診断レポートが現れます。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ④ 分散型である理由 -->
+    <section aria-labelledby="why-title">
+      <div class="wrap">
+        <h2 id="why-title">あなたの端末が起点である理由</h2>
+        <div class="points">
+          <div class="point"><p>アカウントを識別する鍵は端末内にだけ保存されます。コミュニティノードはあなたのアカウントの持ち主でも、ホームサーバーでもありません。</p></div>
+          <div class="point"><p>接続は Direct P2P を優先し、次に Relay Supported P2P、実データが relay を経由する Relay Fallback は、ほかの経路が成立しないときだけ使います。</p></div>
+          <div class="point"><p>moderation の判定は、それを出したノードからの任意の入力であり、ネットワーク全体への命令ではありません。受け取り方は各クライアントが決めます。</p></div>
+        </div>
+        <p style="margin-top:24px"><a href="https://github.com/kukuri-app/kukuri/blob/main/docs/architecture/p2p-first-community-node-responsibility-boundary.md">責務境界の詳細を読む</a></p>
+      </div>
+    </section>
+
+    <!-- ⑤ Preview の機能・OS・版・手順 -->
+    <section id="preview" aria-labelledby="preview-title">
+      <div class="wrap">
+        <h2 id="preview-title">いま試せること</h2>
+        <p class="lead">Windows 10 / 11（NSIS）、Linux x86_64（AppImage / deb）、Linux CLI x86_64・aarch64。macOS 版はありません。版は v0.2.5-preview.3 です。</p>
+
+        <div class="table-scroll" role="region" aria-label="ダウンロード" tabindex="0">
+          <table>
+            <thead><tr><th scope="col">対象</th><th scope="col">ダウンロード</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Windows 10 / 11（x64）</th><td><a href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri_0.2.5_x64-setup.exe">kukuri_0.2.5_x64-setup.exe</a></td></tr>
+              <tr><th scope="row">Linux（x86_64）AppImage</th><td><a href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri_0.2.5_amd64.AppImage">kukuri_0.2.5_amd64.AppImage</a>（<a href="https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/linux-appimage-smoke.md">手順</a>）</td></tr>
+              <tr><th scope="row">Linux（x86_64）deb</th><td><a href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri_0.2.5_amd64.deb">kukuri_0.2.5_amd64.deb</a>（<a href="https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/linux-deb.md">手順</a>）</td></tr>
+              <tr><th scope="row">Linux CLI</th><td><a href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri-cli_0.2.5_x86_64-unknown-linux-gnu.tar.gz">x86_64</a> ／ <a href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri-cli_0.2.5_aarch64-unknown-linux-gnu.tar.gz">aarch64</a>（<a href="https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/linux-cli.md">手順</a>）</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">配布物の一覧とチェックサム（SHA256SUMS.txt）は <a href="https://github.com/kukuri-app/kukuri/releases/tag/v0.2.5-preview.3">リリースページ</a> にあります。</p>
+
+        <h3 style="margin-top:40px">始め方</h3>
+        <ol class="steps">
+          <li>自分の環境向けのインストーラーを取得して起動する</li>
+          <li>言語を選び、18 歳以上であることを申告し、アプリ規約に同意する</li>
+          <li>コミュニティノードの文書を確認して同意する</li>
+          <li>プロフィールを設定する</li>
+          <li>話題を開いて投稿・返信する</li>
+          <li>同じ話題の中でプライベートチャンネルを作る・参加する</li>
+        </ol>
+        <p class="note" style="margin-top:16px">同意するまでネットワーク接続は始まりません。preview installer に OS のコード署名はなく、Windows では警告が出ることがあります。</p>
+      </div>
+    </section>
+
+    <!-- ⑥ FAQ・開発状況・feedback・運営／規約 -->
+    <section id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <h2 id="faq-title">よくある質問</h2>
+        <div class="faq">
+          <details>
+            <summary>macOS 版はありますか</summary>
+            <p>現時点でパッケージを提供していません。Windows 10 / 11 と Linux（x86_64 GUI、x86_64 / aarch64 CLI）のみです。</p>
+          </details>
+          <details>
+            <summary>アカウントを失ったら復旧できますか</summary>
+            <p>中央での再発行・復旧はありません。アカウントを識別する鍵を暗号化してエクスポートするか、端末バックアップを自分で保管してください。</p>
+          </details>
+          <details>
+            <summary>コミュニティノードは必須ですか</summary>
+            <p>各ノードの文書へ同意するまで利用しません。「あとで」を選んでも、見つける／設定から後で同意へ戻れます。ノードは投稿の保管先ではありません。</p>
+          </details>
+          <details>
+            <summary>検索できないのはなぜですか</summary>
+            <p>接続の手助けと検索（コミュニティインデックス）の提供は別です。検索を提供しないノードでは、別の検索提供ノードを選んでください。</p>
+          </details>
+          <details>
+            <summary>インストール時に警告が出ます</summary>
+            <p>preview installer に OS のコード署名がないためです。リリースノートを確認してから実行してください。アプリ内更新の manifest は署名を検証します。</p>
+          </details>
+          <details>
+            <summary>更新するとデータは残りますか</summary>
+            <p>鍵、プロフィール、フォロー、自分の投稿、端末内データベース、Iroh のデータ、コミュニティノード設定、プライベートチャンネルの閲覧権限、通知一覧が保持される想定です。アンインストール・リセットの前にはバックアップを取ってください。</p>
+          </details>
+          <details>
+            <summary>不具合はどこへ報告しますか</summary>
+            <p>アプリ下部バーの「フィードバックを送る」、または <a href="https://github.com/kukuri-app/kukuri/issues">GitHub Issues</a> / <a href="https://github.com/kukuri-app/kukuri/discussions">Discussions</a> へ。接続・更新・復旧の問題には、開発者モードで取得した診断レポートを添えてください。</p>
+          </details>
+          <details>
+            <summary>開発中の機能はありますか</summary>
+            <p>Live、Game、Stream、Metaverse Dome は既定で非表示です。<code>設定 → 開発者</code> で開発者モードを有効にしたときだけ現れる実験機能で、データ形式の後方互換・移行は保証しません。</p>
+          </details>
+        </div>
+
+        <div class="experimental" aria-labelledby="experimental-title">
+          <span class="experimental-badge">開発中</span>
+          <h3 id="experimental-title">開発中の実験機能（開発者モードで有効化）</h3>
+          <p>3D 空間で話題に集まる Metaverse Dome を試作しています。<code>設定 → 開発者</code> で開発者モードを有効にしたときだけ現れます。</p>
+          <p class="required-notice">実験中の機能です。開発者モードでのみ利用でき、データ形式の後方互換や移行は保証しません。</p>
+          <figure class="shot">
+            <img src="/assets/screens/dome-teaser.png" width="1906" height="1243" loading="lazy" alt="配布版の実機画面。左にタイムラインのカラム、右に Metaverse のカラムが同じ並びで表示され、Dome の中に白いアバターが立っている。">
+          </figure>
+          <p class="note">1台の端末で Dome を開き、タイムラインと同じカラムに並べた画面です。Dome 機能は開発中です。</p>
+        </div>
+
+        <div class="links-grid">
+          <div>
+            <h3>開発状況</h3>
+            <ul>
+              <li><a href="https://github.com/kukuri-app/kukuri/releases">リリース</a></li>
+              <li><a href="https://github.com/kukuri-app/kukuri/blob/main/CHANGELOG.md">変更履歴</a></li>
+              <li><a href="https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md">うまく動かないとき</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>フィードバック</h3>
+            <ul>
+              <li><a href="https://github.com/kukuri-app/kukuri/issues">不具合の報告（GitHub Issues）</a></li>
+              <li><a href="https://github.com/kukuri-app/kukuri/discussions">質問・提案（GitHub Discussions）</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>規約・運営</h3>
+            <ul>
+              <li><a href="https://api.kukuri.app/terms">利用規約</a></li>
+              <li><a href="https://api.kukuri.app/privacy">プライバシー</a></li>
+              <li><a href="https://api.kukuri.app/external-transmission">外部送信</a></li>
+              <li><a href="https://api.kukuri.app/abuse-policy">通報方針</a></li>
+              <li><a href="https://api.kukuri.app/data-retention">データ保持</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑦ 再 CTA -->
+    <section class="closing" aria-labelledby="closing-title">
+      <div class="wrap">
+        <h2 id="closing-title">話題から始めてみる</h2>
+        <p class="lead">Builder Preview はテスター向けです。うまくいかない点は、アプリ内のフィードバックか GitHub へ送ってください。</p>
+        <div class="cta-row download-actions" data-download-group>
+          <a class="button button-primary" data-os-target="windows" href="https://github.com/kukuri-app/kukuri/releases/download/v0.2.5-preview.3/kukuri_0.2.5_x64-setup.exe">Windows版をダウンロード</a>
+          <a class="button button-secondary" data-os-target="linux" href="#preview">Linux版をダウンロード</a>
+          <a class="button button-secondary" href="https://github.com/kukuri-app/kukuri/issues">GitHubで報告する</a>
+        </div>
+        <div class="handoff" role="region" aria-label="PCで開く">
+          <p>このページを PC で開いてダウンロードしてください。</p>
+          <button class="button button-primary" type="button" data-handoff data-copied="リンクをコピーしました。PC で開いてください。" data-shared="共有しました。PC で開いてください。">PCで開くためのリンクを送る</button>
+          <p class="handoff-status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>kukuri Builder Preview · <a href="https://github.com/kukuri-app/kukuri">GitHub</a> · <a href="https://github.com/kukuri-app/kukuri/blob/main/LICENSE">License</a></span>
+      <span>画面はデモです。登場する人物と会話はデモ用に作ったものです（開発中の実験機能の画面を除く）。</span>
+    </div>
+  </footer>
+</body>
+</html>
