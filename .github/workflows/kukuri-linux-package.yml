@@ -1,23 +1,6 @@
 name: Kukuri Linux Package
 
-# PR の Actions cache は同じ PR 内からしか読めない。main への push でも走らせ、全 PR が
-# restore できる main の cache を作る（保存するのは main の run だけ）。
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/kukuri-linux-package.yml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - 'xtask/**'
-      - 'crates/**'
-      - 'apps/desktop/**'
-      - 'scripts/release/*appimage_runtime_inventory.py'
-      - 'scripts/release/release_assets.py'
-      - 'scripts/release/native*'
-      - 'scripts/release/test_native_compliance.py'
-      - 'scripts/release/*deb*'
   pull_request:
     paths:
       - '.github/workflows/kukuri-linux-package.yml'
@@ -60,7 +43,10 @@ permissions:
 
 jobs:
   linux-appimage:
-    runs-on: ubuntu-22.04
+    # #1148: 検証の run は Namespace の Cache Volume で build する（Ubuntu 24.04 でも配布物の
+    # 互換性は実機で確認済み）。配布用の署名鍵を渡す run だけは外部 runner に鍵を出さず、
+    # GitHub-hosted で build する。
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && 'ubuntu-22.04' || 'namespace-profile-kukuri;overrides.cache-tag=kukuri-linux-package' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -95,14 +81,15 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
-      - uses: Swatinem/rust-cache@v2
+      # `cache: rust` は Cargo registry / git と root の target を扱う。配布物を build する
+      # src-tauri 側の target は別 directory なので path で明示する。
+      - name: Cache Rust
+        if: ${{ runner.environment != 'github-hosted' }}
+        uses: namespacelabs/nscloud-cache-action@v1
         with:
-          shared-key: kukuri-linux-package
-          workspaces: |
-            . -> target
-            apps/desktop/src-tauri -> target
-          # PR や release tag の cache は他の run から読めず、10 GB の上限を圧迫するだけなので保存しない。
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          cache: rust
+          path: |
+            ${{ github.workspace }}/apps/desktop/src-tauri/target
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
@@ -141,6 +128,8 @@ jobs:
             config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY.trim();
             fs.writeFileSync(file, JSON.stringify(config, null, 2));
           '
+          # Cache Volume に前回の bundle が残っていると、後続の glob が複数の版に当たる。
+          rm -rf apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
           cargo xtask desktop-package
           bundle=apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage
           bash xtask/tests/appimage/gio-isolation.sh "$bundle/kukuri.AppDir"
@@ -220,3 +209,10 @@ jobs:
           name: kukuri-linux-x86_64-${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && 'distribution' || 'test' }}
           if-no-files-found: error
           path: ${{ runner.temp }}/kukuri-linux-package/
+      # #1120: workspace crate の成果物は checkout ごとに再 compile されるため、Cache Volume に残さない。
+      # 配布物の bundle も次の run では使わない。
+      - name: Prune workspace build artifacts
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          rm -rf apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          cargo xtask-lite ci-prune-target

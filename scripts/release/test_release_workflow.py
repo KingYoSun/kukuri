@@ -91,16 +91,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(cli["jobs"]["cli-package"]["strategy"]["matrix"]["arch"], ["x86_64", "aarch64"])
         self.assertNotIn("secrets", cli["on"].get("workflow_call", {}))
 
-    def test_linux_package_cache_is_saved_only_from_main(self):
-        # PR scope の cache は他の PR から読めないため、main の push で保存した cache を共有する。
-        package = workflow("kukuri-linux-package.yml")
-        events = package["on"]
-        self.assertEqual(events["push"]["branches"], ["main"])
-        self.assertEqual(events["push"]["paths"], events["pull_request"]["paths"])
-        steps = package["jobs"]["linux-appimage"]["steps"]
-        cache = next(step for step in steps if step.get("uses", "").startswith("Swatinem/rust-cache@"))
-        self.assertEqual(cache["with"]["save-if"],
-                         "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}")
+    def test_linux_package_keeps_distribution_keys_on_github_hosted(self):
+        # 検証の run は Namespace の Cache Volume、配布鍵を渡す run は GitHub-hosted（#1148）。
+        job = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]
+        runs_on = job["runs-on"]
+        signing = next(step for step in job["steps"] if step.get("name") == "Build and verify AppImage and Deb")
+        distribution = signing["env"]["SIGNING_MODE"].removesuffix(" && 'distribution' || 'test' }}")
+        self.assertTrue(runs_on.startswith(distribution + " && 'ubuntu-22.04' || 'namespace-profile-"), runs_on)
+        cached = [step for step in job["steps"] if step.get("uses", "").startswith("namespacelabs/nscloud-cache-action@")]
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(cached[0]["if"], "${{ runner.environment != 'github-hosted' }}")
+        self.assertIn("apps/desktop/src-tauri/target", cached[0]["with"]["path"])
+        self.assertFalse(any("rust-cache" in step.get("uses", "") for step in job["steps"]))
 
     def test_updater_endpoint_is_the_canonical_repository_stable_url(self):
         # 2026-09-16 移管後の正本。旧 owner の URL は GitHub redirect に依存するため設定へ保存しない。
