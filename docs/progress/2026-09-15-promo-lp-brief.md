@@ -3,7 +3,7 @@
 ## この文書の位置づけ
 
 - 所有Issue: #1037（統括 #1036）。本書は後続 #1039 / #1040 / #1041 / #1042 / #1043 / #1044 が参照する共通briefの正本。
-- Scope revision: 2026-09-15-promo-lp-brief-v2
+- Scope revision: 2026-09-18-promo-lp-brief-v3（v2からの変更: Dome予告を操作者が提供した実機の静止画1枚に限定し、動画から外した。S9の画面に限り、操作者本人とテスト用アカウントの名前の写り込みを許可した。いずれも 2026-09-18 の操作者の判断）
 - 作業日: 2026-09-18
 - 作業時の main: `d455bdd8e03541de9734f06a8e050a72bdb01bfd`
 - 配布候補release: `v0.2.5-preview.3`（2026-09-17公開）。Issue起票時点の記載 `v0.2.3-preview.2` から更新した（2026-09-18にユーザーが候補を確定）。
@@ -76,7 +76,7 @@ macOS packageとaarch64 GUI packageは存在しない。素材でmacOS・Android
 - 無効時は `live` / `game` のroute遷移を受け付けない（`apps/desktop/src/shell/useDesktopShellRouting.ts:164`）。
 - 切替は `設定 → 開発者`。
 
-したがって、3場面（S1〜S3）は**開発者モードを無効のまま**撮影する。Dome予告（S9）だけ開発者モードを有効にして別撮りし、manifestの `developerMode` を `true` で記録する。
+したがって、3場面（S1〜S3）は**開発者モードを無効のまま**撮影する。Dome予告（S9）だけ開発者モードを有効にした実機の静止画を使い、manifestの `developerMode` を `true` で記録する。
 
 ### 3場面を構成する既定機能の入口
 
@@ -173,6 +173,9 @@ AC-1のQ-1〜Q-8をFAQ項目として使う。並び順はQ-1、Q-2、Q-3、Q-4�
 | 見出し | 開発中の実験機能（開発者モードで有効化） | Experimental, in development (enable developer mode) |
 | 本文 | 3D空間で話題に集まるMetaverse Domeを試作しています。`設定 → 開発者` で開発者モードを有効にしたときだけ現れます。 | We are prototyping Metaverse Domes, a 3D space tied to a topic. It appears only after you enable developer mode in `Settings -> Developer`. |
 | 必須の表記 | 実験中の機能です。開発者モードでのみ利用でき、データ形式の後方互換や移行は保証しません。 | Experimental. Available only in developer mode, with no backward-compatible decoding or migration guarantee for its data formats. |
+| 画面の説明 | 1台の端末で Dome を開き、タイムラインと同じカラムに並べた画面です。Dome 機能は開発中です。 | One device opening a Dome in the same column deck as the timeline. The Dome feature is still in development. |
+
+「画面の説明」は、画面内の状態表示「外部ピアに接続中」が、複数の端末で同じ Dome に入れる状態だと読まれないよう、1 台の端末で開いた画面であることと、機能が開発中であることを添える（2026-09-18 の確認で、2 台で同じ Dome に入れなかった。#1140）。文言は 2026-09-18 に操作者が確定した。
 
 feedbackと運営・規約のリンクはAC-4の表に従う。
 
@@ -201,11 +204,12 @@ feedbackと運営・規約のリンクはAC-4の表に従う。
 | S3 | S3-C3 | 参加後の会話 | チャンネル内で投稿・返信 | チャンネルのタイムライン | 動画 | mock | 話題を離れずに話す / Stay in the topic |
 | S4 | S4-C1 | 2台での実同期 | Windows実機で投稿し、Linux実機に届く | 2画面を並べる | 動画 | 実機（Windows 11 NSIS + Linux AppImage/deb） | 2台の実機で同期 / Synced across two real machines |
 | S4 | S4-C2 | 私的チャンネルの実同期 | 招待リンクで参加し、投稿が届く | 2画面を並べる | 動画 | 実機 | 招待して、同じ輪へ / Invite, and join the same circle |
-| S9 | S9-C1 | Dome予告 | 開発者モードを有効にし、Domeを数秒映す | Metaverseカラム | 動画（数秒）または静止画1枚 | mock または実機 | 開発中の実験機能。開発者モードでのみ利用でき、データ形式の互換は保証しません / Experimental, developer mode only. No data-format compatibility guarantee. |
+| S9 | S9-C1 | Dome予告 | 開発者モードを有効にした配布版で Dome を開き、タイムラインと並べる | Timeline カラムと Metaverse カラムを含む画面全体（切り抜かない） | 静止画1枚 | 実機（Windows 11、配布版 `v0.2.5-preview.3`、操作者が提供） | AC-2 の「必須の表記」と「画面の説明」。「画面の説明」は画像の外に置く |
 
 - S1〜S3は#1039（mock撮影）が所有する。
 - S4は#1040（実機撮影）が所有する。
-- S9は#1039または#1040が撮り、どちらで撮ったかをmanifestの `sourceMode` に記録する。
+- S9は操作者が配布版 `v0.2.5-preview.3` の実機で撮った静止画を使う（2026-09-18 に方針を変更）。`tools/promo/scripts/import-still.mjs` で由来付きの原素材として取り込み、spec を `tools/promo/device-captures/s9-dome-teaser.ja-dark.json` に置く。Dome の動画は撮らない。2 台で同じ Dome に入れないこと（#1140）とアバターのマテリアルが適用されないこと（#1141）が分かり、動画で見せられる状態ではないため。
+- S9 の画面は、タイムラインと Metaverse が同じカラムの並びで両立することを示すため、切り抜かずに使う。左のタイムラインに操作者本人（KingYoSun）とテスト用アカウント（GrokTester・CliPeerA）の名前と投稿が写るが、2026-09-18 に操作者が公開候補への掲載を許可した。この例外は S9 の画面に限り、ほかの場面は引き続きデモ identity だけを写す。
 - 実機素材（S4）とmock素材（S1〜S3）を1つのカットの中で混在させない。動画内で切り替える場合は、実機由来のカットに「実機 / Real devices」の表記を出す。
 
 ## AC-3: 固定出力一覧とscene IDの対応
@@ -228,18 +232,18 @@ feedbackと運営・規約のリンクはAC-4の表に従う。
 | `lp-scene3-ja` / `lp-scene3-en` | LP | PNG 1600×1000 | S3-C2 | #1041 | 不可 |
 | `lp-loop-ja` / `lp-loop-en` | LP | MP4 H.264/yuv420p 30fps 1600×1000 15〜20秒 | S1-C1, S2-C1, S3-C1 | #1042 | 不可 |
 | `lp-loop-poster-ja` / `lp-loop-poster-en` | LP | PNG 1600×1000（動画停止時のfallback） | S1-C1 | #1041 | 不可 |
-| `lp-dome-teaser` | LP ⑥内 | MP4 3〜5秒 または PNG 1600×1000 | S9-C1 | #1042（動画）／#1041（静止画） | 掲出可（表記必須） |
+| `lp-dome-teaser` | LP ⑥内 | PNG（原素材 1906×1243 を元に #1041 が寸法を決める） | S9-C1 | #1041 | 掲出可（表記必須） |
 | `ogp-ja` / `ogp-en` | LP | PNG 1200×630 | S0-C1 | #1041 | 不可 |
 | `ph-gallery-1` | Product Hunt (EN) | PNG 1270×760（価値） | S0-C1 | #1041 | 不可 |
 | `ph-gallery-2` | Product Hunt (EN) | PNG 1270×760（話題） | S1-C1 | #1041 | 不可 |
 | `ph-gallery-3` | Product Hunt (EN) | PNG 1270×760（会話） | S2-C2 | #1041 | 不可 |
 | `ph-gallery-4` | Product Hunt (EN) | PNG 1270×760（私的チャンネル） | S3-C2 | #1041 | 不可 |
 | `ph-icon` | Product Hunt (EN) | PNG 240×240 | なし（アイコン） | #1041 | 不可 |
-| `ph-video` | Product Hunt (EN) | MP4 1920×1080 30fps 30〜60秒 | S1〜S3（+ 末尾にS9-C1可） | #1042 | 末尾のCTA直前のみ可 |
+| `ph-video` | Product Hunt (EN) | MP4 1920×1080 30fps 30〜60秒 | S1〜S3 | #1042 | 不可 |
 | `note-header` | note (JA) | PNG 1280×670 | S0-C1 | #1041 | 不可 |
 | `note-body-1` / `-2` / `-3` | note (JA) | PNG 1280×720 | S1-C1 / S2-C2 / S3-C2 | #1041 | 不可 |
 | `x-card-ja` | X (JA) | PNG 1600×900 | S0-C1 | #1041 | 不可 |
-| `x-video-ja` | X (JA) | MP4 1600×900 30fps 20〜40秒 | S1〜S3 | #1042 | 末尾のCTA直前のみ可 |
+| `x-video-ja` | X (JA) | MP4 1600×900 30fps 20〜40秒 | S1〜S3 | #1042 | 不可 |
 
 ### Domeを含めてはならない出力
 
@@ -253,9 +257,11 @@ feedbackと運営・規約のリンクはAC-4の表に従う。
 - `ph-icon`
 - `note-header` / `note-body-1..3`
 - `x-card-ja`
-- すべての動画の冒頭（`ph-video` と `x-video-ja` の先頭5秒）
+- すべての動画（`lp-loop`、`ph-video`、`x-video-ja`）。2026-09-18 に、動画の末尾にも Dome を入れない方針へ変えた
 
-Domeを掲出してよいのは `lp-dome-teaser`、および `ph-video` / `x-video-ja` の末尾CTA直前の数秒に限る。いずれの掲出にも、AC-2の「必須の表記」を字幕またはキャプションとして必ず添える。
+Domeを掲出してよいのは `lp-dome-teaser` の静止画 1 枚だけとする。AC-2 の「必須の表記」と「画面の説明」をキャプションとして必ず添える。
+
+`lp-dome-teaser` の原素材は画面全体で、下端近くまでタイムラインが写っている。重ねるとタイムラインが隠れ、両立を示す狙いが弱まるため、「画面の説明」は画像に焼き込まず、画像の外（LP の本文側）に置く（2026-09-18 の操作者の判断）。文言は取り込んだ manifest の `externalCaption` に残る。「必須の表記」の置き方は、タイムラインを隠さないことを条件に #1041 が決める。
 
 ## AC-4: 公開先と導線
 
@@ -323,7 +329,7 @@ mobileからの閲覧では、ダウンロードの代わりに「PCで開くた
 | --- | --- | --- |
 | INVAR-1 | 未実装機能、架空の利用者数・推薦、デモを実績に見せる表現を含めない | AC-1「素材で使える主張と、その根拠」で使用可能な主張をF-1〜F-14に限定し、使わない表現を明示。デモ表記をAC-3の共通ルールで必須化 |
 | INVAR-2 | 既存の製品仕様と公開先を変更せず、#602・#603・#604は過去のClosed Issueとして参照する | 本書は文書のみを追加し、製品コード・DNS・既存公開物を変更しない。`api.kukuri.app` は参照のみ |
-| INVAR-3 | 開発者モード限定の実験機能を既定機能として描かず、掲出は末尾予告1件に限り、常に実験中・開発者モード限定の表記を伴う | AC-2でDome予告文と必須表記を固定し、AC-3で掲出可能な出力を `lp-dome-teaser` と2本の動画末尾に限定、非掲出出力を一覧化 |
+| INVAR-3 | 開発者モード限定の実験機能を既定機能として描かず、掲出は末尾予告1件に限り、常に実験中・開発者モード限定の表記を伴う | AC-2でDome予告文・必須表記・画面の説明を固定し、AC-3で掲出可能な出力を `lp-dome-teaser` の静止画 1 枚に限定、非掲出出力を一覧化 |
 
 ## 未確認・後続への引き継ぎ
 

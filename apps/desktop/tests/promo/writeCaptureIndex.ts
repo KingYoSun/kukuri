@@ -34,9 +34,16 @@ const NOT_CAPTURED_BY_MOCK = [
     cutId: 'c1',
     owner: '#1040',
     reason:
-      '開発者モード限定の実験機能 (Metaverse Dome)。#1039 では開発者モードを無効のまま撮るため、Dome は対象外',
+      '開発者モード限定の実験機能 (Metaverse Dome)。mock では撮らず、実機の静止画を ' +
+      'tools/promo/scripts/import-still.mjs で取り込む',
   },
 ];
+
+/**
+ * 開発者モードを有効にして撮ってよい場面。Dome の予告だけで、実機の素材に限る。
+ * これ以外の場面に開発者モードの素材が紛れたら索引を書かずに失敗させる (INVAR-3)。
+ */
+const DEVELOPER_MODE_SCENES = new Set(['s9-dome-teaser']);
 
 type ManifestFile = { version: number; manifest: Record<string, unknown> };
 
@@ -79,11 +86,15 @@ export default function writeCaptureIndex() {
     };
   });
 
-  // 開発者モードを有効にして撮った cut が紛れていたら、索引を書かずに失敗させる (INVAR-3)。
-  const developerModeCuts = cuts.filter((cut) => cut.developerMode === true);
-  if (developerModeCuts.length > 0) {
+  // 開発者モードの cut は、Dome 予告の場面の実機素材だけを認める (INVAR-3)。
+  const misplaced = cuts.filter(
+    (cut) =>
+      cut.developerMode === true &&
+      !(DEVELOPER_MODE_SCENES.has(String(cut.sceneId)) && cut.sourceMode === 'device')
+  );
+  if (misplaced.length > 0) {
     throw new Error(
-      `promo index: 開発者モードで撮った cut がある: ${developerModeCuts
+      `promo index: 開発者モードで撮った cut が、Dome 予告以外の場面にある: ${misplaced
         .map((cut) => `${String(cut.sceneId)}/${String(cut.cutId)}`)
         .join(', ')}`
     );
@@ -93,8 +104,8 @@ export default function writeCaptureIndex() {
     version: 1,
     generatedAt: new Date().toISOString(),
     note:
-      'browser mock で撮った原素材の索引。mock の画面は実ネットワーク同期の証拠ではない。' +
-      'Dome を含む開発者モード限定の機能は撮っていない。',
+      '原素材の索引。sourceMode が mock の画面は実ネットワーク同期の証拠ではない。' +
+      '開発者モード限定の機能は、Dome 予告の実機素材 (s9-dome-teaser) だけを含む。',
     cuts,
     notCapturedByMock: NOT_CAPTURED_BY_MOCK,
   };

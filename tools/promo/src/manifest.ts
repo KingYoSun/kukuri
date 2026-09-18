@@ -40,6 +40,10 @@ export type PromoManifest = {
   files: { video: string | null; still: string | null };
   /** files と同じ key の SHA-256。 */
   checksums: { video: string | null; still: string | null };
+  /** 画像に焼き込まず、画像の外（LP の本文など）に置く説明文。 */
+  externalCaption?: string | null;
+  /** 取り込んだ素材の由来の補足（撮影者からの許可や、画面の読み方の注意など）。 */
+  notes?: string[];
 };
 
 export const PROMO_MANIFEST_VERSION = 1;
