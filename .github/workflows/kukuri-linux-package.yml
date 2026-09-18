@@ -41,6 +41,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # #1160: debug build は行番号だけの debuginfo にし、Cache Volume の容量を減らす（Fast と同じ）。
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
 jobs:
   linux-appimage:
     # #1148: 検証の run は Namespace の Cache Volume で build する（Ubuntu 24.04 でも配布物の
@@ -95,7 +99,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Package contracts
         run: |
-          cargo test --locked -p xtask
+          # harness は package の検証に使わない。依存 749 crate の debug build を避ける（#1160）。
+          cargo test --locked -p xtask --no-default-features
           python3 scripts/release/test_appimage_runtime_inventory.py
           python3 scripts/release/test_native_compliance.py
           python3 scripts/release/test_deb_package.py
@@ -130,11 +135,11 @@ jobs:
           '
           # Cache Volume に前回の bundle が残っていると、後続の glob が複数の版に当たる。
           rm -rf apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
-          cargo xtask desktop-package
+          cargo xtask-lite desktop-package
           bundle=apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage
           bash xtask/tests/appimage/gio-isolation.sh "$bundle/kukuri.AppDir"
           printf '%s\n' "$TAURI_UPDATER_PUBLIC_KEY" > "$bundle/test-updater-key.pub"
-          KUKURI_APPIMAGE_TEST_DIR="$PWD/$bundle" cargo test --locked -p xtask \
+          KUKURI_APPIMAGE_TEST_DIR="$PWD/$bundle" cargo test --locked -p xtask --no-default-features \
             appimage::tests::signed_appimage_accepts_only_matching_bundle_and_key -- --ignored
           printf '%s\n' "$SIGNING_MODE" > "$bundle/signing-mode.txt"
           git rev-parse HEAD > "$bundle/source-commit.txt"
@@ -225,3 +230,5 @@ jobs:
         run: |
           rm -rf apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
           cargo xtask-lite ci-prune-target
+          # 保存量が profile の上限（20 GB）を超えると cache はリセットされる（#1160）。
+          du -sh ~/.cargo/registry ~/.cargo/git target apps/desktop/src-tauri/target 2>/dev/null || true
