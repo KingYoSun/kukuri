@@ -235,25 +235,39 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # #1122: smoke が通った image だけを GHCR へ出す。build し直さず、書き出した
-      # OCI layout の manifest（attestation を含む）をそのまま push する。
+      # OCI layout の manifest（attestation を含む）をそのまま複製する。runner の
+      # buildx（v0.32.1）は imagetools の source に oci-layout を取れないため regctl を使う。
+      - name: Install regctl
+        if: ${{ steps.meta.outputs.push == 'true' }}
+        shell: bash
+        env:
+          REGCTL_VERSION: v0.11.6
+          REGCTL_SHA256: 8e0e62a497fcdb8048d18aa927a139613176ba0531f412bc541044e28f9856bd
+        run: |
+          set -euo pipefail
+          url="https://github.com/regclient/regclient/releases/download/${REGCTL_VERSION}/regctl-linux-amd64"
+          curl -fsSL -o "${RUNNER_TEMP}/regctl" "$url"
+          echo "${REGCTL_SHA256}  ${RUNNER_TEMP}/regctl" | sha256sum --check --strict -
+          chmod +x "${RUNNER_TEMP}/regctl"
+          "${RUNNER_TEMP}/regctl" version --format '{{ .VCSTag }}'
+
       - name: Push images
         if: ${{ steps.meta.outputs.push == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
+          cd "${RUNNER_TEMP}/cn-images-out"
           for image in kukuri-cn-user-api kukuri-cn-iroh-relay kukuri-cn-cli kukuri-cn-indexer; do
-            layout="${RUNNER_TEMP}/cn-images-out/${image}"
-            digest=$(jq -r '.manifests[0].digest' "${layout}/index.json")
+            digest=$(jq -r '.manifests[0].digest' "${image}/index.json")
             if [[ -z "$digest" || "$digest" == "null" ]]; then
               echo "::error::${image}: OCI layout の digest を読めない"
               exit 1
             fi
-            tag_args=()
             while read -r tag; do
-              [[ -n "$tag" ]] && tag_args+=(--tag "$tag")
+              [[ -z "$tag" ]] && continue
+              echo "pushing ${image} (${digest}) -> ${tag}"
+              "${RUNNER_TEMP}/regctl" image copy "ocidir://${image}@${digest}" "$tag"
             done < "${RUNNER_TEMP}/cn-image-tags/${image}"
-            echo "pushing ${image} (${digest}) -> ${tag_args[*]}"
-            docker buildx imagetools create "${tag_args[@]}" "oci-layout://${layout}@${digest}"
           done
 
       - name: Image summary
