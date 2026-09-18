@@ -13,10 +13,10 @@ LP は依存もビルドも無い静的ファイルで、`apps/lp/public` をそ
 
 ## 画像を作り直す
 
-画面の静止画と OGP は、撮影済みの原素材から作る。撮影と実機の静止画の取り込みは [告知素材の制作 runbook](promo-production.md) を参照する。
+画面の静止画（幅違いの版を含む）と OGP は、撮影済みの原素材から作る。撮影と実機の静止画の取り込み、出力の設定は [告知素材の制作 runbook](promo-production.md) の「媒体別の静止画を作る」を参照する。LP の分だけ作るときは id で絞る。
 
 ```bash
-cd tools/promo && node scripts/lp-assets.mjs
+cd tools/promo && node scripts/render-stills.mjs lp- ogp-
 ```
 
 ## 手元で確認する

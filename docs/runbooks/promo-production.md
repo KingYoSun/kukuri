@@ -38,9 +38,15 @@ promo-artifacts/
       video.webm                              録画（VP8, viewport と同解像度）
       manifest.json                           原素材の由来（version 1）
       props.json                              Remotion へ渡す props
+  stills/                                     媒体別の静止画（Product Hunt・note・X）と出力一覧
+    index.json / outputs.md                   寸法・形式・locale・掲載順・alt・説明・checksum・原素材・Dome の有無
+    review.html                               縮小表示で確かめるためのページ（任意）
+  brand/                                      静止画に使うアプリのアイコンの写し
   renders/                                    Remotion の出力（PNG / MP4）
   playwright-output/                          Playwright 自身の artifact
 ```
+
+LP が配信する画像（画面の静止画・幅違いの版・OGP）は `apps/lp/public/assets/screens/` に出し、git で管理する。
 
 同じ場面を言語・テーマ違いで撮っても互いに上書きしないよう、カットの下を `<locale>-<theme>` で分ける（例: `captures/s3-private-channel/c3/ja-dark/`）。
 
@@ -148,9 +154,38 @@ cd tools/promo && npx pnpm@10.16.1 studio --props=../../promo-artifacts/captures
 
 ## 4. 静止画を出す
 
+1 カットだけを確かめるときは、原素材の props をそのまま渡す。
+
 ```bash
 cd tools/promo && npx pnpm@10.16.1 still SceneStill ../../promo-artifacts/renders/<出力名>.png --props=../../promo-artifacts/captures/<sceneId>/<cutId>/<locale>-<theme>/props.json
 ```
+
+### 媒体別の静止画を作る
+
+LP・OGP・Product Hunt・note・X の画像は、`tools/promo/presets/stills.json` の固定出力一覧から一括で作る（#1041）。
+
+```bash
+cd tools/promo && node scripts/render-stills.mjs
+```
+
+id の先頭一致で絞れる（例: `node scripts/render-stills.mjs ph- note-`）。
+
+| composition | 用途 |
+| --- | --- |
+| `SceneStill` | LP の画面。原素材に「デモ画面」「実機」の表記と、実験機能なら必須の表記を重ねる。字幕は焼き込まない。`variants` の幅で縮小版も作る |
+| `PromoStill` | OGP・Product Hunt・note・X。`layout` は `split`（文字と画面を左右に並べる）、`header`（見出し中心）、`icon`（アイコンだけ）。画面は原素材を `crop` の範囲で切り抜いて拡大するだけで、UI を作り直さない |
+
+preset の主な項目は、寸法（`width`・`height`）、原素材（`capture`）、切り抜き（`crop`、原素材 1600×1000 の座標）、文言（`eyebrow`・`headline`・`subhead`・`footer`）、掲載順（`order`）、`alt`、説明（`description`）。日本語の見出しは文節で折り返し、区切りたい位置があれば文言に `\n` を入れる。
+
+スクリプトは次のときに失敗し、失敗した画像を完成扱いにしない。
+
+| 条件 | 結果 |
+| --- | --- |
+| 文字が枠からあふれる | `promo still: 文字が枠からあふれている (...)`。文言を短くするか寸法を見直す |
+| 原素材が無い | `render-stills: <id>: 原素材が無い (...)`。先に撮影または取り込みを行う |
+| Dome の原素材を `lp-dome-teaser` 以外に使う | `render-stills: Dome の原素材を lp-dome-teaser 以外で使っている: <id>`。何も出力しない |
+
+出力一覧は `promo-artifacts/stills/index.json` と `outputs.md` に書かれる。寸法は制作時の preset なので、投稿の直前に各媒体の現行の要件を確かめる。
 
 ## 5. 動画を出す
 
