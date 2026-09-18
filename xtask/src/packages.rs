@@ -1,12 +1,10 @@
-use std::process::Command;
-
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 const CN_LANE_METADATA_PATH: [&str; 2] = ["kukuri", "cn-lane"];
 
 pub(crate) fn cn_packages() -> Result<Vec<String>> {
-    let output = Command::new("cargo")
+    let output = crate::child_command("cargo")
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(crate::root_dir())
         .output()

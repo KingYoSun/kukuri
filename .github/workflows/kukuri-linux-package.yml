@@ -1,6 +1,23 @@
 name: Kukuri Linux Package
 
+# PR の Actions cache は同じ PR 内からしか読めない。main への push でも走らせ、全 PR が
+# restore できる main の cache を作る（保存するのは main の run だけ）。
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kukuri-linux-package.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'xtask/**'
+      - 'crates/**'
+      - 'apps/desktop/**'
+      - 'scripts/release/*appimage_runtime_inventory.py'
+      - 'scripts/release/release_assets.py'
+      - 'scripts/release/native*'
+      - 'scripts/release/test_native_compliance.py'
+      - 'scripts/release/*deb*'
   pull_request:
     paths:
       - '.github/workflows/kukuri-linux-package.yml'
@@ -84,6 +101,8 @@ jobs:
           workspaces: |
             . -> target
             apps/desktop/src-tauri -> target
+          # PR や release tag の cache は他の run から読めず、10 GB の上限を圧迫するだけなので保存しない。
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
