@@ -201,8 +201,17 @@ jobs:
           test "${#debs[@]}" -eq 1
           export KUKURI_DEB_UPDATER_BUNDLE="${debs[0]}"
           export KUKURI_DEB_UPDATER_SIGNATURE="${debs[0]}.sig"
-          cargo test --locked --release --target x86_64-unknown-linux-gnu \
-            --manifest-path apps/desktop/src-tauri/Cargo.toml --test updater_install -- --ignored
+          # updater は置換対象と一時 directory の st_dev が一致する場所を退避先に選ぶ。Namespace の
+          # runner の root filesystem は同じ directory 内でも file と directory の st_dev が食い違い、
+          # 退避先が見つからない（TempDirNotOnSameMountPoint、#1148）。試験の fixture は tmpfs に置く。
+          # compile の一時ファイルまで tmpfs に載せないよう、build と実行を分ける。
+          test_args=(--locked --release --target x86_64-unknown-linux-gnu
+            --manifest-path apps/desktop/src-tauri/Cargo.toml --test updater_install)
+          cargo test "${test_args[@]}" --no-run
+          test "$(stat -f -c %T /dev/shm)" = tmpfs
+          fixture_tmp=$(mktemp -d -p /dev/shm kukuri-updater.XXXXXX)
+          TMPDIR="$fixture_tmp" cargo test "${test_args[@]}" -- --ignored
+          rm -rf -- "$fixture_tmp"
       - name: Keep verified artifacts (no Release publication)
         uses: actions/upload-artifact@v4
         with:
