@@ -654,13 +654,27 @@ test('post card opens a custom reaction context menu and keeps the reaction popo
   await user.click(screen.getAllByRole('button', { name: /👍/ })[0]);
   expect(onToggleReaction).toHaveBeenNthCalledWith(1, view.post, { kind: 'emoji', emoji: '👍' });
 
-  const customReactionChip = screen.getByAltText(customAsset.search_key).closest('button');
-  if (!(customReactionChip instanceof HTMLButtonElement)) {
-    throw new Error('custom reaction chip not found');
-  }
-  expect(customReactionChip).toHaveAccessibleName(/party-parrot/i);
+  const customReactionChip = screen.getByRole('button', {
+    name: `${customAsset.search_key} 1`,
+  });
+  expect(within(customReactionChip).queryByText(customAsset.search_key)).not.toBeInTheDocument();
+  expect(customReactionChip).toHaveAttribute('aria-label', `${customAsset.search_key} 1`);
+  expect(customReactionChip).toHaveAttribute('data-tooltip', customAsset.search_key);
+  expect(customReactionChip).toHaveAccessibleName(`${customAsset.search_key} 1`);
   expect(customReactionChip).not.toHaveAccessibleName(new RegExp(customAsset.asset_id, 'i'));
   expect(screen.queryByText(customAsset.asset_id.slice(0, 6))).not.toBeInTheDocument();
+
+  await user.hover(customReactionChip);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(customAsset.search_key);
+  await user.unhover(customReactionChip);
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+
+  customReactionChip.focus();
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(customAsset.search_key);
+  customReactionChip.blur();
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
 
   fireEvent.contextMenu(customReactionChip);
   await user.click(screen.getByRole('menuitem', { name: 'Copy hash' }));
@@ -712,6 +726,64 @@ test('post card opens a custom reaction context menu and keeps the reaction popo
   expect(onToggleReaction).toHaveBeenNthCalledWith(3, view.post, {
     kind: 'custom_asset',
     asset: bookmarkedAsset,
+  });
+});
+
+test('post card keeps an unresolved custom reaction identifiable without showing its full name', async () => {
+  const user = userEvent.setup();
+  const onToggleReaction = vi.fn();
+  const customAsset = {
+    asset_id: 'unresolved-asset',
+    owner_pubkey: 'b'.repeat(64),
+    blob_hash: 'blob-unresolved',
+    search_key: 'very-long-custom-reaction-name',
+    mime: 'image/png',
+    bytes: 128,
+    width: 128,
+    height: 128,
+  };
+  const view = createView({
+    post: {
+      ...createView().post,
+      reaction_summary: [
+        {
+          reaction_key_kind: 'custom_asset',
+          normalized_reaction_key: `custom_asset:${customAsset.asset_id}`,
+          emoji: null,
+          custom_asset: customAsset,
+          count: 3,
+        },
+      ],
+      my_reactions: [],
+    },
+  });
+
+  render(
+    <PostCard
+      view={view}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+      onToggleReaction={onToggleReaction}
+    />
+  );
+
+  const customReactionChip = screen.getByRole('button', {
+    name: `${customAsset.search_key} 3`,
+  });
+  expect(within(customReactionChip).queryByText(customAsset.search_key)).not.toBeInTheDocument();
+  expect(within(customReactionChip).getByText(customAsset.search_key.slice(0, 2))).toHaveAttribute(
+    'aria-hidden',
+    'true'
+  );
+  expect(customReactionChip).toHaveAttribute('data-tooltip', customAsset.search_key);
+
+  await user.hover(customReactionChip);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(customAsset.search_key);
+  await user.click(customReactionChip);
+  expect(onToggleReaction).toHaveBeenCalledWith(view.post, {
+    kind: 'custom_asset',
+    asset: customAsset,
   });
 });
 
