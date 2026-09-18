@@ -1,6 +1,6 @@
 import { Composition } from 'remotion';
 
-import { Ogp } from './compositions/Ogp';
+import { PromoStill, parsePromoStillProps } from './compositions/PromoStill';
 import { SceneClip } from './compositions/SceneClip';
 import { SceneStill } from './compositions/SceneStill';
 import { DEFAULT_FPS, clipDurationInFrames, parseSceneProps } from './props';
@@ -34,11 +34,16 @@ export function RemotionRoot() {
         durationInFrames={1}
       />
       <Composition
-        id='Ogp'
-        component={Ogp}
+        id='PromoStill'
+        component={PromoStill}
         defaultProps={{}}
-        width={1200}
-        height={630}
+        // 媒体ごとの寸法は preset (tools/promo/presets/) が props で渡す。
+        calculateMetadata={({ props }: { props: Record<string, unknown> }) => {
+          const parsed = parsePromoStillProps(props);
+          return { width: parsed.width, height: parsed.height, fps: DEFAULT_FPS, durationInFrames: 1 };
+        }}
+        width={1270}
+        height={760}
         fps={DEFAULT_FPS}
         durationInFrames={1}
       />

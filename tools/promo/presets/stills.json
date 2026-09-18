@@ -1,0 +1,430 @@
+{
+  "$comment": "媒体別の静止画の固定出力一覧 (#1041)。寸法は制作時の preset で、投稿の直前に各媒体の現行要件を確かめる。capture は promo-artifacts/captures/<capture>/<locale>-dark の原素材。crop は原素材 (1600x1000) の座標。Dome の原素材 (s9-dome-teaser) を使ってよいのは lp-dome-teaser だけで、render-stills.mjs が検査する。",
+  "outputs": [
+    {
+      "id": "lp-hero-ja",
+      "media": "lp",
+      "order": 1,
+      "locale": "ja",
+      "composition": "SceneStill",
+      "capture": "s0-hero/c1",
+      "file": "apps/lp/public/assets/screens/hero-ja.png",
+      "variants": [
+        800
+      ],
+      "alt": "kukuri のデモ画面。左から、話題「dev」のタイムライン、プロフィール、コミュニティインデックスの検索のカラムが並ぶ。タイムラインには、デモ参加者の会話が並んでいる。",
+      "description": "LP ① Hero の画面"
+    },
+    {
+      "id": "lp-hero-en",
+      "media": "lp",
+      "order": 1,
+      "locale": "en",
+      "composition": "SceneStill",
+      "capture": "s0-hero/c1",
+      "file": "apps/lp/public/assets/screens/hero-en.png",
+      "variants": [
+        800
+      ],
+      "alt": "A kukuri demo screen. From the left: the Timeline column for the topic dev, a Profile column, and Community Index search. The timeline shows a conversation between demo participants.",
+      "description": "LP 1. Hero screen"
+    },
+    {
+      "id": "lp-scene1-ja",
+      "media": "lp",
+      "order": 2,
+      "locale": "ja",
+      "composition": "SceneStill",
+      "capture": "s1-topic/c1",
+      "file": "apps/lp/public/assets/screens/scene1-ja.png",
+      "variants": [
+        800
+      ],
+      "alt": "話題「general」のタイムラインのデモ画面。カラム上部で話題を切り替えられる。",
+      "description": "LP ② 場面 1「話題を選ぶ」"
+    },
+    {
+      "id": "lp-scene1-en",
+      "media": "lp",
+      "order": 2,
+      "locale": "en",
+      "composition": "SceneStill",
+      "capture": "s1-topic/c1",
+      "file": "apps/lp/public/assets/screens/scene1-en.png",
+      "variants": [
+        800
+      ],
+      "alt": "A demo timeline for the topic general. The topic can be switched at the top of the column.",
+      "description": "LP 2. Scene 1, Pick a topic"
+    },
+    {
+      "id": "lp-scene2-ja",
+      "media": "lp",
+      "order": 3,
+      "locale": "ja",
+      "composition": "SceneStill",
+      "capture": "s2-conversation/c2",
+      "file": "apps/lp/public/assets/screens/scene2-ja.png",
+      "variants": [
+        800
+      ],
+      "alt": "話題「dev」で、デモ参加者のみなととふたばが会話しているタイムラインのデモ画面。最初の投稿にリアクションが付いている。",
+      "description": "LP ② 場面 2「公開で会話する」"
+    },
+    {
+      "id": "lp-scene2-en",
+      "media": "lp",
+      "order": 3,
+      "locale": "en",
+      "composition": "SceneStill",
+      "capture": "s2-conversation/c2",
+      "file": "apps/lp/public/assets/screens/scene2-en.png",
+      "variants": [
+        800
+      ],
+      "alt": "A demo timeline for the topic dev, where the demo participants Minato and Futaba are talking. The first post has reactions.",
+      "description": "LP 2. Scene 2, Talk in the open"
+    },
+    {
+      "id": "lp-scene3-ja",
+      "media": "lp",
+      "order": 4,
+      "locale": "ja",
+      "composition": "SceneStill",
+      "capture": "s3-private-channel/c2",
+      "file": "apps/lp/public/assets/screens/scene3-ja.png",
+      "variants": [
+        800
+      ],
+      "alt": "プライベートチャンネルを作る画面のデモ。チャンネル名「カラム配置の相談（デモ）」を入力し、公開範囲に「招待限定」を選んでいる。",
+      "description": "LP ② 場面 3「同じ話題の中で、小さな輪へ」"
+    },
+    {
+      "id": "lp-scene3-en",
+      "media": "lp",
+      "order": 4,
+      "locale": "en",
+      "composition": "SceneStill",
+      "capture": "s3-private-channel/c2",
+      "file": "apps/lp/public/assets/screens/scene3-en.png",
+      "variants": [
+        800
+      ],
+      "alt": "A demo of creating a private channel named Column layout chat (demo) with the Invite only audience.",
+      "description": "LP 2. Scene 3, Move into a smaller circle"
+    },
+    {
+      "id": "lp-dome-teaser",
+      "media": "lp",
+      "order": 5,
+      "locale": "ja",
+      "composition": "SceneStill",
+      "capture": "s9-dome-teaser/c1",
+      "file": "apps/lp/public/assets/screens/dome-teaser.png",
+      "variants": [
+        960
+      ],
+      "alt": "配布版の実機画面。左にタイムラインのカラム、右に Metaverse のカラムが同じ並びで表示され、Dome の中に白いアバターが立っている。",
+      "description": "LP ⑥ 開発中の実験機能の予告。必須の表記は画像内の帯と LP 本文、画面の説明は画像の外（LP 本文）"
+    },
+    {
+      "id": "ogp-ja",
+      "media": "ogp",
+      "order": 1,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1200,
+      "height": 630,
+      "layout": "header",
+      "capture": "s0-hero/c1",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1180,
+        "height": 1000
+      },
+      "file": "apps/lp/public/assets/screens/ogp-ja.png",
+      "headline": "話題からつながる、\nあなたの端末が\n起点のSNS",
+      "subhead": "話題を選び、公開で語り、同じ話題の中で小さな輪へ。",
+      "footer": "Builder Preview · Windows / Linux",
+      "alt": "kukuri のデモ画面。話題ごとのカラムに会話が並ぶ。",
+      "description": "LP 日本語版の OGP"
+    },
+    {
+      "id": "ogp-en",
+      "media": "ogp",
+      "order": 1,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 1200,
+      "height": 630,
+      "layout": "header",
+      "capture": "s0-hero/c1",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1180,
+        "height": 1000
+      },
+      "file": "apps/lp/public/assets/screens/ogp-en.png",
+      "headline": "A topic-first social app that starts on your device",
+      "subhead": "Pick a topic, talk in the open, move into a smaller circle.",
+      "footer": "Builder Preview · Windows / Linux",
+      "alt": "A kukuri demo screen with a conversation in a topic column.",
+      "description": "LP English OGP"
+    },
+    {
+      "id": "ph-gallery-1",
+      "media": "product-hunt",
+      "order": 1,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 1270,
+      "height": 760,
+      "layout": "split",
+      "capture": "s0-hero/c1",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 1000
+      },
+      "file": "promo-artifacts/stills/product-hunt/ph-gallery-1.png",
+      "eyebrow": "Builder Preview for Windows and Linux",
+      "headline": "A topic-first social app that starts on your device",
+      "subhead": "Pick a topic, talk in the open, then move into a smaller circle inside the same topic.",
+      "footer": "kukuri.app",
+      "alt": "kukuri, a topic-first social app. A demo screen with topic, profile, and Community Index columns side by side.",
+      "description": "Gallery 1 (value). Readable on its own: what kukuri is and where it runs."
+    },
+    {
+      "id": "ph-gallery-2",
+      "media": "product-hunt",
+      "order": 2,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 1270,
+      "height": 760,
+      "layout": "split",
+      "capture": "s1-topic/c1",
+      "crop": {
+        "x": 20,
+        "y": 0,
+        "width": 820,
+        "height": 820
+      },
+      "file": "promo-artifacts/stills/product-hunt/ph-gallery-2.png",
+      "eyebrow": "1 · Topics",
+      "headline": "Pick a topic",
+      "subhead": "Open a starter topic, or search topics and posts through the Community Index of a Community Node you consented to.",
+      "footer": "kukuri.app",
+      "alt": "A demo Timeline column for the topic general, with the topic picker at the top.",
+      "description": "Gallery 2 (topic)."
+    },
+    {
+      "id": "ph-gallery-3",
+      "media": "product-hunt",
+      "order": 3,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 1270,
+      "height": 760,
+      "layout": "split",
+      "capture": "s2-conversation/c2",
+      "crop": {
+        "x": 20,
+        "y": 0,
+        "width": 700,
+        "height": 700
+      },
+      "file": "promo-artifacts/stills/product-hunt/ph-gallery-3.png",
+      "eyebrow": "2 · Conversation",
+      "headline": "Talk in the open",
+      "subhead": "Post, reply, and keep the thread going. React, repost, quote, and bookmark from the same column.",
+      "footer": "kukuri.app",
+      "alt": "Demo participants Minato and Futaba talking in the topic dev, with reactions on the first post.",
+      "description": "Gallery 3 (conversation)."
+    },
+    {
+      "id": "ph-gallery-4",
+      "media": "product-hunt",
+      "order": 4,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 1270,
+      "height": 760,
+      "layout": "split",
+      "capture": "s3-private-channel/c2",
+      "crop": {
+        "x": 450,
+        "y": 50,
+        "width": 720,
+        "height": 720
+      },
+      "file": "promo-artifacts/stills/product-hunt/ph-gallery-4.png",
+      "eyebrow": "3 · Private channels",
+      "headline": "Move into a smaller circle, same topic",
+      "subhead": "Create or join a private channel from the Timeline column. Choose Invite only, Mutuals, or Mutuals+.",
+      "footer": "kukuri.app",
+      "alt": "Creating a private channel named Column layout chat (demo) with the Invite only audience.",
+      "description": "Gallery 4 (private channel)."
+    },
+    {
+      "id": "ph-icon",
+      "media": "product-hunt",
+      "order": 0,
+      "locale": "en",
+      "composition": "PromoStill",
+      "width": 240,
+      "height": 240,
+      "layout": "icon",
+      "icon": "brand/icon-256.png",
+      "file": "promo-artifacts/stills/product-hunt/ph-icon.png",
+      "alt": "kukuri icon",
+      "description": "Product Hunt の thumbnail。アプリのアイコン (apps/desktop/src-tauri/icons/128x128@2x.png、docs/ASSET_MANIFEST.json で管理) をそのまま使う"
+    },
+    {
+      "id": "note-header",
+      "media": "note",
+      "order": 0,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1280,
+      "height": 670,
+      "layout": "header",
+      "capture": "s0-hero/c1",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1180,
+        "height": 1000
+      },
+      "file": "promo-artifacts/stills/note/note-header.png",
+      "headline": "話題からつながる、\nあなたの端末が\n起点のSNS",
+      "subhead": "話題を選び、公開で語り、同じ話題の中で小さな輪へ。",
+      "footer": "Builder Preview · Windows / Linux",
+      "alt": "kukuri のデモ画面。話題ごとのカラムに会話が並ぶ。",
+      "description": "note 記事の見出し画像"
+    },
+    {
+      "id": "note-body-1",
+      "media": "note",
+      "order": 1,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1280,
+      "height": 720,
+      "layout": "split",
+      "capture": "s1-topic/c1",
+      "crop": {
+        "x": 20,
+        "y": 0,
+        "width": 820,
+        "height": 820
+      },
+      "file": "promo-artifacts/stills/note/note-body-1.png",
+      "eyebrow": "1 · 話題を選ぶ",
+      "headline": "話題を選ぶ",
+      "subhead": "最初から用意された話題を開くか、同意したコミュニティノードのコミュニティインデックスで、話題と投稿を検索します。",
+      "footer": "kukuri.app",
+      "alt": "話題「general」のタイムラインのデモ画面。カラム上部で話題を切り替えられる。",
+      "description": "note 本文 1 枚目（話題）"
+    },
+    {
+      "id": "note-body-2",
+      "media": "note",
+      "order": 2,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1280,
+      "height": 720,
+      "layout": "split",
+      "capture": "s2-conversation/c2",
+      "crop": {
+        "x": 20,
+        "y": 0,
+        "width": 700,
+        "height": 700
+      },
+      "file": "promo-artifacts/stills/note/note-body-2.png",
+      "eyebrow": "2 · 公開で会話する",
+      "headline": "公開で会話する",
+      "subhead": "投稿し、返信し、スレッドで続けます。リアクション、リポスト、引用、ブックマークも同じカラムで。",
+      "footer": "kukuri.app",
+      "alt": "話題「dev」で、デモ参加者のみなととふたばが会話しているデモ画面。最初の投稿にリアクションが付いている。",
+      "description": "note 本文 2 枚目（会話）"
+    },
+    {
+      "id": "note-body-3",
+      "media": "note",
+      "order": 3,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1280,
+      "height": 720,
+      "layout": "split",
+      "capture": "s3-private-channel/c2",
+      "crop": {
+        "x": 450,
+        "y": 50,
+        "width": 720,
+        "height": 720
+      },
+      "file": "promo-artifacts/stills/note/note-body-3.png",
+      "eyebrow": "3 · 小さな輪へ",
+      "headline": "同じ話題の中で、\n小さな輪へ",
+      "subhead": "タイムライン上部の「プライベートチャンネル」から作成・参加。招待限定・相互フォロー限定・相互フォロー+から範囲を選べます。",
+      "footer": "kukuri.app",
+      "alt": "プライベートチャンネルを作る画面のデモ。チャンネル名「カラム配置の相談（デモ）」を入力し、公開範囲に「招待限定」を選んでいる。",
+      "description": "note 本文 3 枚目（私的チャンネル）"
+    },
+    {
+      "id": "x-1-ja",
+      "media": "x",
+      "order": 1,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1920,
+      "height": 1080,
+      "layout": "split",
+      "capture": "s0-hero/c1",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1100,
+        "height": 1000
+      },
+      "file": "promo-artifacts/stills/x/x-1-ja.png",
+      "eyebrow": "Windows / Linux 向け Builder Preview",
+      "headline": "話題からつながる、\nあなたの端末が起点のSNS",
+      "subhead": "話題を選び、公開で語り、同じ話題の中で小さな輪へ移る。",
+      "footer": "kukuri.app",
+      "alt": "kukuri のデモ画面。話題、プロフィール、コミュニティインデックスのカラムが並ぶ。",
+      "description": "X 投稿 1 枚目（価値）"
+    },
+    {
+      "id": "x-2-ja",
+      "media": "x",
+      "order": 2,
+      "locale": "ja",
+      "composition": "PromoStill",
+      "width": 1920,
+      "height": 1080,
+      "layout": "split",
+      "capture": "s3-private-channel/c2",
+      "crop": {
+        "x": 450,
+        "y": 50,
+        "width": 720,
+        "height": 720
+      },
+      "file": "promo-artifacts/stills/x/x-2-ja.png",
+      "eyebrow": "話題の中の、小さな輪",
+      "headline": "同じ話題の中で、\n小さな輪へ",
+      "subhead": "公開の会話と同じ話題の中に、プライベートチャンネルを作れます。範囲は招待限定・相互フォロー限定・相互フォロー+から。",
+      "footer": "kukuri.app",
+      "alt": "プライベートチャンネルを作る画面のデモ。チャンネル名「カラム配置の相談（デモ）」を入力し、公開範囲に「招待限定」を選んでいる。",
+      "description": "X 投稿 2 枚目（私的チャンネル）"
+    }
+  ]
+}
