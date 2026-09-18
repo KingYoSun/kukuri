@@ -38,6 +38,18 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
     isVisiblePost,
     withCurrentRelationship,
   } = runtime;
+  // 新しく作る投稿の時刻。clockBase 未指定なら従来どおり連番そのもの。
+  const postedAt = () => (runtime.options?.clockBase ?? 0) + runtime.sequence;
+  // 自分が作った投稿には、実アプリと同じく自分のプロフィールの名前を載せる。
+  // myProfile は再代入されるので、作成のたびに runtime から読む。名前が未設定のときは
+  // 項目自体を載せず、従来の投稿と同じ形にする (null を明示すると既存の表示が変わる)。
+  const selfAuthor = () => {
+    const { name, display_name: displayName } = runtime.myProfile;
+    return {
+      ...(name != null ? { author_name: name } : {}),
+      ...(displayName != null ? { author_display_name: displayName } : {}),
+    };
+  };
 
   return {
     async createPost(topic, content, replyTo, attachments, channelRef = { kind: 'public' }) {
@@ -60,6 +72,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
           object_id: objectId,
           envelope_id: `envelope-${runtime.sequence}`,
           author_pubkey: syncStatus.local_author_pubkey,
+          ...selfAuthor(),
           following: false,
           followed_by: false,
           mutual: false,
@@ -68,7 +81,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
           content,
           content_status: 'Available',
           attachments: postAttachments,
-          created_at: runtime.sequence,
+          created_at: postedAt(),
           reply_to: replyTo ?? null,
           root_id: rootId,
           origin_topic_id: topic,
@@ -83,6 +96,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
             object_id: objectId,
             envelope_id: objectId,
             author_pubkey: syncStatus.local_author_pubkey,
+            ...selfAuthor(),
             following: false,
             followed_by: false,
             mutual: false,
@@ -91,7 +105,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
             content,
             content_status: 'Available',
             attachments: postAttachments,
-            created_at: runtime.sequence,
+            created_at: postedAt(),
             reply_to: replyTo ?? null,
             root_id: rootId,
             origin_topic_id: topic,
@@ -149,6 +163,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
         object_id: objectId,
         envelope_id: `envelope-${runtime.sequence}`,
         author_pubkey: syncStatus.local_author_pubkey,
+        ...selfAuthor(),
         following: false,
         followed_by: false,
         mutual: false,
@@ -157,7 +172,7 @@ export function createPostsMock(runtime: MockRuntime): PostsMock {
         content: normalizedCommentary ?? '',
         content_status: 'Available',
         attachments: [],
-        created_at: runtime.sequence,
+        created_at: postedAt(),
         reply_to: null,
         root_id: null,
         published_topic_id: topic,

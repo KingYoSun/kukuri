@@ -31,14 +31,18 @@ Remotion は個人および従業員3名以下の営利組織に Free License �
 
 ```
 promo-artifacts/
-  captures/<sceneId>/<cutId>/   撮影の原素材
-    still.png                   静止画
-    video.webm                  録画（VP8, viewport と同解像度）
-    manifest.json               原素材の由来（version 1）
-    props.json                  Remotion へ渡す props
-  renders/                      Remotion の出力（PNG / MP4）
-  playwright-output/            Playwright 自身の artifact
+  captures/
+    index.json                                原素材全体の索引（撮影のたびに作り直す）
+    <sceneId>/<cutId>/<locale>-<theme>/       1 カットの原素材
+      still.png                               静止画
+      video.webm                              録画（VP8, viewport と同解像度）
+      manifest.json                           原素材の由来（version 1）
+      props.json                              Remotion へ渡す props
+  renders/                                    Remotion の出力（PNG / MP4）
+  playwright-output/                          Playwright 自身の artifact
 ```
+
+同じ場面を言語・テーマ違いで撮っても互いに上書きしないよう、カットの下を `<locale>-<theme>` で分ける（例: `captures/s3-private-channel/c3/ja-dark/`）。
 
 既存の `apps/desktop/test-results/` と `tests/playwright/__screenshots__/`（視覚回帰 baseline）には書き込まない。
 
@@ -79,6 +83,43 @@ cd apps/desktop && KUKURI_PROMO_SOURCE_RELEASE=v0.2.5-preview.3 npx pnpm@10.16.1
 
 `KUKURI_PROMO_SOURCE_COMMIT` を指定しない場合は、作業ツリーの `git rev-parse HEAD` を記録する。
 
+### 撮る場面
+
+`tests/promo/` には次の spec がある。
+
+| spec | 内容 |
+| --- | --- |
+| `scenes.spec.ts` | brief の 3 場面（S0 Hero 候補、S1 話題を選ぶ、S2 公開で会話する、S3 私的チャンネルへ移る）を JA / EN で撮る。計 9 カット × 2 言語 |
+| `guards.spec.ts` | 撮影の guard が、不完全な画面を素材として採用しないことを確かめる。撮影の出力には書かない |
+| `smoke.spec.ts` | 制作環境が通ることを確かめる最小経路（#1038）。素材ではない |
+
+特定の spec や場面だけを撮るときは、ファイル名や `-g` で絞る。
+
+```bash
+cd apps/desktop && npx pnpm@10.16.1 exec playwright test --config=playwright.promo.config.ts scenes.spec.ts -g "S3"
+```
+
+場面の台本と scene ID の対応は [brief の shot list](../progress/2026-09-15-promo-lp-brief.md) を正本とする。撮影の手順と入力は次の 2 つにまとまっている。
+
+- `tests/promo/fixtures/demoStory.ts`: 合成のデモ物語（話題 `kukuri:topic:dev`、デモ参加者 2 名、会話、時刻）。実在の利用者のデータは使わない
+- `tests/promo/fixtures/captureScene.ts`: 1 カットの撮影手順と guard
+
+撮影は開発者モードを無効のまま行う。Dome などの実験機能の場面、および 2 台の実機間の実同期は browser mock では撮らない（#1040 が実機で撮る）。どの shot を撮っていないかは `captures/index.json` の `notCapturedByMock` に理由付きで残る。
+
+### 不完全な画面を採用しない
+
+撮影の直前に次を確かめ、満たさなければ撮影を失敗させる。
+
+| 確認 | 失敗の条件 |
+| --- | --- |
+| フォント | 15 秒以内に `document.fonts.status` が `loaded` にならない |
+| 画像 | 読み込みが終わっていない、またはデコードできない画像がある |
+| 文字 | 画面に文字が 1 つも無い |
+| 文字化け | 置換文字（U+FFFD）が出ている |
+| 画面の安定 | 150ms 間隔の連続 2 回の撮影が、3 秒以内に一度も一致しない |
+
+静止画は動きを止め、入力欄のカーソルを隠し、画面が落ち着いてから撮る。そのため同じ fixture・設定で撮り直すと、静止画はバイト単位で同じになる（#1039 で 3 回撮影して 18 カットすべて一致を確認した）。操作の録画は実時間で動くので、撮り直すと細部が変わる。
+
 ### 撮影が途中で失敗したとき
 
 そのまま同じコマンドを再実行する。対象ディレクトリは作り直されるため、古い素材が新しい撮影として残ることはない。`video.webm` が空の場合は撮影が失敗として報告され、manifest は書かれない。
@@ -86,19 +127,19 @@ cd apps/desktop && KUKURI_PROMO_SOURCE_RELEASE=v0.2.5-preview.3 npx pnpm@10.16.1
 ## 3. 編集を確認する（Remotion Studio）
 
 ```bash
-cd tools/promo && npx pnpm@10.16.1 studio --props=../../promo-artifacts/captures/smoke/c1/props.json
+cd tools/promo && npx pnpm@10.16.1 studio --props=../../promo-artifacts/captures/smoke/c1/ja-dark/props.json
 ```
 
 ## 4. 静止画を出す
 
 ```bash
-cd tools/promo && npx pnpm@10.16.1 still SceneStill ../../promo-artifacts/renders/<出力名>.png --props=../../promo-artifacts/captures/<sceneId>/<cutId>/props.json
+cd tools/promo && npx pnpm@10.16.1 still SceneStill ../../promo-artifacts/renders/<出力名>.png --props=../../promo-artifacts/captures/<sceneId>/<cutId>/<locale>-<theme>/props.json
 ```
 
 ## 5. 動画を出す
 
 ```bash
-cd tools/promo && npx pnpm@10.16.1 render SceneClip ../../promo-artifacts/renders/<出力名>.mp4 --props=../../promo-artifacts/captures/<sceneId>/<cutId>/props.json
+cd tools/promo && npx pnpm@10.16.1 render SceneClip ../../promo-artifacts/renders/<出力名>.mp4 --props=../../promo-artifacts/captures/<sceneId>/<cutId>/<locale>-<theme>/props.json
 ```
 
 出力は H.264 / yuv420p / bt709 / 30fps。寸法と長さは props の manifest（`viewport` と `clip`）から決まるので、composition 側に固定値を持たせない。
@@ -165,7 +206,8 @@ props は必ず JSON ファイルで渡す（`--props=<path>`）。inline の JS
 - 原素材は `promo-artifacts/captures/` に置き、git へは commit しない。大きな動画を通常の git 履歴へ積まない。
 - 各 cut の `manifest.json` に SHA-256 があるので、別の場所へ退避したファイルの同一性を確認できる。
 - 期限付きの CI artifact を唯一の保管先にしない。採用した素材は、撮影者が保持する別の保管先（外付けドライブ・オブジェクトストレージなど）へ退避し、`manifest.json` を一緒に保管する。
-- 退避先から戻すときは `captures/<sceneId>/<cutId>/` の構造ごと戻し、checksum を照合してから render する。
+- 退避先から戻すときは `captures/<sceneId>/<cutId>/<locale>-<theme>/` の構造ごと戻し、checksum を照合してから render する。
+- どの原素材がどの場面・言語で、どの commit / release から撮ったかは `captures/index.json` で一覧できる。
 - 原素材を失った場合は、manifest の `sourceCommit` / `sourceRelease` / `locale` / `theme` / `viewport` を同じにして撮り直す。
 
 ## 関連
