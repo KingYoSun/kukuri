@@ -330,6 +330,13 @@ mod tests {
                 Ok(kukuri_blob_service::BlobStatus::Missing)
             }
 
+            async fn local_blob_status(
+                &self,
+                _hash: &BlobHash,
+            ) -> anyhow::Result<kukuri_blob_service::BlobStatus> {
+                Ok(kukuri_blob_service::BlobStatus::Missing)
+            }
+
             async fn import_peer_ticket(&self, _ticket: &str) -> anyhow::Result<()> {
                 Ok(())
             }

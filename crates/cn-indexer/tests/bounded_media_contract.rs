@@ -37,6 +37,9 @@ impl BlobService for ObservedBoundedBlob {
     async fn blob_status(&self, _: &BlobHash) -> anyhow::Result<BlobStatus> {
         Ok(BlobStatus::Missing)
     }
+    async fn local_blob_status(&self, _: &BlobHash) -> anyhow::Result<BlobStatus> {
+        Ok(BlobStatus::Missing)
+    }
     async fn import_peer_ticket(&self, _: &str) -> anyhow::Result<()> {
         Ok(())
     }

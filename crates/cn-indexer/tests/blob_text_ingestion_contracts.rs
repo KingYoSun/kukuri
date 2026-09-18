@@ -211,6 +211,10 @@ impl BlobService for SwitchableBlobService {
         })
     }
 
+    async fn local_blob_status(&self, hash: &kukuri_core::BlobHash) -> Result<BlobStatus> {
+        self.blob_status(hash).await
+    }
+
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
         Ok(())
     }

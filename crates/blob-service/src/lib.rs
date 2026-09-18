@@ -49,6 +49,13 @@ pub trait BlobService: Send + Sync {
         Ok(())
     }
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
+    /// ローカルの有無だけを返す状態確認（#1152）。remote から取得せず、bytes も読まない。
+    ///
+    /// `blob_status` はローカルに無い blob を remote から取得・永続化して確かめる。投稿添付の
+    /// 状態確認でそれを使うと、成人向け表示の取得ゲート（ADR 0046 §4 / §6.2）を迂回するため、
+    /// 表示用 projection の状態はこちらを使う。既定実装を置かないのは、`blob_status` への委譲で
+    /// 黙って remote 取得へ戻る実装を作らないため。
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
     async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {
         Ok(())
@@ -125,6 +132,17 @@ impl IrohBlobService {
         Ok(())
     }
 
+    async fn is_pinned(&self, hash: &BlobHash) -> Result<bool> {
+        Ok(self.pinned.read().await.contains(hash.as_str())
+            || self
+                .node
+                .blobs()
+                .tags()
+                .get(metaverse_pin_tag(hash))
+                .await?
+                .is_some())
+    }
+
     async fn available_fetch_peer_ids(&self) -> Vec<String> {
         self.peers.available_peer_ids().await
     }
@@ -190,6 +208,11 @@ impl BlobService for MemoryBlobService {
             Some(_) => BlobStatus::Available,
             None => BlobStatus::Missing,
         })
+    }
+
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        // in-memory 実装に remote は無いため、`blob_status` と同じくローカル参照だけで決まる。
+        self.blob_status(hash).await
     }
 
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
@@ -313,20 +336,24 @@ impl BlobService for IrohBlobService {
     }
 
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
-        if self.pinned.read().await.contains(hash.as_str())
-            || self
-                .node
-                .blobs()
-                .tags()
-                .get(metaverse_pin_tag(hash))
-                .await?
-                .is_some()
-        {
+        if self.is_pinned(hash).await? {
             return Ok(BlobStatus::Pinned);
         }
         Ok(match self.fetch_blob(hash).await? {
             Some(_) => BlobStatus::Available,
             None => BlobStatus::Missing,
+        })
+    }
+
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        if self.is_pinned(hash).await? {
+            return Ok(BlobStatus::Pinned);
+        }
+        let iroh_hash = iroh_blobs::Hash::from_str(hash.as_str())?;
+        Ok(if self.node.blobs().blobs().has(iroh_hash).await? {
+            BlobStatus::Available
+        } else {
+            BlobStatus::Missing
         })
     }
 
@@ -672,6 +699,81 @@ mod tests {
         let payload = receiver.fetch_blob(&stored.hash).await.expect("fetch blob");
 
         assert_eq!(payload, Some(b"video-remote-roundtrip".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn local_blob_status_does_not_fetch_or_persist_remote_blob() {
+        // #1152: 表示用の状態確認はローカルの有無だけを返し、remote peer が持つ blob を
+        // 取得・永続化しない(`blob_status` は remote 取得で確かめるため挙動が異なる)。
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
+
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+            .await
+            .expect("sender node");
+        let receiver_node =
+            IrohDocsNode::persistent_with_config(receiver_dir.path(), config.clone())
+                .await
+                .expect("receiver node");
+
+        let sender = IrohBlobService::new(sender_node.clone());
+        let receiver = IrohBlobService::new(receiver_node.clone());
+        let ticket = loopback_ticket(sender_node.endpoint(), &config);
+        receiver
+            .import_peer_ticket(&ticket)
+            .await
+            .expect("import ticket");
+
+        let stored = sender
+            .put_blob(b"remote-only-attachment".to_vec(), "image/png")
+            .await
+            .expect("put blob");
+        let hash = iroh_blobs::Hash::from_str(stored.hash.as_str()).expect("hash");
+
+        assert_eq!(
+            receiver
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("receiver local status"),
+            BlobStatus::Missing
+        );
+        assert!(
+            receiver_node.blobs().blobs().get_bytes(hash).await.is_err(),
+            "local status check must not persist the remote blob"
+        );
+
+        assert_eq!(
+            sender
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("sender local status"),
+            BlobStatus::Available
+        );
+        sender.pin_blob(&stored.hash).await.expect("pin blob");
+        assert_eq!(
+            sender
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("pinned local status"),
+            BlobStatus::Pinned
+        );
+
+        // 取得を伴う `blob_status` とは区別される: remote から取得した後はローカルに在る。
+        assert_eq!(
+            receiver
+                .blob_status(&stored.hash)
+                .await
+                .expect("receiver fetching status"),
+            BlobStatus::Available
+        );
+        assert_eq!(
+            receiver
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("receiver local status after fetch"),
+            BlobStatus::Available
+        );
     }
 
     #[tokio::test]

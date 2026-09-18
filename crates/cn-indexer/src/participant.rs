@@ -368,6 +368,10 @@ mod tests {
             unreachable!("not used by this contract test")
         }
 
+        async fn local_blob_status(&self, _hash: &BlobHash) -> Result<BlobStatus> {
+            unreachable!("not used by this contract test")
+        }
+
         async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
             unreachable!("not used by this contract test")
         }

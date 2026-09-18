@@ -40,6 +40,13 @@ impl BlobService for SelectivelyMissingBlobService {
         self.inner.blob_status(hash).await
     }
 
+    async fn local_blob_status(&self, hash: &kukuri_core::BlobHash) -> Result<BlobStatus> {
+        if self.missing.lock().await.contains(hash.as_str()) {
+            return Ok(BlobStatus::Missing);
+        }
+        self.inner.local_blob_status(hash).await
+    }
+
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         self.inner.import_peer_ticket(ticket).await
     }

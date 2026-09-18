@@ -1,4 +1,5 @@
 use super::*;
+use kukuri_core::BlobHash;
 use kukuri_store::NotificationStore;
 
 #[tokio::test]
@@ -381,6 +382,235 @@ async fn advisory_labeled_media_respects_adult_display_gate() {
         .find(|post| post.object_id == object_id)
         .expect("advisory target post after registration");
     assert!(post.content_labels.is_empty());
+}
+
+/// remote peer だけが持つ blob を、`IrohBlobService` と同じ規則で扱う double(#1152)。
+/// `fetch_blob` はローカルに無ければ remote から取得してローカルへ保存し、`blob_status` は
+/// ローカルに無ければ `fetch_blob` で確かめる(= 状態確認が取得を兼ねる)。
+struct RemotePeerBlobService {
+    local: MemoryBlobService,
+    remote: TokioMutex<HashMap<String, Vec<u8>>>,
+    remote_fetches: TokioMutex<Vec<String>>,
+}
+
+impl RemotePeerBlobService {
+    fn new() -> Self {
+        Self {
+            local: MemoryBlobService::default(),
+            remote: TokioMutex::new(HashMap::new()),
+            remote_fetches: TokioMutex::new(Vec::new()),
+        }
+    }
+
+    /// remote peer にだけ blob を置き、投稿へ載せる AssetRef を返す。
+    async fn put_remote(&self, data: &[u8], mime: &str) -> kukuri_core::AssetRef {
+        let hash = blake3::hash(data).to_hex().to_string();
+        self.remote.lock().await.insert(hash.clone(), data.to_vec());
+        kukuri_core::AssetRef {
+            hash: BlobHash::new(hash),
+            mime: mime.to_string(),
+            bytes: data.len() as u64,
+            role: AssetRole::ImageOriginal,
+        }
+    }
+
+    async fn remote_fetches(&self) -> Vec<String> {
+        self.remote_fetches.lock().await.clone()
+    }
+
+    async fn is_local(&self, hash: &str) -> bool {
+        self.local
+            .fetch_blob(&BlobHash::new(hash))
+            .await
+            .expect("local fetch")
+            .is_some()
+    }
+}
+
+#[async_trait]
+impl BlobService for RemotePeerBlobService {
+    async fn put_blob(&self, data: Vec<u8>, mime: &str) -> Result<StoredBlob> {
+        self.local.put_blob(data, mime).await
+    }
+
+    async fn fetch_blob(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        if let Some(bytes) = self.local.fetch_blob(hash).await? {
+            return Ok(Some(bytes));
+        }
+        let Some(bytes) = self.remote.lock().await.get(hash.as_str()).cloned() else {
+            return Ok(None);
+        };
+        self.remote_fetches
+            .lock()
+            .await
+            .push(hash.as_str().to_string());
+        self.local
+            .put_blob(bytes.clone(), "application/octet-stream")
+            .await?;
+        Ok(Some(bytes))
+    }
+
+    async fn fetch_blob_ephemeral(&self, hash: &BlobHash) -> Result<Option<Vec<u8>>> {
+        if let Some(bytes) = self.local.fetch_blob(hash).await? {
+            return Ok(Some(bytes));
+        }
+        let Some(bytes) = self.remote.lock().await.get(hash.as_str()).cloned() else {
+            return Ok(None);
+        };
+        self.remote_fetches
+            .lock()
+            .await
+            .push(hash.as_str().to_string());
+        Ok(Some(bytes))
+    }
+
+    async fn pin_blob(&self, hash: &BlobHash) -> Result<()> {
+        self.local.pin_blob(hash).await
+    }
+
+    async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        Ok(match self.fetch_blob(hash).await? {
+            Some(_) => BlobStatus::Available,
+            None => BlobStatus::Missing,
+        })
+    }
+
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        self.local.local_blob_status(hash).await
+    }
+
+    async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
+        self.local.import_peer_ticket(ticket).await
+    }
+}
+
+fn app_with_remote_peer_blobs(
+    docs_sync: Arc<MemoryDocsSync>,
+    blob_service: Arc<RemotePeerBlobService>,
+) -> AppService {
+    let store = Arc::new(MemoryStore::default());
+    let transport = Arc::new(StaticTransport::new(PeerSnapshot::default()));
+    app_service_from_dependencies(
+        store.clone(),
+        store,
+        transport,
+        Arc::new(NoopHintTransport),
+        docs_sync,
+        blob_service,
+        generate_keys(),
+    )
+}
+
+// #1152 / ADR 0046 §4: 表示設定 OFF の間、remote から届いた self-label 付き投稿を projection へ
+// 反映・表示しても、添付の状態確認が bytes を remote 取得・永続化しない。
+#[tokio::test]
+async fn projecting_remote_adult_labeled_post_does_not_fetch_attachment_while_display_disabled() {
+    let docs_sync = Arc::new(MemoryDocsSync::default());
+    let blob_service = Arc::new(RemotePeerBlobService::new());
+    let topic = TopicId::new("kukuri:topic:adult-projection-fetch");
+    let attachment = blob_service
+        .put_remote(b"remote-adult-labeled-image", "image/png")
+        .await;
+    let attachment_hash = attachment.hash.as_str().to_string();
+    persist_test_post_with_labels(
+        docs_sync.as_ref(),
+        None,
+        &generate_keys(),
+        &topic,
+        PayloadRef::InlineText {
+            text: "remote adult caption".into(),
+        },
+        vec![attachment],
+        None,
+        vec![kukuri_core::ADULT_CONTENT_LABEL.to_string()],
+    )
+    .await;
+    let app = app_with_remote_peer_blobs(docs_sync, blob_service.clone());
+    assert!(!app.adult_content_display_enabled());
+
+    let timeline = app
+        .list_timeline(topic.as_str(), None, 10)
+        .await
+        .expect("timeline");
+    assert_eq!(timeline.items.len(), 1);
+    assert_eq!(timeline.items[0].attachments[0].hash, attachment_hash);
+    assert_eq!(
+        timeline.items[0].attachments[0].status,
+        BlobViewStatus::Missing
+    );
+
+    assert!(
+        app.blob_media_payload(attachment_hash.as_str(), "image/png")
+            .await
+            .expect("gated payload result")
+            .is_none()
+    );
+    assert_eq!(blob_service.remote_fetches().await, Vec::<String>::new());
+    assert!(!blob_service.is_local(attachment_hash.as_str()).await);
+}
+
+// #1152 / ADR 0046 §6.2: CN advisory は受信時点では未判明のため、ラベルの無い添付も状態確認で
+// 取得しない。advisory 登録後は表示要求でも取得せず、advisory の無い添付は表示要求で初めて取得する。
+#[tokio::test]
+async fn projecting_remote_posts_fetches_attachments_only_on_ungated_display_request() {
+    let docs_sync = Arc::new(MemoryDocsSync::default());
+    let blob_service = Arc::new(RemotePeerBlobService::new());
+    let topic = TopicId::new("kukuri:topic:advisory-projection-fetch");
+    let remote_keys = generate_keys();
+    let advisory_attachment = blob_service
+        .put_remote(b"remote-advisory-image", "image/png")
+        .await;
+    let advisory_hash = advisory_attachment.hash.as_str().to_string();
+    let plain_attachment = blob_service
+        .put_remote(b"remote-plain-image", "image/png")
+        .await;
+    let plain_hash = plain_attachment.hash.as_str().to_string();
+    for (text, attachment) in [
+        ("advisory caption", advisory_attachment),
+        ("plain caption", plain_attachment),
+    ] {
+        persist_test_post(
+            docs_sync.as_ref(),
+            None,
+            &remote_keys,
+            &topic,
+            PayloadRef::InlineText { text: text.into() },
+            vec![attachment],
+            None,
+        )
+        .await;
+    }
+    let app = app_with_remote_peer_blobs(docs_sync, blob_service.clone());
+
+    let timeline = app
+        .list_timeline(topic.as_str(), None, 10)
+        .await
+        .expect("timeline");
+    assert_eq!(timeline.items.len(), 2);
+    assert_eq!(blob_service.remote_fetches().await, Vec::<String>::new());
+
+    app.register_advisory_media_hashes(std::slice::from_ref(&advisory_hash))
+        .await;
+    assert!(
+        app.blob_media_payload(advisory_hash.as_str(), "image/png")
+            .await
+            .expect("advisory payload result")
+            .is_none()
+    );
+    assert_eq!(blob_service.remote_fetches().await, Vec::<String>::new());
+    assert!(!blob_service.is_local(advisory_hash.as_str()).await);
+
+    assert!(
+        app.blob_media_payload(plain_hash.as_str(), "image/png")
+            .await
+            .expect("plain payload result")
+            .is_some()
+    );
+    assert_eq!(
+        blob_service.remote_fetches().await,
+        vec![plain_hash.clone()]
+    );
+    assert!(blob_service.is_local(plain_hash.as_str()).await);
 }
 
 // #1055: advisory が付いていない hash は、登録済みの別 hash があっても影響を受けない。

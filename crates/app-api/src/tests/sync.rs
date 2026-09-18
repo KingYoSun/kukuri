@@ -185,6 +185,21 @@ impl BlobService for DelayedBlobService {
         self.inner.blob_status(hash).await
     }
 
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        if self
+            .remaining_misses
+            .lock()
+            .await
+            .get(hash.as_str())
+            .copied()
+            .unwrap_or_default()
+            > 0
+        {
+            return Ok(BlobStatus::Missing);
+        }
+        self.inner.local_blob_status(hash).await
+    }
+
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()> {
         self.inner.import_peer_ticket(ticket).await
     }
