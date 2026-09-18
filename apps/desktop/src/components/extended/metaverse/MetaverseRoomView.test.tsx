@@ -215,6 +215,28 @@ describe('MetaverseRoomView', () => {
     expect(screen.queryByRole('button', { name: 'Dome settings' })).not.toBeInTheDocument();
   });
 
+  test('#1139 Tab then Enter before the next frame keeps the menu instead of opening chat', () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    const view = render(<MetaverseRoomView {...viewProps({ initialHudOpen: false, initialChatOpen: false, initialCategory: 'connections' })} />);
+    const stage = view.container.querySelector<HTMLElement>('[data-column-gesture-owner]')!;
+    act(() => stage.focus());
+    fireEvent.keyDown(stage, { key: 'Tab' });
+    const selected = view.container.querySelector<HTMLElement>('.metaverse-category-menu [data-category="connections"]')!;
+    expect(selected).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+    expect(screen.queryByLabelText('Room chat message')).not.toBeInTheDocument();
+    expect(selected).toBeVisible();
+  });
+
+  test('#1139 Enter focuses the chat input before the next frame', () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
+    const view = render(<MetaverseRoomView {...viewProps({ initialHudOpen: false, initialChatOpen: false })} />);
+    const stage = view.container.querySelector<HTMLElement>('[data-column-gesture-owner]')!;
+    act(() => stage.focus());
+    fireEvent.keyDown(stage, { key: 'Enter' });
+    expect(screen.getByLabelText('Room chat message')).toHaveFocus();
+  });
+
   test('chat Escape keeps the draft, ignores IME confirmation and causes no domain actions', async () => {
     const props = viewProps({ initialHudOpen: false, initialChatOpen: false, messageDraft: 'unsent draft' });
     const view = render(<MetaverseRoomView {...props} />);

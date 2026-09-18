@@ -5,6 +5,7 @@ import {
   useState,
   type FormEventHandler,
 } from 'react';
+import { flushSync } from 'react-dom';
 
 import { Card } from '@/components/ui/card';
 import type { SupportedLocale } from '@/i18n';
@@ -97,6 +98,17 @@ function isEditableTarget(target: EventTarget | null) {
   return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
 }
 
+function focusOverlay(
+  stage: HTMLElement | null,
+  messageInput: HTMLInputElement | null,
+  overlay: MetaverseOverlay,
+  category: MetaverseCategory,
+) {
+  if (overlay === 'chat') messageInput?.focus();
+  if (overlay === 'categories') stage?.querySelector<HTMLElement>(`.metaverse-category-menu [data-category="${category}"]`)?.focus();
+  if (overlay === 'details') stage?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+}
+
 export function MetaverseRoomView({
   room,
   activeTopic,
@@ -160,6 +172,8 @@ export function MetaverseRoomView({
   const eligible = Boolean(room) && runtime.active && runtime.visible && !runtime.suspended;
   const eligibleRef = useRef(eligible);
   useLayoutEffect(() => { eligibleRef.current = eligible; }, [eligible]);
+  const categoryRef = useRef(category);
+  useLayoutEffect(() => { categoryRef.current = category; }, [category]);
   const cameraState = useRef(createAvatarCameraState());
   const { mode, start, release } = useMetaverseSceneInput(stageRef, eligible, `${room?.room_id ?? ''}:${room?.metaverse?.instance_generation ?? ''}`);
   const controlsEnabled = eligible && overlay === 'closed' && sceneFocused && (mode === 'locked' || mode === 'unavailable');
@@ -176,9 +190,7 @@ export function MetaverseRoomView({
     if (!eligibleRef.current || overlay === 'closed') return;
     const frame = requestAnimationFrame(() => {
       if (!eligibleRef.current) return;
-      if (overlay === 'chat') messageInputRef.current?.focus();
-      if (overlay === 'categories') stageRef.current?.querySelector<HTMLElement>(`.metaverse-category-menu [data-category="${category}"]`)?.focus();
-      if (overlay === 'details') stageRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+      focusOverlay(stageRef.current, messageInputRef.current, overlay, category);
     });
     return () => cancelAnimationFrame(frame);
   }, [overlay, category]);
@@ -208,8 +220,14 @@ export function MetaverseRoomView({
         return;
       }
       event.preventDefault();
-      release();
-      setOverlay(event.key === 'Enter' ? 'chat' : 'categories');
+      const next = event.key === 'Enter' ? 'chat' : 'categories';
+      // #1139: move focus within this key event. Waiting for the frame lets a
+      // following Enter reach the still-focused stage and replace the menu with chat.
+      flushSync(() => {
+        release();
+        setOverlay(next);
+      });
+      focusOverlay(stageRef.current, messageInputRef.current, next, categoryRef.current);
     };
     // Consume owned UI keys before the shell's window-level Escape cascade.
     // The window fallback also handles the canvas Pointer Lock path.
