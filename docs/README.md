@@ -103,3 +103,7 @@ Issue・PR・セッションの記述だけで「実装済み」「検証成功�
 - visual spec: `DESIGN.md`（root）
 - migration plan: `docs/progress/2026-03-24-shell-ui-production-migration.md`
 - accepted review records: `docs/ui-reviews/`
+
+## 告知素材・LP
+- 制作仕様の正本（配布候補の事実、JA/EN原稿、shot list、固定出力一覧、公開先）: `docs/progress/2026-09-15-promo-lp-brief.md`
+- 撮影（Playwright）とレンダリング（Remotion）の実行手順: `docs/runbooks/promo-production.md`（実装は `tools/promo/` と `apps/desktop/tests/promo/`）

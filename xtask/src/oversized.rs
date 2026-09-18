@@ -19,6 +19,9 @@ pub(crate) const OVERSIZED_FILE_EXCLUDED_EXACT_PATHS: &[&str] = &[
     "Cargo.lock",
     "apps/desktop/pnpm-lock.yaml",
     "apps/desktop/src-tauri/Cargo.lock",
+    // 告知素材の制作パッケージ (#1038)。root の workspace に含めない独立 package のため
+    // lockfile も独立している。
+    "tools/promo/pnpm-lock.yaml",
 ];
 
 pub(crate) const OVERSIZED_BASELINE_PATH: &str = "xtask/oversized-baseline.json";

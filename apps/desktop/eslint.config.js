@@ -8,6 +8,8 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      // 告知素材の撮影用 preview の build 出力 (#1038)
+      'dist-promo',
       'storybook-static',
       'playwright-report',
       'test-results',

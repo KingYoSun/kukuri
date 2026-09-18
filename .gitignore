@@ -144,3 +144,7 @@ override.tf.json
 AGENTS.local.md
 
 operator-config.yaml
+
+# 告知素材の撮影・レンダリング出力 (#1038)
+promo-artifacts/
+apps/desktop/dist-promo/

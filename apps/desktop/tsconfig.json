@@ -28,6 +28,7 @@
     "tests/**/*",
     "vite.config.ts",
     "playwright.config.ts",
+    "playwright.promo.config.ts",
     "eslint.config.js"
   ]
 }
