@@ -18,6 +18,44 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.6-preview.1] - 2026-09-18
+
+### Features
+
+- 採用したコミュニティノードの信頼値で投稿を折りたためるようにする (#1061 PR3) ([#1130](https://github.com/kukuri-app/kukuri/pull/1130))
+- Remotion + Playwright の制作環境と最小キャプチャ→レンダリング経路を入れる ([#1038](https://github.com/kukuri-app/kukuri/pull/1038), [#1135](https://github.com/kukuri-app/kukuri/pull/1135))
+- ブロック・ミュートの観測を同意した CN へ提供できるようにする (#1061 PR2) ([#1129](https://github.com/kukuri-app/kukuri/pull/1129))
+- trust 絶対値と閲覧者別 relation 値を CN 側で合算し、ブロック・ミュート観測を受け付ける (#1061 PR1) ([#1125](https://github.com/kukuri-app/kukuri/pull/1125))
+- 推定による代替表示を枠上の短い表示にし、詳細を dialog へ移す ([#1108](https://github.com/kukuri-app/kukuri/pull/1108), [#1124](https://github.com/kukuri-app/kukuri/pull/1124))
+- コミュニティノード規約を Markdown で描画し文書ごとに折りたためるようにする ([#1106](https://github.com/kukuri-app/kukuri/pull/1106), [#1115](https://github.com/kukuri-app/kukuri/pull/1115))
+
+### Fixes
+
+- 再 scan で現在の判定から外れた advisory signal を失効させる ([#1109](https://github.com/kukuri-app/kukuri/pull/1109), [#1119](https://github.com/kukuri-app/kukuri/pull/1119))
+- 成人向け表示の切替で共有 blob がちらつき、通常画像がスケルトンに残る問題を修正 ([#1107](https://github.com/kukuri-app/kukuri/pull/1107), [#1114](https://github.com/kukuri-app/kukuri/pull/1114))
+- 開発ビルドの app data を配布版と分け、同意記録に build の種別を残す ([#1105](https://github.com/kukuri-app/kukuri/pull/1105), [#1113](https://github.com/kukuri-app/kukuri/pull/1113))
+- 初回の関係解析の前に stale alert を出さない ([#1102](https://github.com/kukuri-app/kukuri/pull/1102), [#1111](https://github.com/kukuri-app/kukuri/pull/1111))
+- relation analyze の間隔を readiness の許容時間内に収まる範囲に制限する ([#1101](https://github.com/kukuri-app/kukuri/pull/1101), [#1103](https://github.com/kukuri-app/kukuri/pull/1103))
+- startup 再実行後も readiness timer の次回実行を決める ([#1097](https://github.com/kukuri-app/kukuri/pull/1097), [#1098](https://github.com/kukuri-app/kukuri/pull/1098))
+- 動画抽出の作業領域lock待機と decoder 準備、readiness の失敗分類を追加する ([#1091](https://github.com/kukuri-app/kukuri/pull/1091), [#1096](https://github.com/kukuri-app/kukuri/pull/1096))
+
+### Other
+
+- prepare v0.2.6-preview.1 release ([#1136](https://github.com/kukuri-app/kukuri/pull/1136))
+- CI へ push する前にローカルで検証する規則を追記する ([#1134](https://github.com/kukuri-app/kukuri/pull/1134))
+- LP・告知素材の共通brief を追加する ([#1037](https://github.com/kukuri-app/kukuri/pull/1037), [#1133](https://github.com/kukuri-app/kukuri/pull/1133))
+- cn-images の push を regctl で行う ([#1122](https://github.com/kukuri-app/kukuri/pull/1122), [#1132](https://github.com/kukuri-app/kukuri/pull/1132))
+- cn-images の 4 image を 1 回の build session で作る ([#1122](https://github.com/kukuri-app/kukuri/pull/1122), [#1131](https://github.com/kukuri-app/kukuri/pull/1131))
+- rust-tests・Vitest・Playwright の並列度を上げる ([#1121](https://github.com/kukuri-app/kukuri/pull/1121), [#1128](https://github.com/kukuri-app/kukuri/pull/1128))
+- test の失敗率を測る Kukuri Flake Probe workflow を追加する ([#1121](https://github.com/kukuri-app/kukuri/pull/1121), [#1127](https://github.com/kukuri-app/kukuri/pull/1127))
+- debuginfo 変更前の成果物を含む Cache Volume を cache-tag の入れ替えで捨てる ([#1120](https://github.com/kukuri-app/kukuri/pull/1120), [#1126](https://github.com/kukuri-app/kukuri/pull/1126))
+- harness を使わない job の xtask を軽くし Cache Volume の容量を減らす ([#1120](https://github.com/kukuri-app/kukuri/pull/1120), [#1123](https://github.com/kukuri-app/kukuri/pull/1123))
+- Namespace の Linux 同時実行枠に収まるよう profile と concurrency を見直す ([#1117](https://github.com/kukuri-app/kukuri/pull/1117), [#1118](https://github.com/kukuri-app/kukuri/pull/1118))
+- CI runner を Namespace へ移し Rust cache を Cache Volume に置く ([#1073](https://github.com/kukuri-app/kukuri/pull/1073), [#1112](https://github.com/kukuri-app/kukuri/pull/1112))
+- v0.2.5 リリースと #1068 の CN 反映・統合確認を記録 ([#1110](https://github.com/kukuri-app/kukuri/pull/1110))
+- update CHANGELOG for v0.2.5-preview.3 ([#1104](https://github.com/kukuri-app/kukuri/pull/1104))
+- relation analyze timer が startup 再実行後も継続することを固定する ([#1099](https://github.com/kukuri-app/kukuri/pull/1099), [#1100](https://github.com/kukuri-app/kukuri/pull/1100))
+
 ## [v0.2.5-preview.3] - 2026-09-17
 
 ### Features
