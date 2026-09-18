@@ -74,9 +74,9 @@
 
 | 条件 | 実装 | 検証 |
 | --- | --- | --- |
-| AC-3 / AC-6 / AC-7 / INV-4 / TR-4 / TR-5 / TR-7 | `CommunityNodeConfig.trust_node_priority`（設定済み node に正規化、空なら機能オフ）と `trust_gate_support.rs` の `evaluate_author_trust_gates`。優先順に一括評価を読み、viewer・対象・期限を照合して最初の有効値を採る。失敗・401・期限切れは次の選択済み node へ進み、全滅なら未評価（折りたたまない）。cache は (node, target) 単位で、設定・同意・認証の変更で世代を進めて捨てる | `trust_gates.rs` 7 件（優先順・未選択 0 件・失敗 fallback・viewer/期限の照合・cache と設定変更・restart 復元・social state 不変） |
+| AC-3 / AC-6 / AC-7 / INV-4 / TR-4 / TR-5 / TR-7 | `CommunityNodeConfig.trust_node_priority`（設定済み node に正規化、空なら機能オフ）と `trust_gate_support.rs` の `evaluate_author_trust_gates`。優先順に一括評価を読み、viewer・対象・期限を照合して最初の有効値を採る。失敗・401・期限切れは次の選択済み node へ進み、全滅なら未評価（折りたたまない）。cache は (node, target) 単位で、設定・同意・認証の変更で世代を進めて捨てる | `trust_gates.rs` 8 件（優先順・未選択 0 件・失敗 fallback・viewer/期限の照合・cache と設定変更・restart 復元・social state 不変・破損した優先順位からの復元） |
 | AC-4 / INVAR-1 / INVAR-4 / INV-5 / INV-6 | `resolvePostTrustGate`（著者と引用元）、`AuthorTrustGateNotice`（理由・採用 CN・表示する・作者を開く）、live / game 一覧の同じ案内、作者詳細の「この作者を常に表示する」、設定画面の採用順位 UI | `DesktopShellPage.authorTrustGate.test.tsx` 4 件、`authorTrustGates.test.ts` 3 件、`CommunityNodeTrustPriorityField.test.tsx` 3 件、[ui-review record](../ui-reviews/2026-09-18-1061-author-trust-gate.md) |
-| AC-5 | 判断は評価の期限まで使い、期限切れは照会し直して応答で差し替える（応答までは前の判断のままで、折りたたんだ投稿を一瞬開かせない）。照会に失敗したら判断を捨てる（fail-open）。node の状態を読み終えるまで照会しない。採用順位・認証・必須同意が変わったら全部捨てる。作者ごとの例外は設定・解除の時点で表示へ反映する | `useAuthorTrustGateLookup.test.tsx` 6 件、`DesktopShellPage.authorTrustGate.test.tsx` の例外 test |
+| AC-5 | 判断は評価の期限まで使い、期限切れは照会し直して応答で差し替える（応答までは前の判断のままで、折りたたんだ投稿を一瞬開かせない）。照会に失敗したら判断を捨てる（fail-open）。node の状態を読み終えるまで照会しない。採用順位・認証・必須同意が変わったら全部捨てる。作者ごとの例外は設定・解除の時点で表示へ反映する | `useAuthorTrustGateLookup.test.tsx` 7 件、`DesktopShellPage.authorTrustGate.test.tsx` の例外 test |
 | 法務 | legal bundle を version 7 へ（利用規約 第3条に第 5・6 項、プライバシーポリシーと外部送信表示に「信頼評価の照会」「ブロック・ミュートの提供」の送信項目・送らない情報・取消時の削除要求、データフロー突合表に行を追加、i18n 本文とミラーと同意 fixture を同期）。2026-09-18 のユーザー判断どおり PR2 分と合わせて 1 回で上げる | Tauri の法務 bundle テスト（必須句に version 7 分を追加）、`App.test.tsx`、Playwright の同意 fixture |
 
 ### PR3 独立監査（commit `ed71c6ec`）の指摘と対応
@@ -105,6 +105,14 @@
 | Minor: 外部送信表示と i18n が live / game 主催者の公開鍵を挙げていない（過小記載） | 表・変更履歴・3 locale の本文に加え、プライバシーポリシーの文言も主催者と投稿の作成者を分けた |
 | Minor: 優先順位の fail-soft に test も log も無い | 破損した設定からの復元 test を追加し、落とした値を `warn!` で残すようにした |
 | Nit: 英語本文だけ curly apostrophe / 版の帰属のズレ | ASCII に統一し、同意分類表の version 7 記述を外部送信表示の扱いに揃えた |
+
+### PR3 最終差分監査（`ee9a34a9` → `24f9d88d`）の指摘と対応
+
+| 指摘 | 対応 |
+| --- | --- |
+| Major: 期限切れの判断を応答まで残す方式にしたため、応答が返らない CN では古い判断で折りたたみ続ける（TR-4 の「無期限の古い非表示」） | 判断ごとに「作り直す時刻」と「捨てる時刻」を持たせ、期限から最大 60 秒で判断を捨てるようにした。応答が返らない場合の test を追加 |
+| Minor: プライバシーポリシーの変更履歴だけ live / game 主催者が欠ける | 追記した。期限後の扱い（作り直し・破棄）も本文と 3 locale で実装に合わせた |
+| Nit: progress の test 件数のズレ / 日本語 i18n の「表示した」の掛かり方 | 修正した |
 
 ## 検証記録
 

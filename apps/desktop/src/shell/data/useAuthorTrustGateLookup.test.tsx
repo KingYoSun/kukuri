@@ -11,6 +11,7 @@ import { createShellHookHarness } from '@/shell/testSupport/renderShellHook';
 
 import {
   AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS,
+  AUTHOR_TRUST_GATE_LOOKUP_STALE_GRACE_MS,
   AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS,
   useAuthorTrustGateLookup,
 } from './useAuthorTrustGateLookup';
@@ -164,6 +165,25 @@ test('a failed lookup stops collapsing the post (fail-open)', async () => {
 
   api.evaluateAuthorTrustGates.mockRejectedValue(new Error('unreachable'));
   await advance(600_000 + AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates).toEqual({});
+});
+
+test('a lookup that never answers stops collapsing the post after the grace period', async () => {
+  const fresh = new Date(Date.now() + 600_000).toISOString();
+  const { harness, api } = mount(() => hiddenGate(fresh));
+
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
+
+  // 応答が返らない CN。期限を過ぎた判断は猶予のあいだだけ使う。
+  api.evaluateAuthorTrustGates.mockImplementation(
+    () => new Promise<AuthorTrustGateResult>(() => {})
+  );
+  await advance(600_000 + AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
+
+  // 猶予を過ぎたら捨てる（古い判断で折りたたみ続けない）。
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_STALE_GRACE_MS + AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS);
   expect(harness.store.getState().authorTrustGates).toEqual({});
 });
 
