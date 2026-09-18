@@ -167,7 +167,9 @@ pub(crate) fn persist_keys_with_keyring(
     persist_secret_to_file(db_path, encoded.as_str())?;
     write_backend_marker(db_path, BACKEND_FILE)?;
     if mode == IdentityStorageMode::Auto {
-        let _ = keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str());
+        for account in keyring_account_candidates(db_path) {
+            let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        }
     }
     Ok(())
 }
@@ -178,7 +180,9 @@ fn delete_identity_with_keyring(
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
     if mode == IdentityStorageMode::Auto {
-        keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str())?;
+        for account in keyring_account_candidates(db_path) {
+            keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+        }
     }
     delete_file_if_exists(key_file_path(db_path).as_path())?;
     delete_file_if_exists(legacy_key_file_path(db_path).as_path())?;
@@ -224,18 +228,17 @@ pub(crate) fn load_optional_secret_with_keyring(
     keyring: &dyn KeyringStore,
 ) -> Result<Option<String>> {
     if mode == IdentityStorageMode::Auto {
-        match keyring.get_password(
-            KEYRING_SERVICE,
-            optional_secret_account(db_path, purpose, key).as_str(),
-        ) {
-            Ok(Some(secret)) => return Ok(Some(secret)),
-            Ok(None) => {}
-            // Headless Linux environments can have no default keyring provider at all.
-            // Such environments could only have persisted this optional value through
-            // the file fallback, so continue there without weakening other keyring errors.
-            Err(error) if is_missing_default_keyring(&error) => {}
-            Err(error) => {
-                return Err(error).context("failed to read optional secret from keyring");
+        for account in optional_secret_account_candidates(db_path, purpose, key) {
+            match keyring.get_password(KEYRING_SERVICE, account.as_str()) {
+                Ok(Some(secret)) => return Ok(Some(secret)),
+                Ok(None) => {}
+                // Headless Linux environments can have no default keyring provider at all.
+                // Such environments could only have persisted this optional value through
+                // the file fallback, so continue there without weakening other keyring errors.
+                Err(error) if is_missing_default_keyring(&error) => break,
+                Err(error) => {
+                    return Err(error).context("failed to read optional secret from keyring");
+                }
             }
         }
     }
@@ -273,7 +276,9 @@ pub(crate) fn persist_optional_secret_with_keyring(
         // set 失敗時に旧 entry を残すと、load が keyring を優先するため file へ書いた
         // 新しい値が恒久的にシャドウされる(例: Windows Credential Manager の blob 上限
         // 超過で set が失敗し始めるケース)。best effort で削除してから file へ倒す。
-        let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        for account in optional_secret_account_candidates(db_path, purpose, key) {
+            let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        }
     }
 
     persist_secret_to_file_path(
@@ -302,20 +307,26 @@ pub(crate) fn delete_optional_secret_keyring_entry_with_keyring(
     key: &str,
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
-    let account = optional_secret_account(db_path, purpose, key);
-    match keyring.delete_password(KEYRING_SERVICE, account.as_str()) {
-        Ok(()) => Ok(()),
-        Err(error) if is_missing_default_keyring(&error) => Ok(()),
-        Err(error) => Err(error).context("failed to delete optional secret from keyring"),
+    for account in optional_secret_account_candidates(db_path, purpose, key) {
+        match keyring.delete_password(KEYRING_SERVICE, account.as_str()) {
+            Ok(()) => {}
+            Err(error) if is_missing_default_keyring(&error) => return Ok(()),
+            Err(error) => {
+                return Err(error).context("failed to delete optional secret from keyring");
+            }
+        }
     }
+    Ok(())
 }
 
 fn load_secret_from_keyring(db_path: &Path, keyring: &dyn KeyringStore) -> Result<Option<String>> {
-    if let Some(secret) = keyring
-        .get_password(KEYRING_SERVICE, keyring_account(db_path).as_str())
-        .context("failed to read secret from keyring")?
-    {
-        return Ok(Some(secret));
+    for account in keyring_account_candidates(db_path) {
+        if let Some(secret) = keyring
+            .get_password(KEYRING_SERVICE, account.as_str())
+            .context("failed to read secret from keyring")?
+        {
+            return Ok(Some(secret));
+        }
     }
     Ok(None)
 }
@@ -453,8 +464,41 @@ fn configure_private_file_options(options: &mut OpenOptions) {
 fn configure_private_file_options(_options: &mut OpenOptions) {}
 
 fn keyring_account(db_path: &Path) -> String {
-    let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
-    format!("db:{}", resolved.display())
+    format!("db:{}", resolve_db_path(db_path).display())
+}
+
+/// 読込・削除で試す keyring account。先頭が書込先の正規 account で、以降は旧版が
+/// DB ファイル不在時に書いた未正規化パスの account(存在しうる場合のみ)。
+fn keyring_account_candidates(db_path: &Path) -> Vec<String> {
+    account_candidates(
+        keyring_account(db_path),
+        format!("db:{}", db_path.display()),
+    )
+}
+
+/// DB ファイルの有無で keyring account が変わらないよう、ファイルが無ければ親ディレクトリを
+/// 正規化して結合する。旧実装は `canonicalize(db_path)` 失敗時に生のパスへ倒していたため、
+/// Windows のクリーンインストールでは作成時 `C:\...` と再読込時 `\\?\C:\...` で account が
+/// 食い違い、keyring の identity に到達できなくなっていた。
+fn resolve_db_path(db_path: &Path) -> PathBuf {
+    if let Ok(resolved) = std::fs::canonicalize(db_path) {
+        return resolved;
+    }
+    if let (Some(parent), Some(file_name)) = (db_path.parent(), db_path.file_name())
+        && !parent.as_os_str().is_empty()
+        && let Ok(parent) = std::fs::canonicalize(parent)
+    {
+        return parent.join(file_name);
+    }
+    db_path.to_path_buf()
+}
+
+fn account_candidates(primary: String, legacy: String) -> Vec<String> {
+    if primary == legacy {
+        vec![primary]
+    } else {
+        vec![primary, legacy]
+    }
 }
 
 fn key_file_path(db_path: &Path) -> PathBuf {
@@ -476,10 +520,20 @@ fn backend_marker_path(db_path: &Path) -> PathBuf {
 }
 
 fn optional_secret_account(db_path: &Path, purpose: &str, key: &str) -> String {
-    let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
+    optional_secret_account_for(resolve_db_path(db_path).as_path(), purpose, key)
+}
+
+fn optional_secret_account_candidates(db_path: &Path, purpose: &str, key: &str) -> Vec<String> {
+    account_candidates(
+        optional_secret_account(db_path, purpose, key),
+        optional_secret_account_for(db_path, purpose, key),
+    )
+}
+
+fn optional_secret_account_for(path: &Path, purpose: &str, key: &str) -> String {
     format!(
         "db:{}:{}:{}",
-        resolved.display(),
+        path.display(),
         purpose,
         optional_secret_suffix(key)
     )
@@ -720,6 +774,80 @@ mod tests {
             assert_eq!(recovered.public_key(), original.public_key(), "{failure}");
             assert!(!key_file_path(&db_path).exists(), "{failure}");
         }
+    }
+
+    #[test]
+    fn keyring_identity_created_before_db_file_survives_db_creation() {
+        // クリーンインストールでは DB ファイル作成前に鍵を keyring へ保存する。
+        // DB 作成後に canonicalize の結果(Windows では `\\?\` 付き)が変わっても
+        // 同じ entry を引けなければ、marker=keyring のまま起動不能になる。
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+
+        let created =
+            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                .expect("generate keys before db exists");
+        std::fs::write(&db_path, b"").expect("create db file");
+        let reloaded =
+            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+                .expect("reload keys after db exists");
+
+        assert_eq!(reloaded.export_secret_hex(), created.export_secret_hex());
+    }
+
+    #[test]
+    fn keyring_identity_saved_under_uncanonicalized_account_still_loads() {
+        // 修正前の版が DB 不在時に書いた entry(生のパス)を救済できること。
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        std::fs::write(&db_path, b"").expect("create db file");
+        let keyring = FakeKeyringStore::default();
+        let secret = KukuriKeys::generate().export_secret_hex();
+        keyring
+            .set_password(
+                KEYRING_SERVICE,
+                format!("db:{}", db_path.display()).as_str(),
+                secret.as_str(),
+            )
+            .expect("seed legacy keyring entry");
+        write_backend_marker(&db_path, BACKEND_KEYRING).expect("seed marker");
+
+        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
+            .expect("load legacy keyring identity");
+
+        assert_eq!(keys.export_secret_hex(), secret);
+    }
+
+    #[test]
+    fn optional_secret_saved_before_db_file_survives_db_creation() {
+        clear_identity_env();
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("kukuri.db");
+        let keyring = FakeKeyringStore::default();
+
+        persist_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            "value",
+            &keyring,
+        )
+        .expect("persist before db exists");
+        std::fs::write(&db_path, b"").expect("create db file");
+
+        let loaded = load_optional_secret_with_keyring(
+            &db_path,
+            IdentityStorageMode::Auto,
+            "test-purpose",
+            "registry",
+            &keyring,
+        )
+        .expect("load after db exists");
+        assert_eq!(loaded, Some("value".to_string()));
     }
 
     #[test]
