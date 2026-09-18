@@ -66,10 +66,6 @@
     },
     {
       "lines": 1004,
-      "path": "crates/desktop-runtime/src/identity.rs"
-    },
-    {
-      "lines": 1004,
       "path": "crates/desktop-runtime/src/tests/community_node/connectivity.rs"
     },
     {

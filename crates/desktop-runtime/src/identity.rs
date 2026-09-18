@@ -167,7 +167,9 @@ pub(crate) fn persist_keys_with_keyring(
     persist_secret_to_file(db_path, encoded.as_str())?;
     write_backend_marker(db_path, BACKEND_FILE)?;
     if mode == IdentityStorageMode::Auto {
-        let _ = keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str());
+        for account in keyring_account_candidates(db_path) {
+            let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        }
     }
     Ok(())
 }
@@ -178,7 +180,9 @@ fn delete_identity_with_keyring(
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
     if mode == IdentityStorageMode::Auto {
-        keyring.delete_password(KEYRING_SERVICE, keyring_account(db_path).as_str())?;
+        for account in keyring_account_candidates(db_path) {
+            keyring.delete_password(KEYRING_SERVICE, account.as_str())?;
+        }
     }
     delete_file_if_exists(key_file_path(db_path).as_path())?;
     delete_file_if_exists(legacy_key_file_path(db_path).as_path())?;
@@ -224,18 +228,17 @@ pub(crate) fn load_optional_secret_with_keyring(
     keyring: &dyn KeyringStore,
 ) -> Result<Option<String>> {
     if mode == IdentityStorageMode::Auto {
-        match keyring.get_password(
-            KEYRING_SERVICE,
-            optional_secret_account(db_path, purpose, key).as_str(),
-        ) {
-            Ok(Some(secret)) => return Ok(Some(secret)),
-            Ok(None) => {}
-            // Headless Linux environments can have no default keyring provider at all.
-            // Such environments could only have persisted this optional value through
-            // the file fallback, so continue there without weakening other keyring errors.
-            Err(error) if is_missing_default_keyring(&error) => {}
-            Err(error) => {
-                return Err(error).context("failed to read optional secret from keyring");
+        for account in optional_secret_account_candidates(db_path, purpose, key) {
+            match keyring.get_password(KEYRING_SERVICE, account.as_str()) {
+                Ok(Some(secret)) => return Ok(Some(secret)),
+                Ok(None) => {}
+                // Headless Linux environments can have no default keyring provider at all.
+                // Such environments could only have persisted this optional value through
+                // the file fallback, so continue there without weakening other keyring errors.
+                Err(error) if is_missing_default_keyring(&error) => break,
+                Err(error) => {
+                    return Err(error).context("failed to read optional secret from keyring");
+                }
             }
         }
     }
@@ -273,7 +276,9 @@ pub(crate) fn persist_optional_secret_with_keyring(
         // set 失敗時に旧 entry を残すと、load が keyring を優先するため file へ書いた
         // 新しい値が恒久的にシャドウされる(例: Windows Credential Manager の blob 上限
         // 超過で set が失敗し始めるケース)。best effort で削除してから file へ倒す。
-        let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        for account in optional_secret_account_candidates(db_path, purpose, key) {
+            let _ = keyring.delete_password(KEYRING_SERVICE, account.as_str());
+        }
     }
 
     persist_secret_to_file_path(
@@ -302,20 +307,26 @@ pub(crate) fn delete_optional_secret_keyring_entry_with_keyring(
     key: &str,
     keyring: &dyn KeyringStore,
 ) -> Result<()> {
-    let account = optional_secret_account(db_path, purpose, key);
-    match keyring.delete_password(KEYRING_SERVICE, account.as_str()) {
-        Ok(()) => Ok(()),
-        Err(error) if is_missing_default_keyring(&error) => Ok(()),
-        Err(error) => Err(error).context("failed to delete optional secret from keyring"),
+    for account in optional_secret_account_candidates(db_path, purpose, key) {
+        match keyring.delete_password(KEYRING_SERVICE, account.as_str()) {
+            Ok(()) => {}
+            Err(error) if is_missing_default_keyring(&error) => return Ok(()),
+            Err(error) => {
+                return Err(error).context("failed to delete optional secret from keyring");
+            }
+        }
     }
+    Ok(())
 }
 
 fn load_secret_from_keyring(db_path: &Path, keyring: &dyn KeyringStore) -> Result<Option<String>> {
-    if let Some(secret) = keyring
-        .get_password(KEYRING_SERVICE, keyring_account(db_path).as_str())
-        .context("failed to read secret from keyring")?
-    {
-        return Ok(Some(secret));
+    for account in keyring_account_candidates(db_path) {
+        if let Some(secret) = keyring
+            .get_password(KEYRING_SERVICE, account.as_str())
+            .context("failed to read secret from keyring")?
+        {
+            return Ok(Some(secret));
+        }
     }
     Ok(None)
 }
@@ -453,8 +464,41 @@ fn configure_private_file_options(options: &mut OpenOptions) {
 fn configure_private_file_options(_options: &mut OpenOptions) {}
 
 fn keyring_account(db_path: &Path) -> String {
-    let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
-    format!("db:{}", resolved.display())
+    format!("db:{}", resolve_db_path(db_path).display())
+}
+
+/// 読込・削除で試す keyring account。先頭が書込先の正規 account で、以降は旧版が
+/// DB ファイル不在時に書いた未正規化パスの account(存在しうる場合のみ)。
+fn keyring_account_candidates(db_path: &Path) -> Vec<String> {
+    account_candidates(
+        keyring_account(db_path),
+        format!("db:{}", db_path.display()),
+    )
+}
+
+/// DB ファイルの有無で keyring account が変わらないよう、ファイルが無ければ親ディレクトリを
+/// 正規化して結合する。旧実装は `canonicalize(db_path)` 失敗時に生のパスへ倒していたため、
+/// Windows のクリーンインストールでは作成時 `C:\...` と再読込時 `\\?\C:\...` で account が
+/// 食い違い、keyring の identity に到達できなくなっていた。
+fn resolve_db_path(db_path: &Path) -> PathBuf {
+    if let Ok(resolved) = std::fs::canonicalize(db_path) {
+        return resolved;
+    }
+    if let (Some(parent), Some(file_name)) = (db_path.parent(), db_path.file_name())
+        && !parent.as_os_str().is_empty()
+        && let Ok(parent) = std::fs::canonicalize(parent)
+    {
+        return parent.join(file_name);
+    }
+    db_path.to_path_buf()
+}
+
+fn account_candidates(primary: String, legacy: String) -> Vec<String> {
+    if primary == legacy {
+        vec![primary]
+    } else {
+        vec![primary, legacy]
+    }
 }
 
 fn key_file_path(db_path: &Path) -> PathBuf {
@@ -476,10 +520,20 @@ fn backend_marker_path(db_path: &Path) -> PathBuf {
 }
 
 fn optional_secret_account(db_path: &Path, purpose: &str, key: &str) -> String {
-    let resolved = std::fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
+    optional_secret_account_for(resolve_db_path(db_path).as_path(), purpose, key)
+}
+
+fn optional_secret_account_candidates(db_path: &Path, purpose: &str, key: &str) -> Vec<String> {
+    account_candidates(
+        optional_secret_account(db_path, purpose, key),
+        optional_secret_account_for(db_path, purpose, key),
+    )
+}
+
+fn optional_secret_account_for(path: &Path, purpose: &str, key: &str) -> String {
     format!(
         "db:{}:{}:{}",
-        resolved.display(),
+        path.display(),
         purpose,
         optional_secret_suffix(key)
     )
@@ -537,468 +591,4 @@ impl KeyringStore for SystemKeyringStore {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use tempfile::tempdir;
-
-    #[derive(Clone, Default)]
-    struct FakeKeyringStore {
-        entries: Arc<Mutex<HashMap<(String, String), String>>>,
-        fail_get: Arc<Mutex<bool>>,
-        no_default_store: Arc<Mutex<bool>>,
-        fail_set: Arc<Mutex<bool>>,
-        fail_delete: Arc<Mutex<bool>>,
-    }
-
-    impl KeyringStore for FakeKeyringStore {
-        fn get_password(&self, service: &str, account: &str) -> Result<Option<String>> {
-            if *self.no_default_store.lock().expect("keyring lock") {
-                return Err(anyhow!(KeyringError::NoDefaultStore));
-            }
-            if *self.fail_get.lock().expect("keyring lock") {
-                anyhow::bail!("fake keyring get failure");
-            }
-            Ok(self
-                .entries
-                .lock()
-                .expect("keyring lock")
-                .get(&(service.to_string(), account.to_string()))
-                .cloned())
-        }
-
-        fn set_password(&self, service: &str, account: &str, secret: &str) -> Result<()> {
-            if *self.fail_set.lock().expect("keyring lock") {
-                anyhow::bail!("fake keyring set failure");
-            }
-            self.entries.lock().expect("keyring lock").insert(
-                (service.to_string(), account.to_string()),
-                secret.to_string(),
-            );
-            Ok(())
-        }
-
-        fn delete_password(&self, service: &str, account: &str) -> Result<()> {
-            if *self.no_default_store.lock().expect("keyring lock") {
-                return Err(anyhow!(KeyringError::NoDefaultStore));
-            }
-            if *self.fail_delete.lock().expect("keyring lock") {
-                anyhow::bail!("fake keyring delete failure");
-            }
-            self.entries
-                .lock()
-                .expect("keyring lock")
-                .remove(&(service.to_string(), account.to_string()));
-            Ok(())
-        }
-    }
-
-    fn clear_identity_env() {
-        unsafe { std::env::remove_var("KUKURI_DISABLE_KEYRING") };
-    }
-
-    #[test]
-    fn auto_mode_prefers_keyring_secret_over_file_secret() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring_secret = KukuriKeys::generate().export_secret_hex();
-        let file_secret = KukuriKeys::generate().export_secret_hex();
-        let keyring = FakeKeyringStore::default();
-        keyring
-            .set_password(
-                KEYRING_SERVICE,
-                keyring_account(&db_path).as_str(),
-                keyring_secret.as_str(),
-            )
-            .expect("seed keyring");
-        persist_secret_to_file(&db_path, file_secret.as_str()).expect("seed file");
-
-        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-            .expect("load keys");
-
-        assert_eq!(keys.export_secret_hex(), keyring_secret);
-        assert_eq!(
-            load_backend_marker(&db_path).expect("load backend marker"),
-            Some(BACKEND_KEYRING.to_string())
-        );
-    }
-
-    #[test]
-    fn auto_mode_falls_back_to_file_when_keyring_write_fails() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-        *keyring.fail_set.lock().expect("keyring lock") = true;
-
-        let keys = load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-            .expect("generate keys");
-
-        assert_eq!(
-            load_backend_marker(&db_path).expect("load backend marker"),
-            Some(BACKEND_FILE.to_string())
-        );
-        assert_eq!(
-            load_secret_from_file(&db_path).expect("load file secret"),
-            Some(keys.export_secret_hex())
-        );
-        assert!(
-            keyring
-                .get_password(KEYRING_SERVICE, keyring_account(&db_path).as_str())
-                .expect("keyring lookup")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn auto_mode_generated_keyring_secret_survives_restart() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-
-        let original =
-            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-                .expect("create keys");
-        let restarted =
-            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-                .expect("reload keys");
-
-        assert_eq!(original.export_secret_hex(), restarted.export_secret_hex());
-        assert_eq!(
-            load_backend_marker(&db_path).expect("load backend marker"),
-            Some(BACKEND_KEYRING.to_string())
-        );
-    }
-
-    #[test]
-    fn existing_keyring_identity_read_failures_preserve_storage_and_recover() {
-        for failure in ["get_failure", "no_default_store", "missing_entry"] {
-            let dir = tempdir().expect("tempdir");
-            let db_path = dir.path().join("kukuri.db");
-            let keyring = FakeKeyringStore::default();
-            let original =
-                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-                    .expect("create keyring identity");
-            let marker = std::fs::read(backend_marker_path(&db_path)).expect("backend marker");
-            let original_entries = keyring.entries.lock().expect("keyring lock").clone();
-            match failure {
-                "get_failure" => *keyring.fail_get.lock().expect("keyring lock") = true,
-                "no_default_store" => {
-                    *keyring.no_default_store.lock().expect("keyring lock") = true;
-                }
-                "missing_entry" => keyring.entries.lock().expect("keyring lock").clear(),
-                _ => unreachable!(),
-            }
-            let inaccessible_entries = keyring.entries.lock().expect("keyring lock").clone();
-
-            assert!(
-                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-                    .is_err(),
-                "{failure} must not create a replacement identity"
-            );
-            assert_eq!(
-                std::fs::read(backend_marker_path(&db_path)).expect("unchanged marker"),
-                marker,
-                "{failure}"
-            );
-            assert_eq!(
-                *keyring.entries.lock().expect("keyring lock"),
-                inaccessible_entries,
-                "{failure} must not mutate keyring entries"
-            );
-            assert!(!key_file_path(&db_path).exists(), "{failure}");
-            assert!(!legacy_key_file_path(&db_path).exists(), "{failure}");
-
-            *keyring.fail_get.lock().expect("keyring lock") = false;
-            *keyring.no_default_store.lock().expect("keyring lock") = false;
-            *keyring.entries.lock().expect("keyring lock") = original_entries;
-            let recovered =
-                load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::Auto, &keyring)
-                    .expect("recover original keyring identity");
-            assert_eq!(recovered.public_key(), original.public_key(), "{failure}");
-            assert!(!key_file_path(&db_path).exists(), "{failure}");
-        }
-    }
-
-    #[test]
-    fn file_only_mode_rejects_existing_keyring_backend_marker() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let secret = KukuriKeys::generate().export_secret_hex();
-        let keyring = FakeKeyringStore::default();
-        keyring
-            .set_password(
-                KEYRING_SERVICE,
-                keyring_account(&db_path).as_str(),
-                secret.as_str(),
-            )
-            .expect("seed keyring");
-        write_backend_marker(&db_path, BACKEND_KEYRING).expect("write backend marker");
-
-        let error =
-            load_or_create_keys_with_keyring(&db_path, IdentityStorageMode::FileOnly, &keyring)
-                .expect_err("file-only should reject keyring backend");
-
-        assert!(
-            error
-                .to_string()
-                .contains("persisted identity is stored in keyring"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[test]
-    fn optional_secret_keyring_set_failure_does_not_shadow_file_fallback() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-
-        persist_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::Auto,
-            "test-purpose",
-            "registry",
-            "old-value",
-            &keyring,
-        )
-        .expect("persist to keyring");
-        assert_eq!(
-            load_optional_secret_with_keyring(
-                &db_path,
-                IdentityStorageMode::Auto,
-                "test-purpose",
-                "registry",
-                &keyring,
-            )
-            .expect("load from keyring"),
-            Some("old-value".to_string())
-        );
-
-        // keyring 書き込みが失敗し始めた後の更新(例: registry JSON が blob 上限を超過)。
-        // 旧 entry が残ると load(keyring 優先)が file の新しい値を恒久的にシャドウする。
-        *keyring.fail_set.lock().expect("keyring lock") = true;
-        persist_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::Auto,
-            "test-purpose",
-            "registry",
-            "new-value",
-            &keyring,
-        )
-        .expect("persist with keyring set failure");
-
-        let loaded = load_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::Auto,
-            "test-purpose",
-            "registry",
-            &keyring,
-        )
-        .expect("load after fallback");
-        assert_eq!(
-            loaded,
-            Some("new-value".to_string()),
-            "stale keyring entry must not shadow the file fallback"
-        );
-    }
-
-    #[test]
-    fn optional_secret_uses_file_fallback_without_a_default_keyring() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-        *keyring.no_default_store.lock().expect("keyring lock") = true;
-        persist_secret_to_file_path(
-            optional_secret_file_path(&db_path, "test-purpose", "registry").as_path(),
-            "file-value",
-        )
-        .expect("seed file fallback");
-
-        let loaded = load_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::Auto,
-            "test-purpose",
-            "registry",
-            &keyring,
-        )
-        .expect("missing default keyring must use file fallback");
-
-        assert_eq!(loaded, Some("file-value".to_string()));
-    }
-
-    #[test]
-    fn optional_secret_keyring_delete_treats_missing_default_store_as_absent() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-        *keyring.no_default_store.lock().expect("keyring lock") = true;
-
-        delete_optional_secret_keyring_entry_with_keyring(
-            &db_path,
-            "test-purpose",
-            "registry",
-            &keyring,
-        )
-        .expect("missing default keyring is equivalent to an absent entry");
-    }
-
-    #[test]
-    fn file_only_optional_secret_ignores_keyring_shadow_and_failure() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-        keyring
-            .set_password(
-                KEYRING_SERVICE,
-                optional_secret_account(&db_path, "test-purpose", "registry").as_str(),
-                "stale-keyring-value",
-            )
-            .expect("seed stale keyring value");
-        persist_secret_to_file_path(
-            optional_secret_file_path(&db_path, "test-purpose", "registry").as_path(),
-            "staged-file-value",
-        )
-        .expect("seed staged file value");
-        *keyring.fail_get.lock().expect("keyring lock") = true;
-
-        let loaded = load_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::FileOnly,
-            "test-purpose",
-            "registry",
-            &keyring,
-        )
-        .expect("file-only load must not consult keyring");
-
-        assert_eq!(loaded, Some("staged-file-value".to_string()));
-    }
-
-    #[test]
-    fn optional_secret_persists_to_file_even_when_keyring_delete_fails() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keyring = FakeKeyringStore::default();
-
-        *keyring.fail_set.lock().expect("keyring lock") = true;
-        *keyring.fail_delete.lock().expect("keyring lock") = true;
-        persist_optional_secret_with_keyring(
-            &db_path,
-            IdentityStorageMode::Auto,
-            "test-purpose",
-            "registry",
-            "value",
-            &keyring,
-        )
-        .expect("persist must fall back to file even when delete fails");
-
-        assert_eq!(
-            load_secret_from_file_path(
-                optional_secret_file_path(&db_path, "test-purpose", "registry").as_path()
-            )
-            .expect("read fallback file"),
-            Some("value".to_string())
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn persist_secret_replaces_existing_file_via_rename() {
-        use std::os::unix::fs::MetadataExt;
-
-        let dir = tempdir().expect("tempdir");
-        let path = dir.path().join("kukuri.test-secret");
-        persist_secret_to_file_path(&path, "old-value").expect("persist old value");
-        let inode_before = std::fs::metadata(&path).expect("metadata before").ino();
-
-        persist_secret_to_file_path(&path, "new-value").expect("persist new value");
-
-        let inode_after = std::fs::metadata(&path).expect("metadata after").ino();
-        assert_ne!(
-            inode_before, inode_after,
-            "persist must replace the file via rename, not truncate it in place"
-        );
-        assert_eq!(
-            load_secret_from_file_path(&path).expect("load after persist"),
-            Some("new-value".to_string())
-        );
-    }
-
-    #[test]
-    fn stale_temp_file_does_not_corrupt_persisted_secret() {
-        let dir = tempdir().expect("tempdir");
-        let path = dir.path().join("kukuri.test-secret");
-        persist_secret_to_file_path(&path, "old-value").expect("persist old value");
-
-        // 書き込み途中(rename 前)にクラッシュした状態を再現する。
-        let temp_path = path.with_file_name("kukuri.test-secret.tmp");
-        std::fs::write(&temp_path, "garbage-from-interrupted-write").expect("write stale temp");
-
-        assert_eq!(
-            load_secret_from_file_path(&path).expect("load with stale temp present"),
-            Some("old-value".to_string()),
-            "interrupted write must leave the previous content readable"
-        );
-
-        persist_secret_to_file_path(&path, "new-value").expect("persist over stale temp");
-        assert_eq!(
-            load_secret_from_file_path(&path).expect("load after recovery"),
-            Some("new-value".to_string())
-        );
-        assert!(
-            !temp_path.exists(),
-            "persist must consume the temp file via rename"
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn persisted_secret_file_keeps_private_mode() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempdir().expect("tempdir");
-        let path = dir.path().join("kukuri.test-secret");
-        persist_secret_to_file_path(&path, "old-value").expect("persist first value");
-        persist_secret_to_file_path(&path, "new-value").expect("persist second value");
-
-        let mode = std::fs::metadata(&path)
-            .expect("metadata")
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600, "secret file must stay private");
-    }
-
-    #[test]
-    fn legacy_nsec_file_still_loads() {
-        clear_identity_env();
-        let dir = tempdir().expect("tempdir");
-        let db_path = dir.path().join("kukuri.db");
-        let keys = KukuriKeys::generate();
-        let legacy_secret = kukuri_core::encode_secret_key_bech32(
-            keys.export_secret_hex().as_str(),
-            kukuri_core::LEGACY_SECRET_HRP,
-        )
-        .expect("legacy bech32");
-        persist_secret_to_file_path(
-            legacy_key_file_path(&db_path).as_path(),
-            legacy_secret.as_str(),
-        )
-        .expect("persist legacy file");
-
-        let restored = load_or_create_keys_with_keyring(
-            &db_path,
-            IdentityStorageMode::FileOnly,
-            &FakeKeyringStore::default(),
-        )
-        .expect("load legacy keys");
-
-        assert_eq!(restored.export_secret_hex(), keys.export_secret_hex());
-    }
-}
+mod tests;
