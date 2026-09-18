@@ -65,7 +65,7 @@
 - 閲覧側（Linux、アカウント `e8700632…`、成人向け表示 OFF）を停止した状態で、投稿者（Windows、アカウント `bcdde13a…`）が画像投稿 `184508a5…`（画像 `5ca47f2e…`、3,449,739 bytes）を general へ行った（13:43 JST）。
 - CN は 04:47:30 UTC に post／blob とも `allow`・policy v3、advisory `adult`（nsfw、confidence 100、`classifier_score`）を付け、索引した。signal は 1 件（low）。OpenAI の `api_attempts=2`、`scans_failed=0`。
 - 投稿直後の変更通知では、indexer の取得先 peer が直前に終了した Linux client（`13c1ee7e…`）だけで、本文を取得できず `temporarily failed to ingest object record` になった。投稿者の Windows client は bootstrap に登録済み（TTL 90 秒で更新）だったが、取得先 peer は全件見直しのときにだけ更新されるため、次の pass（04:47）で取得・索引された。`last_index_lag_secs=227`（runbook §5.6 の「数十秒以内」を超えた）。
-- signal／event の件数は 2 巡後も増えていない（`risk_signals` 5 件うち有効 3、`signed_moderation_events` 613、索引 22）。
+- 索引直後（04:47:43 UTC）の `risk_signals` 5 件（うち有効 3）、`signed_moderation_events` 613 件、索引 22 件は、general の 2 pass（04:52、04:57、いずれも `scans_fresh=0`・`scans_reused=23`）後の 04:58:28 UTC でも同数。
 
 ### client 実機（AC-6）
 
