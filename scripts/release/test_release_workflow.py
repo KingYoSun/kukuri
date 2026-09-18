@@ -91,6 +91,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(cli["jobs"]["cli-package"]["strategy"]["matrix"]["arch"], ["x86_64", "aarch64"])
         self.assertNotIn("secrets", cli["on"].get("workflow_call", {}))
 
+    def test_linux_package_keeps_distribution_keys_on_github_hosted(self):
+        # 検証の run は Namespace の Cache Volume、配布鍵を渡す run は GitHub-hosted（#1148）。
+        job = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]
+        runs_on = job["runs-on"]
+        signing = next(step for step in job["steps"] if step.get("name") == "Build and verify AppImage and Deb")
+        distribution = signing["env"]["SIGNING_MODE"].removesuffix(" && 'distribution' || 'test' }}")
+        self.assertTrue(runs_on.startswith(distribution + " && 'ubuntu-22.04' || 'namespace-profile-"), runs_on)
+        cached = [step for step in job["steps"] if step.get("uses", "").startswith("namespacelabs/nscloud-cache-action@")]
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(cached[0]["if"], "${{ runner.environment != 'github-hosted' }}")
+        self.assertIn("apps/desktop/src-tauri/target", cached[0]["with"]["path"])
+        self.assertFalse(any("rust-cache" in step.get("uses", "") for step in job["steps"]))
+
     def test_updater_endpoint_is_the_canonical_repository_stable_url(self):
         # 2026-09-16 移管後の正本。旧 owner の URL は GitHub redirect に依存するため設定へ保存しない。
         config = json.loads((ROOT / "apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))

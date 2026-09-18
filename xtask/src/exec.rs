@@ -33,6 +33,36 @@ pub(crate) fn artifacts_dir(name: &str) -> PathBuf {
         .join(name.replace('/', "-"))
 }
 
+/// `cargo xtask`（`cargo run`）が xtask 自身へ渡す package 情報の環境変数。
+///
+/// ring などの build script はこれらを `rerun-if-env-changed` で監視する。xtask 経由の
+/// cargo と直接の cargo で値が食い違うと、そのたびに依存 crate が再 build される。
+/// 子プロセスへは引き継がず、どちらから起動しても同じ環境で build させる。
+const CARGO_RUN_PACKAGE_ENV_PREFIXES: [&str; 2] = ["CARGO_PKG_", "CARGO_MANIFEST_"];
+const CARGO_RUN_PACKAGE_ENV_NAMES: [&str; 3] = [
+    "CARGO_CRATE_NAME",
+    "CARGO_BIN_NAME",
+    "CARGO_PRIMARY_PACKAGE",
+];
+
+pub(crate) fn is_cargo_run_package_env(name: &str) -> bool {
+    CARGO_RUN_PACKAGE_ENV_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+        || CARGO_RUN_PACKAGE_ENV_NAMES.contains(&name)
+}
+
+/// 子プロセス用の `Command`。`cargo run` 由来の package 情報を取り除く。
+pub(crate) fn child_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    for (name, _) in std::env::vars_os() {
+        if name.to_str().is_some_and(is_cargo_run_package_env) {
+            command.env_remove(name);
+        }
+    }
+    command
+}
+
 pub(crate) fn env_refs(envs: &[(String, String)]) -> Vec<(&str, &str)> {
     envs.iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -139,7 +169,7 @@ pub(crate) fn run_spec_with_env(
 ) -> Result<()> {
     let label = format_command(spec);
     run_timed_step(label, || {
-        let status = Command::new(spec.program.as_str())
+        let status = child_command(spec.program.as_str())
             .args(spec.args.iter())
             .current_dir(cwd)
             .envs(envs.iter().copied())
@@ -163,7 +193,7 @@ pub(crate) fn run_capture(
 pub(crate) fn run_capture_spec(spec: &CommandSpec, cwd: &Path) -> Result<()> {
     let label = format_command(spec);
     run_timed_step(label, || {
-        let output = Command::new(spec.program.as_str())
+        let output = child_command(spec.program.as_str())
             .args(spec.args.iter())
             .current_dir(cwd)
             .output()
@@ -290,6 +320,30 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn cargo_run_package_env_is_not_inherited_by_children() {
+        for name in [
+            "CARGO_PKG_NAME",
+            "CARGO_PKG_VERSION_MAJOR",
+            "CARGO_MANIFEST_DIR",
+            "CARGO_MANIFEST_PATH",
+            "CARGO_CRATE_NAME",
+            "CARGO_BIN_NAME",
+            "CARGO_PRIMARY_PACKAGE",
+        ] {
+            assert!(is_cargo_run_package_env(name), "{name}");
+        }
+        for name in [
+            "CARGO",
+            "CARGO_HOME",
+            "CARGO_TARGET_DIR",
+            "CARGO_INCREMENTAL",
+            "PATH",
+        ] {
+            assert!(!is_cargo_run_package_env(name), "{name}");
+        }
     }
 
     #[test]

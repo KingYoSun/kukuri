@@ -21,7 +21,7 @@ rustc --edition=2024 "$test_source/env-probe.rs" -o "$fixture/env-probe" \
 env LD_LIBRARY_PATH="$appdir/usr/lib" GIO_MODULE_DIR="$test_dir/host-modules" \
     GIO_EXTRA_MODULES="$appdir/usr/lib/x86_64-linux-gnu/gio/modules" \
     "$fixture/AppRun.wrapped" >"$test_dir/before.out" 2>"$test_dir/before.err" || true
-grep -q 'undefined symbol: g_task_set_static_name' "$test_dir/before.err"
+grep -q 'undefined symbol: kukuri_fixture_missing_gio_symbol' "$test_dir/before.err"
 
 env APPDIR="$fixture" LD_LIBRARY_PATH="$appdir/usr/lib" \
     GIO_MODULE_DIR="$test_dir/host-modules" GIO_EXTRA_MODULES="$test_dir/host-modules" \
@@ -37,7 +37,7 @@ grep -q '^local=1 tls=1$' "$test_dir/after.out"
 env -u APPDIR LD_LIBRARY_PATH="$appdir/usr/lib" GIO_MODULE_DIR="$test_dir/host-modules" \
     GIO_EXTRA_MODULES="$appdir/usr/lib/x86_64-linux-gnu/gio/modules" \
     "$fixture/env-probe" >"$test_dir/native.out" 2>"$test_dir/native.err" || true
-grep -q 'undefined symbol: g_task_set_static_name' "$test_dir/native.err"
+grep -q 'undefined symbol: kukuri_fixture_missing_gio_symbol' "$test_dir/native.err"
 
 # 同梱TLS欠落時にホストへ黙ってfallbackせず、GIOを起動する前に拒否する。
 status=0

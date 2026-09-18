@@ -8,7 +8,6 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -67,7 +66,7 @@ pub(crate) fn ci_prune_target() -> Result<()> {
 }
 
 fn cargo_metadata(root: &Path, manifest: Option<&Path>) -> Result<Value> {
-    let mut command = Command::new("cargo");
+    let mut command = crate::child_command("cargo");
     command.args(["metadata", "--no-deps", "--format-version", "1"]);
     if let Some(manifest) = manifest {
         command.arg("--manifest-path").arg(manifest);
