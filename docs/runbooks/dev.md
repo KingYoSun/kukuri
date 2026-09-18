@@ -71,6 +71,19 @@ cargo xtask desktop-visual-test
 
 日常の製品変更は `cargo xtask check` + `cargo xtask test` を起点とし、変更pathと影響に応じた必須項目は [検証マトリクス](../../REFACTORING.md#path別検証マトリクス) で選ぶ。文書の誤字など区分Aは同節の対象確認を使う。UIの証跡は [ADR 0014](../adr/0014-uiux-dev-flow.md)、視覚baselineの更新方法は次節を参照する。
 
+## ローカル先行検証
+
+CI は課金対象の計算資源で動く。実装しながら CI へ push して確かめる進め方は費用が大きいので行わない。実装中の確認はローカルで済ませ、CI は PR を作った後の最終確認だけに使う。
+
+- 変更 path に対応する validation は [検証マトリクス](../../REFACTORING.md#path別検証マトリクス) で選び、ローカルで実行してから commit する。
+- workflow を変えるときは `actionlint <対象 file>` を実行する。runner label を増やす場合は `.github/actionlint.yaml` にも追加する。
+- `docker/cn/**` や image の build 手順を変えるときは、ローカルの Docker で `docker buildx bake --file docker/cn/docker-bake.hcl --allow "fs.write=<出力先>"` を実行し、smoke まで通してから PR にする。
+- CI 専用の設定（runner profile、Cache Volume、同時実行枠）を変えるときは、変更前後の計測値と根拠を Issue に記録する。
+- ローカルで再現できない項目（実 runner の版差、Cache Volume の当たり外れ、registry への push）は、PR の run か merge 後の run で確認する。その項目を PR 本文の「検証」に明記する。
+- 反復して失敗率を測るときは `Kukuri Flake Probe` を使い、通常の CI を繰り返し起動しない。
+
+PR 作成後は `gh pr checks <番号>` で全 check の完了を待ち、pending が 0 件になってから merge する（`kukuri-fast.yml` 以外にも `xtask/**` や `.cargo/**` の変更で起動する workflow がある）。
+
 ## リファクタリング監査の発火要否（#873）
 
 `cargo xtask refactoring-audit-check` は、監査済みbaseline以後にratchetの新規path登録または許容上限増加があるかを読み取り専用で判定する。判定結果のtrue／falseはともにexit 0で、破損baseline・commit不足・非祖先・git取得失敗はnonzero。既存 `oversized-files` のCIゲートとは別のコマンドである。

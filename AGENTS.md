@@ -41,6 +41,7 @@
 - Issue作業の承認、リスク別の必須記録、独立監査、Close条件は `docs/runbooks/issue-lifecycle.md` に従う。
 - リファクタリングの変更境界、変更pathごとの必須validation、重い検証の選定・中断は `REFACTORING.md` に従う。
 - root に新しい長文ドキュメントを増やさない。必要なら `docs/` に置く（例外: ビジュアル仕様 `DESIGN.md` ）。
+- CI は検証の場ではない。実装中の確認はローカルで CI と同じ内容を実行し、CI は PR 作成後の最終確認だけに使う。手順は `docs/runbooks/dev.md` の「ローカル先行検証」に従う。
 - `console.error` は使わない。
 - コミットはユーザーの依頼範囲で行う。PR作成・マージの依頼には、そのために必要なコミットを含む。承認範囲の判断は `docs/runbooks/issue-lifecycle.md` に従う。
 
