@@ -368,11 +368,17 @@ test('local profile editor saves profile draft from primary navigation and setti
   await user.type(displayNameInput, 'Local Author');
   await user.click(within(profileSection).getByRole('button', { name: 'Save Profile' }));
 
-  await waitFor(() => {
-    expect(screen.getByText('Local Author')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
-    expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
-  });
+  // 保存後は loadTopics / refreshProfile の完了を待って hash の profileMode=edit が消え、
+  // それまで route 同期が edit に戻すので、overview は再取得の連鎖が終わってから現れる。
+  // 負荷下ではこの連鎖が既定の 1 秒を超えるため、待ちの上限を明示する（#1167）。
+  await waitFor(
+    () => {
+      expect(screen.getByText('Local Author')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit Profile' })).toBeInTheDocument();
+      expect(window.location.hash).toBe('#/profile?topic=kukuri%3Atopic%3Ageneral');
+    },
+    { timeout: 10_000 }
+  );
 
   const drawer = await openSettingsDrawer(user);
   expect(within(drawer).queryByTestId('settings-section-profile')).not.toBeInTheDocument();
