@@ -52,8 +52,7 @@ export function createComposeInteractionsActions({
   setSelectedThread,
   setShellChromeState,
 }: ComposeInteractionsParams) {
-  async function handleDirectMessageAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function prepareDirectMessageAttachment(file: File, resetInput: boolean) {
     if (!file) {
       return;
     }
@@ -73,10 +72,34 @@ export function createComposeInteractionsActions({
         setDirectMessageError(null);
       }
     } catch {
-      setDirectMessageError(translate('common:errors.failedToGenerateVideoPoster'));
+      setDirectMessageError(
+        translate(
+          file.type.startsWith('image/')
+            ? 'common:errors.failedToPrepareImageAttachment'
+            : 'common:errors.failedToGenerateVideoPoster'
+        )
+      );
     } finally {
-      setDirectMessageAttachmentInputKey((value) => value + 1);
+      if (resetInput) {
+        setDirectMessageAttachmentInputKey((value) => value + 1);
+      }
     }
+  }
+
+  async function handleDirectMessageAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    await prepareDirectMessageAttachment(file, true);
+  }
+
+  async function handleDirectMessageAttachmentPaste(files: File[]) {
+    const image = files.find((file) => file.type.startsWith('image/'));
+    if (!image) {
+      return;
+    }
+    await prepareDirectMessageAttachment(image, false);
   }
 
   function handleRemoveDirectMessageDraftAttachment(itemId: string) {
@@ -129,6 +152,7 @@ export function createComposeInteractionsActions({
 
   return {
     handleDirectMessageAttachmentSelection,
+    handleDirectMessageAttachmentPaste,
     handleRemoveDirectMessageDraftAttachment,
     handleSimpleRepost,
     handleRetryLocalPost,

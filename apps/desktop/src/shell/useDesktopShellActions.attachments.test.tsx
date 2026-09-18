@@ -19,6 +19,128 @@ beforeEach(() => {
 });
 
 describe('useDesktopShellActions attachments (#965)', () => {
+  test('clipboard images append to the targeted Column draft without publishing', async () => {
+    const createPost = vi.fn();
+    const target = {
+      columnId: 'timeline-public',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({
+      api: { createPost },
+      preset: (current) => ({
+        columnDraftsByKey: setColumnDraft(current.columnDraftsByKey, target, (draft) => ({
+          ...draft,
+          content: 'keep me',
+          expanded: true,
+        })),
+      }),
+    });
+    const image = new File(['image'], 'clipboard.png', { type: 'image/png' });
+
+    await act(async () => {
+      await view.result.current.handleColumnDraftAttachmentPaste(target, [image]);
+    });
+
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      content: 'keep me',
+      mediaItems: [{ id: 'image-item-clipboard.png' }],
+      error: null,
+    });
+    expect(view.mocks.buildImageDraftItem).toHaveBeenCalledWith(image);
+    expect(view.mocks.rememberDraftPreview).toHaveBeenCalledTimes(1);
+    expect(createPost).not.toHaveBeenCalled();
+  });
+
+  test('clipboard image failure keeps accepted Column drafts and reports an image error', async () => {
+    const target = {
+      columnId: 'timeline-public',
+      action: 'post' as const,
+      scope: { topicId: 'topic-a', channelId: null },
+    };
+    const view = renderActionsHook({ translate: recordingTranslate });
+    view.mocks.buildImageDraftItem
+      .mockResolvedValueOnce({
+        id: 'accepted',
+        source_name: 'accepted.png',
+        preview_url: 'blob:accepted',
+        attachments: [],
+      })
+      .mockRejectedValueOnce(new Error('read failed'));
+
+    await act(async () => {
+      await view.result.current.handleColumnDraftAttachmentPaste(target, [
+        new File(['ok'], 'accepted.png', { type: 'image/png' }),
+        new File(['bad'], 'broken.png', { type: 'image/png' }),
+      ]);
+    });
+
+    expect(view.store.getState().columnDraftsByKey[columnDraftKey(target)]).toMatchObject({
+      mediaItems: [{ id: 'accepted' }],
+      error: 'common:errors.failedToPrepareImageAttachment',
+    });
+    expect(view.mocks.rememberDraftPreview).toHaveBeenCalledTimes(1);
+  });
+
+  test('clipboard image replaces the auxiliary DM draft without sending', async () => {
+    const sendDirectMessage = vi.fn();
+    const view = renderActionsHook({
+      api: { sendDirectMessage },
+      preset: () => ({
+        directMessageDraftMediaItems: [
+          {
+            id: 'old-image',
+            source_name: 'old.png',
+            preview_url: 'blob:old',
+            attachments: [],
+          },
+        ],
+      }),
+    });
+    const image = new File(['new'], 'new.png', { type: 'image/png' });
+
+    await act(async () => {
+      await view.result.current.handleDirectMessageAttachmentPaste([image]);
+    });
+
+    expect(view.store.getState()).toMatchObject({
+      directMessageDraftMediaItems: [{ id: 'image-item-new.png' }],
+      directMessageError: null,
+    });
+    expect(view.mocks.releaseAllDirectMessageDraftPreviews).toHaveBeenCalledTimes(1);
+    expect(view.mocks.rememberDirectMessageDraftPreview).toHaveBeenCalledTimes(1);
+    expect(sendDirectMessage).not.toHaveBeenCalled();
+  });
+
+  test('clipboard image failure keeps the existing auxiliary DM draft', async () => {
+    const view = renderActionsHook({
+      preset: () => ({
+        directMessageDraftMediaItems: [
+          {
+            id: 'old-image',
+            source_name: 'old.png',
+            preview_url: 'blob:old',
+            attachments: [],
+          },
+        ],
+      }),
+    });
+    view.mocks.buildImageDraftItem.mockRejectedValueOnce(new Error('read failed'));
+
+    await act(async () => {
+      await view.result.current.handleDirectMessageAttachmentPaste([
+        new File(['bad'], 'broken.png', { type: 'image/png' }),
+      ]);
+    });
+
+    expect(view.store.getState()).toMatchObject({
+      directMessageDraftMediaItems: [{ id: 'old-image' }],
+      directMessageError: 'common:errors.failedToPrepareImageAttachment',
+    });
+    expect(view.mocks.releaseAllDirectMessageDraftPreviews).not.toHaveBeenCalled();
+    expect(view.mocks.rememberDirectMessageDraftPreview).not.toHaveBeenCalled();
+  });
+
   // #965: 非対応ファイルは読み込まずに理由(ファイル名 + 対応形式)を composer に出し、
   // 対応ファイルだけを下書きへ追加する。
   test('unsupported Column Draft attachments show one reason with the rejected count and are never read', async () => {

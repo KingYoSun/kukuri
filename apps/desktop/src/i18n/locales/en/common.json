@@ -89,6 +89,7 @@
     "failedToClearDirectMessages": "Failed to clear direct messages.",
     "failedToDeleteDirectMessage": "Failed to delete the direct message.",
     "failedToFetchConsentStatus": "Failed to load policy acceptance status.",
+    "failedToPrepareImageAttachment": "Failed to prepare the image attachment.",
     "failedToGenerateVideoPoster": "Failed to generate the video preview.",
     "failedToImportPeer": "Failed to import the peer.",
     "failedToLoadAuthor": "Failed to load user information.",

@@ -28,6 +28,7 @@ type ColumnComposerFooterProps = {
     target: ColumnDraftTarget,
     event: ChangeEvent<HTMLInputElement>
   ) => Promise<void>;
+  onAttachmentPaste: (target: ColumnDraftTarget, files: File[]) => Promise<void>;
   onRemoveAttachment: (target: ColumnDraftTarget, itemId: string) => void;
   onSubmit: (target: ColumnDraftTarget, event: FormEvent<HTMLFormElement>) => Promise<void>;
   target: ColumnDraftTarget;
@@ -53,6 +54,7 @@ export function ColumnComposerFooter({
   onActivate,
   onOpenKeyboardHelp,
   onAttachmentSelection,
+  onAttachmentPaste,
   onRemoveAttachment,
   onSubmit,
   target,
@@ -161,6 +163,7 @@ export function ColumnComposerFooter({
         onSubmit={(event) => void onSubmit(target, event)}
         attachmentInputKey={draft.attachmentInputKey}
         onAttachmentSelection={(event) => void onAttachmentSelection(target, event)}
+        onPasteImageFiles={(files) => onAttachmentPaste(target, files)}
         draftMediaItems={draftMediaViews}
         onRemoveDraftAttachment={(itemId) => onRemoveAttachment(target, itemId)}
         adultLabeled={draft.adultLabeled}

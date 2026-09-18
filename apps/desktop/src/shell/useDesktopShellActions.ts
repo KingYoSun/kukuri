@@ -527,6 +527,7 @@ export function useDesktopShellActions({
 
   const {
     handleDirectMessageAttachmentSelection,
+    handleDirectMessageAttachmentPaste,
     handleRemoveDirectMessageDraftAttachment,
     handleSimpleRepost,
     handleRetryLocalPost,
@@ -567,15 +568,16 @@ export function useDesktopShellActions({
     setDirectMessageSending,
   });
 
-  async function handleColumnDraftAttachmentSelection(
+  async function prepareColumnDraftAttachments(
     target: ColumnDraftTarget,
-    event: ChangeEvent<HTMLInputElement>
+    files: File[],
+    resetInput: boolean
   ) {
-    const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
     const nextItems: DraftMediaItem[] = [];
     // #965: 非対応ファイルは読み込まずに名前だけ集め、1 つの理由文にまとめる。
     const rejectedNames: string[] = [];
+    let imageFailed = false;
     let posterFailed = false;
     for (const file of files) {
       try {
@@ -587,11 +589,16 @@ export function useDesktopShellActions({
           rejectedNames.push(file.name);
         }
       } catch {
-        posterFailed = true;
+        if (file.type.startsWith('image/')) {
+          imageFailed = true;
+        } else {
+          posterFailed = true;
+        }
       }
     }
     const failures = [
       formatUnsupportedAttachmentMessage(translate, rejectedNames),
+      imageFailed ? translate('common:errors.failedToPrepareImageAttachment') : null,
       posterFailed ? translate('common:errors.failedToGenerateVideoPoster') : null,
     ].filter((message): message is string => message !== null);
     nextItems.forEach(rememberDraftPreview);
@@ -600,8 +607,23 @@ export function useDesktopShellActions({
         ...draft,
         mediaItems: [...draft.mediaItems, ...nextItems],
         error: failures.length > 0 ? failures.join(' ') : null,
-        attachmentInputKey: draft.attachmentInputKey + 1,
+        attachmentInputKey: resetInput ? draft.attachmentInputKey + 1 : draft.attachmentInputKey,
       }))
+    );
+  }
+
+  async function handleColumnDraftAttachmentSelection(
+    target: ColumnDraftTarget,
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    await prepareColumnDraftAttachments(target, Array.from(event.target.files ?? []), true);
+  }
+
+  async function handleColumnDraftAttachmentPaste(target: ColumnDraftTarget, files: File[]) {
+    await prepareColumnDraftAttachments(
+      target,
+      files.filter((file) => file.type.startsWith('image/')),
+      false
     );
   }
 
@@ -897,9 +919,11 @@ export function useDesktopShellActions({
     handleJoinChannelAccess,
     handleImportChannelAccessToken,
     handleDirectMessageAttachmentSelection,
+    handleDirectMessageAttachmentPaste,
     handleRemoveDirectMessageDraftAttachment,
     handleSendDirectMessage,
     handleColumnDraftAttachmentSelection,
+    handleColumnDraftAttachmentPaste,
     handleRemoveColumnDraftAttachment,
     handleSubmitColumnDraft,
     handleDeleteDirectMessageMessage,

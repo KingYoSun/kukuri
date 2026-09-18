@@ -49,6 +49,64 @@ export async function fileToCreateAttachment(
 
 type TranslateAttachmentMessage = (key: string, options?: Record<string, unknown>) => string;
 
+type ClipboardFileItem = {
+  kind: string;
+  type: string;
+  getAsFile: () => File | null;
+};
+
+type ClipboardFileSource = {
+  items: ArrayLike<ClipboardFileItem>;
+  files: ArrayLike<File>;
+};
+
+function clipboardImageExtension(mime: string) {
+  switch (mime.toLowerCase()) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/svg+xml':
+      return 'svg';
+    case 'image/png':
+      return 'png';
+    case 'image/gif':
+      return 'gif';
+    case 'image/webp':
+      return 'webp';
+    case 'image/bmp':
+      return 'bmp';
+    case 'image/avif':
+      return 'avif';
+    case 'image/heic':
+      return 'heic';
+    default:
+      return 'image';
+  }
+}
+
+function nameClipboardImage(file: File) {
+  if (file.name.trim()) {
+    return file;
+  }
+  return new File([file], `clipboard-image.${clipboardImageExtension(file.type)}`, {
+    type: file.type,
+    lastModified: file.lastModified,
+  });
+}
+
+// #1172: Prefer file items because copied browser images can also expose a text/HTML fallback.
+// DataTransfer.files is retained as the WebView fallback. Only concrete image files enter the
+// existing attachment pipeline; ordinary text paste remains owned by the browser.
+export function clipboardImageFiles(source: ClipboardFileSource): File[] {
+  const itemImages = Array.from(source.items)
+    .filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+  const candidates = itemImages.length > 0 ? itemImages : Array.from(source.files);
+  return candidates
+    .filter((file) => file.type.toLowerCase().startsWith('image/'))
+    .map(nameClipboardImage);
+}
+
 // #965: 非対応ファイルの理由は投稿・返信・DM で同じ文言にする。先頭のファイル名と残り件数だけを
 // 出し、対応形式(画像と動画)の説明は locale 側の文言が持つ。判定自体は caller が所有する。
 export function formatUnsupportedAttachmentMessage(

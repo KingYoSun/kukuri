@@ -26,6 +26,7 @@ import type {
 } from '@/lib/api';
 import { formatLocalizedTime } from '@/i18n/format';
 import type { SupportedLocale } from '@/i18n';
+import { clipboardImageFiles } from '@/lib/attachments';
 import { type InternalSmartReference } from '@/lib/internalLinks';
 import { eligibleTrustRelationNodes } from '@/lib/api/communityIndex';
 import { copyTextToClipboard } from '@/lib/utils';
@@ -85,6 +86,7 @@ export type DesktopShellMessagesSurfaceProps = {
   openAuthorDetail: OpenAuthorDetail;
   handleDeleteDirectMessageMessage: (peerPubkey: string, messageId: string) => Promise<void>;
   handleDirectMessageAttachmentSelection: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleDirectMessageAttachmentPaste?: (files: File[]) => Promise<void>;
   handleRemoveDirectMessageDraftAttachment: (itemId: string) => void;
   handleSendDirectMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   surfaceKind?: 'messages' | 'conversation';
@@ -101,6 +103,7 @@ export function DesktopShellMessagesSurface({
   openAuthorDetail,
   handleDeleteDirectMessageMessage,
   handleDirectMessageAttachmentSelection,
+  handleDirectMessageAttachmentPaste,
   handleRemoveDirectMessageDraftAttachment,
   handleSendDirectMessage,
   surfaceKind,
@@ -368,6 +371,21 @@ export function DesktopShellMessagesSurface({
               <Textarea
                 value={directMessageComposer}
                 onChange={(event) => setDirectMessageComposer(event.target.value)}
+                onPaste={(event) => {
+                  if (
+                    directMessageSending ||
+                    conversationStatus?.send_enabled === false ||
+                    !handleDirectMessageAttachmentPaste
+                  ) {
+                    return;
+                  }
+                  const images = clipboardImageFiles(event.clipboardData);
+                  if (images.length === 0) {
+                    return;
+                  }
+                  event.preventDefault();
+                  void handleDirectMessageAttachmentPaste(images);
+                }}
                 placeholder={t('common:composer.writeMessage')}
                 disabled={
                   directMessageSending || conversationStatus?.send_enabled === false

@@ -542,7 +542,6 @@ export function DesktopShellPage({
       showComposer={false}
     />
   );
-  const openNotificationSettings = () => handleOpenSettingsSection('notifications');
   const renderNotificationsSurface = (column: ColumnState) => (
     <DesktopShellNotificationsSurface
       t={t}
@@ -550,7 +549,7 @@ export function DesktopShellPage({
       handleOpenNotification={(notification) =>
         shellActions.handleOpenNotification(notification, column.id)
       }
-      onOpenNotificationSettings={openNotificationSettings}
+      onOpenNotificationSettings={() => handleOpenSettingsSection('notifications')}
     />
   );
   const renderDetailSurface = (
@@ -828,6 +827,7 @@ export function DesktopShellPage({
       }}
       mentionCandidates={viewModels.mentionCandidates}
       onColumnAttachmentSelection={shellActions.handleColumnDraftAttachmentSelection}
+      onColumnAttachmentPaste={shellActions.handleColumnDraftAttachmentPaste}
       onRemoveColumnAttachment={shellActions.handleRemoveColumnDraftAttachment}
       onSubmitColumnDraft={shellActions.handleSubmitColumnDraft}
       onEndLiveSession={shellActions.handleEndLiveSession}
