@@ -15,7 +15,7 @@ export const AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS = 300;
 export const AUTHOR_TRUST_GATE_LOOKUP_BATCH_SIZE = 100;
 /// 期限を持たない判断（未評価・照会失敗・照会中）を作り直すまでの待ち時間。
 export const AUTHOR_TRUST_GATE_LOOKUP_FALLBACK_TTL_MS = 600_000;
-/// 期限切れの判断を捨てて照会し直す間隔。
+/// 期限切れの判断を照会し直す間隔。
 export const AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS = 30_000;
 
 /// #1061: 投稿カードから、表示判断の対象になる著者を集める。
@@ -64,12 +64,15 @@ export type UseAuthorTrustGateLookupArgs = {
   config: CommunityNodeConfig;
   /// 採用順位に選んだ node の認証・同意の状態。
   statuses?: readonly CommunityNodeNodeStatus[];
+  /// 上の状態を読み終えたか。読む前は照会しない（未確定の状態で判断を作らない）。
+  statusesLoaded?: boolean;
 };
 
 /// #1061: 表示中の著者を採用 CN へ一括照会し、折りたたみ判断を shell state へ置く。
 ///
 /// - 採用順位が空なら照会しない。送るのは著者 pubkey だけで、投稿本文や閲覧履歴は送らない。
-/// - 判断は評価の期限（ADR 0026 §8.4、既定 600 秒）まで使い、過ぎたら捨てて照会し直す。
+/// - 判断は評価の期限（ADR 0026 §8.4、既定 600 秒）まで使い、過ぎたら照会し直して差し替える。
+///   応答が届くまでは前の判断のままにして、折りたたんだ投稿が一瞬開かないようにする。
 /// - 採用順位・認証・必須同意が変わったら、すべての判断を捨てて照会し直す。
 /// - 失敗は runtime 側が「未評価」として返すため、折りたたみは起きない（fail-open）。
 export function useAuthorTrustGateLookup({
@@ -78,10 +81,11 @@ export function useAuthorTrustGateLookup({
   hostPubkeys = [],
   config,
   statuses = [],
+  statusesLoaded = true,
 }: UseAuthorTrustGateLookupArgs) {
   const storeApi = useDesktopShellStoreApi();
   const priority = config.trust_node_priority ?? [];
-  const active = priority.length > 0;
+  const active = priority.length > 0 && statusesLoaded;
   const adoptionSignature = trustGateAdoptionSignature(config, statuses);
   // 照会済みの著者と、その判断を使ってよい期限（epoch ms）。
   const expiryRef = useRef<Map<string, number>>(new Map());
@@ -132,15 +136,22 @@ export function useAuthorTrustGateLookup({
           additions[gate.author_pubkey] = gate;
           expiryRef.current.set(gate.author_pubkey, gateExpiry(gate, fallback));
         }
-        if (Object.keys(additions).length === 0) return;
-        storeApi.getState().setField('authorTrustGates', (current) => ({
-          ...current,
-          ...additions,
-        }));
+        // 応答に含まれなかった著者の判断は残さない（作り直しに失敗した扱い）。
+        const dropped = batch.filter((author) => !(author in additions));
+        storeApi.getState().setField('authorTrustGates', (current) => {
+          const next = { ...current, ...additions };
+          for (const author of dropped) delete next[author];
+          return next;
+        });
       } catch {
-        // 照会できない著者は未評価のまま（折りたたまない）。一定時間後に照会し直す。
+        // 照会できない著者は未評価として扱い、折りたたみをやめる（fail-open）。
         if (generation !== generationRef.current) return;
         for (const author of batch) expiryRef.current.set(author, fallback);
+        storeApi.getState().setField('authorTrustGates', (current) => {
+          const next = { ...current };
+          for (const author of batch) delete next[author];
+          return next;
+        });
       }
     }
 
@@ -157,24 +168,16 @@ export function useAuthorTrustGateLookup({
       }
     }
 
-    /// 期限切れの判断を捨て、判断を持たない著者を照会待ちに入れる。
+    /// 期限切れの判断を照会し直し、判断を持たない著者を照会待ちに入れる。
     function refresh() {
       const now = Date.now();
-      const expired = [...expiryRef.current]
-        .filter(([, expiresAt]) => expiresAt <= now)
-        .map(([author]) => author);
-      for (const author of expired) expiryRef.current.delete(author);
-      if (expired.length > 0) {
-        // 期限切れの判断はそのまま使わない（古い判断で折りたたみ続けない）。
-        storeApi.getState().setField('authorTrustGates', (current) => {
-          const next = { ...current };
-          for (const author of expired) delete next[author];
-          return next;
-        });
+      for (const [author, expiresAt] of expiryRef.current) {
+        if (expiresAt <= now) expiryRef.current.delete(author);
       }
       for (const author of authorsRef.current) {
         if (expiryRef.current.has(author)) continue;
         // 照会中も期限として扱い、応答が返るまで同じ著者を二重に送らない。
+        // 前の判断は応答で差し替えるまで残す（折りたたんだ投稿を一瞬開かせない）。
         expiryRef.current.set(author, now + AUTHOR_TRUST_GATE_LOOKUP_FALLBACK_TTL_MS);
         queueRef.current.add(author);
       }

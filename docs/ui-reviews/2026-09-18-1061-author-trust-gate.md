@@ -35,10 +35,10 @@
 - `apps/desktop/src/shell/DesktopShellPage.authorTrustGate.test.tsx`（4 件）
 - `apps/desktop/src/shell/authorTrustGates.test.ts`（3 件）
 - `apps/desktop/src/components/settings/CommunityNodeTrustPriorityField.test.tsx`（3 件）
-- `apps/desktop/src/shell/data/useAuthorTrustGateLookup.test.tsx`（4 件。期限切れ・同意取消・待ち行列）
+- `apps/desktop/src/shell/data/useAuthorTrustGateLookup.test.tsx`（6 件。期限切れの作り直し・照会失敗・状態の読み込み待ち・同意取消・待ち行列）
 - `cargo xtask desktop-ui-check`（lint / typecheck / Vitest / Storybook / browser / visual）
 
 ## 残っている限界
 
-- 折りたたみの判断は評価の期限（既定 600 秒）で捨てて照会し直す。期限内は同じ判断を使うため、ノード側の評価変更が即時には反映されない。採用順位・認証・必須同意の変更は、期限を待たずに判断を捨てる。
+- 折りたたみの判断は評価の期限（既定 600 秒）で照会し直し、応答が届いた時点で差し替える。応答までは前の判断のままなので、折りたたんだ投稿が一瞬開くことはない。期限内は同じ判断を使うため、ノード側の評価変更が即時には反映されない。採用順位・認証・必須同意の変更は、期限を待たずに判断を捨てる。
 - 作者ごとの例外は端末内の設定で、別の端末には共有されない（mute と同じ扱い）。

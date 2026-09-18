@@ -53,10 +53,26 @@ function hiddenGate(expiresAt: string | null): AuthorTrustGateResult {
   };
 }
 
+function visibleGate(expiresAt: string | null): AuthorTrustGateResult {
+  return {
+    gates: [
+      {
+        author_pubkey: AUTHOR,
+        hidden: false,
+        node_base_url: NODE,
+        reasons: [],
+        expires_at: expiresAt,
+        always_visible: false,
+      },
+    ],
+  };
+}
+
 type MountProps = {
   config: CommunityNodeConfig;
   posts: PostView[];
   statuses: CommunityNodeNodeStatus[];
+  statusesLoaded: boolean;
 };
 
 function mount(result: () => AuthorTrustGateResult, initial?: Partial<MountProps>) {
@@ -69,10 +85,17 @@ function mount(result: () => AuthorTrustGateResult, initial?: Partial<MountProps
         posts: props.posts,
         config: props.config,
         statuses: props.statuses,
+        statusesLoaded: props.statusesLoaded,
       }),
     {
       wrapper: harness.wrapper,
-      initialProps: { config: config(), posts: [post()], statuses: [status()], ...initial },
+      initialProps: {
+        config: config(),
+        posts: [post()],
+        statuses: [status()],
+        statusesLoaded: true,
+        ...initial,
+      },
     }
   );
   return { harness, api, hook };
@@ -100,23 +123,65 @@ test('no node is queried without an adopted priority', async () => {
   expect(harness.store.getState().authorTrustGates).toEqual({});
 });
 
-test('an expired evaluation is dropped and looked up again', async () => {
+test('an expired evaluation is looked up again without opening the post first', async () => {
   const expired = new Date(Date.now() - 1_000).toISOString();
   const fresh = new Date(Date.now() + 600_000).toISOString();
   let expiresAt = expired;
-  const { harness, api } = mount(() => hiddenGate(expiresAt));
+  let hidden = true;
+  const { harness, api } = mount(() => (hidden ? hiddenGate(expiresAt) : visibleGate(fresh)));
 
   await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
   expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
 
-  // 期限を過ぎた判断はそのまま使わず、照会し直す。
+  // 期限を過ぎたら照会し直す。応答が届くまでは前の判断のままにする。
   expiresAt = fresh;
-  await advance(AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS + AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS);
+  expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
   expect(api.evaluateAuthorTrustGates).toHaveBeenCalledTimes(2);
 
   // 期限内の判断は作り直さない。
   await advance(AUTHOR_TRUST_GATE_LOOKUP_SWEEP_MS * 2);
   expect(api.evaluateAuthorTrustGates).toHaveBeenCalledTimes(2);
+
+  // 評価が変わったら、次の作り直しで折りたたみをやめる。
+  hidden = false;
+  expiresAt = new Date(Date.now() - 1_000).toISOString();
+  harness.store.getState().setField('authorTrustGates', (current) => ({
+    ...current,
+    [AUTHOR]: { ...current[AUTHOR], expires_at: expiresAt },
+  }));
+  await advance(600_000 + AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(false);
+});
+
+test('a failed lookup stops collapsing the post (fail-open)', async () => {
+  const fresh = new Date(Date.now() + 600_000).toISOString();
+  const { harness, api } = mount(() => hiddenGate(fresh));
+
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates[AUTHOR]?.hidden).toBe(true);
+
+  api.evaluateAuthorTrustGates.mockRejectedValue(new Error('unreachable'));
+  await advance(600_000 + AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(harness.store.getState().authorTrustGates).toEqual({});
+});
+
+test('nothing is queried until the node statuses are loaded', async () => {
+  const fresh = new Date(Date.now() + 600_000).toISOString();
+  const { api, hook } = mount(() => hiddenGate(fresh), { statusesLoaded: false });
+
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS * 2);
+  expect(api.evaluateAuthorTrustGates).not.toHaveBeenCalled();
+
+  hook.rerender({
+    config: config(),
+    posts: [post()],
+    statuses: [status()],
+    statusesLoaded: true,
+  });
+  await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS);
+  expect(api.evaluateAuthorTrustGates).toHaveBeenCalledTimes(1);
 });
 
 test('withdrawing the required consents drops the collapse and stops using it', async () => {
@@ -131,6 +196,7 @@ test('withdrawing the required consents drops the collapse and stops using it', 
     config: config(),
     posts: [post()],
     statuses: [status({ consent_state: { all_required_accepted: false, items: [] } })],
+    statusesLoaded: true,
   });
 
   // 同意が外れた時点で古い判断を捨てる(照会の応答を待たずに折りたたみをやめる)。
@@ -145,7 +211,7 @@ test('a re-render during the debounce does not drop the queued lookup', async ()
 
   // 待ち時間の途中で表示が更新されると、以前は timer が破棄されたまま再設定されなかった。
   await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS / 2);
-  hook.rerender({ config: config(), posts: [post()], statuses: [status()] });
+  hook.rerender({ config: config(), posts: [post()], statuses: [status()], statusesLoaded: true });
   await advance(AUTHOR_TRUST_GATE_LOOKUP_DEBOUNCE_MS * 2);
 
   expect(api.evaluateAuthorTrustGates).toHaveBeenCalledTimes(1);

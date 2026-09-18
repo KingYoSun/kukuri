@@ -215,8 +215,8 @@ impl DesktopRuntime {
             }
             let mut requested = pending.clone();
             // CN 側の一括評価の上限。超えた分はこのノードでは評価せず、未評価として扱う
-        // (desktop は AUTHOR_TRUST_GATE_LOOKUP_BATCH_SIZE で分割して送る)。
-        requested.truncate(TRUST_EVALUATIONS_MAX_TARGETS);
+            // (desktop は AUTHOR_TRUST_GATE_LOOKUP_BATCH_SIZE で分割して送る)。
+            requested.truncate(TRUST_EVALUATIONS_MAX_TARGETS);
             let evaluations = match self
                 .request_author_trust_evaluations(base_url.as_str(), &requested)
                 .await
@@ -356,6 +356,7 @@ pub(crate) fn normalize_trust_node_priority(priority: &[String], nodes: &[String
     let mut normalized = Vec::new();
     for base_url in priority {
         let Ok(base_url) = normalize_http_url(base_url.as_str()) else {
+            warn!(base_url = %base_url, "trust node priority entry is not a usable url");
             continue;
         };
         if !nodes.contains(&base_url) || !seen.insert(base_url.clone()) {

@@ -325,6 +325,7 @@ export function useDesktopShellData({
     hostPubkeys: trustGateHostPubkeys,
     config: communityNodeConfig,
     statuses: communityNodeStatuses,
+    statusesLoaded: communityNodeStatusesLoaded,
   });
 
   // #858 / #1107: 表示設定 OFF の間にゲート対象となる添付 hash(引用 snapshot 含む)。

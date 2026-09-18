@@ -23,7 +23,7 @@ Legal bundle version: 7
 | Mainline DHT | `seeded_dht` を有効にして接続先を探索するとき | P2P endpoint の発見 | endpoint ID、署名済み address record、通信元 IP address 等 | DHT 参加者に分散して扱われるため、kukuri が一括した保持・削除を制御しません |
 | P2P 接続相手 | topic、profile、public post、private channel、DM、live／game／Dome 等へ参加するとき | 選択した audience 内の同期・表示・添付取得・real-time 通信 | 公開鍵、endpoint／IP address、対象範囲の署名済み metadata・本文・reaction・添付。private channel／DM は対応する capability／暗号鍵の範囲 | 受信端末が copy を保持し得ます。送信後の完全な遠隔回収・一括削除は保証できません |
 | 構成された iroh relay | Direct P2P の接続補助、または Direct P2P と Relay Supported P2P が成立しない場合 | hole punching／endpoint assist、必要時の Relay Fallback | IP address、endpoint ID、接続 metadata。Relay Fallback では暗号化された実データ traffic | relay 運営者の方針に従います。relay URL があるだけでは実データが relay を通ったことを意味しません |
-| 利用者が保存・同意した Community Node | manifest／policy 取得、認証、consent、bootstrap／rendezvous、検索・発見、明示した indexing と索引状況の確認、成人向け表現の推定の照会、信頼評価の照会、ブロック・ミュートの提供（同意した Node だけ）、通報、tester feedback 等 | 選択した Node capability の提供 | 公開鍵、proof、endpoint 情報、topic rendezvous key、検索 query、対象識別子（索引状況の確認では自分の申請対象と確認したい topic／channel。非公開チャンネルの索引対象判定は明示確認後の所属証明を伴います）、成人向け表現の推定の照会では表示した投稿の ID と添付ファイルの識別子（推定の採用を選んだ Node だけ。本文・閲覧履歴・social graph は含みません）、ブロック・ミュートの提供では、相手の公開鍵・操作の種別と状態・操作時刻・あなたの署名（その Node の任意同意文書に同意した場合だけ。投稿本文・閲覧履歴は含みません）、信頼評価の照会では表示した投稿の著者の公開鍵（採用順位に選んだ Node だけ。本文・閲覧履歴・ブロック / ミュート一覧は含みません）、通報／feedback の入力項目等。機能ごとに異なります | 当該 Node の privacy／外部送信／retention 文書に従います。Node 運営者と kukuri 運営者が同一とは限りません |
+| 利用者が保存・同意した Community Node | manifest／policy 取得、認証、consent、bootstrap／rendezvous、検索・発見、明示した indexing と索引状況の確認、成人向け表現の推定の照会、信頼評価の照会、ブロック・ミュートの提供（同意した Node だけ）、通報、tester feedback 等 | 選択した Node capability の提供 | 公開鍵、proof、endpoint 情報、topic rendezvous key、検索 query、対象識別子（索引状況の確認では自分の申請対象と確認したい topic／channel。非公開チャンネルの索引対象判定は明示確認後の所属証明を伴います）、成人向け表現の推定の照会では表示した投稿の ID と添付ファイルの識別子（推定の採用を選んだ Node だけ。本文・閲覧履歴・social graph は含みません）、ブロック・ミュートの提供では、相手の公開鍵・操作の種別と状態・操作時刻・あなたの署名（その Node の任意同意文書に同意した場合だけ。投稿本文・閲覧履歴は含みません）、信頼評価の照会では表示した投稿と引用元の作成者の公開鍵、および表示した live / game 一覧の主催者の公開鍵（採用順位に選んだ Node だけ。本文・閲覧履歴・ブロック / ミュート一覧は含みません）、通報／feedback の入力項目等。機能ごとに異なります | 当該 Node の privacy／外部送信／retention 文書に従います。Node 運営者と kukuri 運営者が同一とは限りません |
 
 現行配布物は `https://api.kukuri.app` を Community Node の初期候補として含みます。これは固定接続先ではなく、利用者は削除または他の Node へ置換できます。実際の relay と Node の開示 URL は、その時点の配布設定、利用者設定、取得した Node manifest から確認できます。
 
@@ -41,7 +41,7 @@ Legal bundle version: 7
 
 ## 5. 変更履歴
 
-- version 7（2026-09-18）: Community Node の送信契機に「信頼評価の照会」を追加しました。採用順位に選んだ Node へ、表示した投稿と引用元の作成者の公開鍵を送ります。本文・閲覧履歴・ブロック / ミュートの一覧は送りません（#1061）。
+- version 7（2026-09-18）: Community Node の送信契機に「信頼評価の照会」を追加しました。採用順位に選んだ Node へ、表示した投稿と引用元の作成者の公開鍵、および表示した live / game 一覧の主催者の公開鍵を送ります。本文・閲覧履歴・ブロック / ミュートの一覧は送りません（#1061）。
 - version 6 補記（2026-09-18）: Community Node の送信契機に「ブロック・ミュートの提供」を追記しました（#1061）。送信は、その Node が公開する任意同意文書へ利用者が個別に同意した場合だけ行い、同意を取り消すと保存済みの記録の削除を要求します。同意済みの Node capability の範囲内で、送信先・目的・保持主体は変わらないため版・施行日は変更していません。
 - version 6（2026-09-16）: Community Node の送信契機に「成人向け表現の推定の照会」を追加しました。推定の採用を選んだ Node へ、タイムライン・スレッド・通知等に表示した投稿の ID と添付ファイルの識別子を送ります（#1056）。
 - version 5 補記（2026-09-11）: Community Node の送信契機に「索引状況の確認」（自分の索引申請の状態と、対象が索引対象かの確認。#975）を追記しました。送信先・目的・保持主体は変わらず、同意済みの Node capability の範囲内のため版・施行日は変更していません。

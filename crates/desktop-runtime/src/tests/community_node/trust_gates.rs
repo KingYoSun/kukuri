@@ -435,6 +435,58 @@ async fn priority_and_display_exceptions_restore_after_restart() {
     node.server.abort();
 }
 
+/// 表示設定にすぎないため、読めない優先順位があっても起動を止めず、有効な分だけ復元する。
+#[tokio::test]
+async fn unusable_priority_entries_are_dropped_without_blocking_startup() {
+    let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
+    let dir = tempdir().expect("tempdir");
+    let db_path = dir.path().join("trust-gates.db");
+    let node = spawn_node(&db_path, "token").await;
+    node.state.hidden.lock().await.push(author(0));
+
+    // 手編集・部分書き込みで壊れた設定を置く（空文字・不正 URL・未設定 node・重複）。
+    let config_path = crate::paths::community_node_config_path(&db_path);
+    let config = serde_json::json!({
+        "nodes": [{ "base_url": node.base_url, "content_advisory_enabled": true }],
+        "trust_node_priority": [
+            "",
+            "not a url",
+            "https://unconfigured.example",
+            node.base_url,
+            node.base_url,
+        ],
+    });
+    std::fs::write(
+        &config_path,
+        serde_json::to_string(&config).expect("config json"),
+    )
+    .expect("write config");
+
+    let runtime = DesktopRuntime::new_with_config_and_identity(
+        &db_path,
+        TransportNetworkConfig::loopback(),
+        IdentityStorageMode::FileOnly,
+    )
+    .await
+    .expect("runtime starts with a broken priority");
+    seed_local_community_node_consents(&runtime, node.base_url.as_str(), 1);
+    *node.state.viewer_override.lock().await = Some(runtime.author_keys.public_key_hex());
+
+    assert_eq!(
+        runtime
+            .community_node_config
+            .lock()
+            .await
+            .trust_node_priority,
+        vec![node.base_url.clone()],
+        "読めない値と未設定 node と重複は落とし、有効な分だけ残す"
+    );
+    assert!(gates(&runtime, &[author(0)]).await[0].hidden);
+
+    runtime.shutdown().await;
+    node.server.abort();
+}
+
 #[tokio::test]
 async fn empty_priority_does_not_query_any_node() {
     let _resource = lock_test_resource(TestResource::CommunityNodeServer).await;
