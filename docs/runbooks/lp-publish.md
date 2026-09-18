@@ -70,4 +70,22 @@ Pages プロジェクトの Custom domains で `kukuri.app` を追加する。`k
 
 ## 版を上げるとき
 
-ダウンロードのリンクと本文の版表記は `v0.2.5-preview.3` に固定している。新しい release を LP に載せるときは、画面の撮り直しの要否を brief で確認したうえで、`index.html` と `en/index.html` のリンクと版表記を同じ差分で更新する。
+LP が案内する release は `apps/lp/release.json` の 1 か所で管理する。ダウンロードのリンク・配布物の名前・本文の版表記は各 HTML に直接書いてあるので、`release.json` を書き換えてからスクリプトで両言語へ反映する。
+
+1. 新しい release の配布物の名前が `kukuri_<version>_...` / `kukuri-cli_<version>_...` の形のままか確かめる（`gh release view <tag>`）。
+2. `apps/lp/release.json` の `tag`・`version`・`commit`・`publishedAt` を更新する。
+3. 反映して、検査する。
+
+```bash
+node apps/lp/scripts/sync-release.mjs
+```
+
+```bash
+node apps/lp/scripts/sync-release.mjs --check
+```
+
+4. ダウンロードのリンクがすべて 200 を返すことを確かめる。
+5. 画面の撮り直しが要るかを brief で確認する。画面に版は写っていないので、UI が変わっていなければ撮り直さない。
+6. 再 deploy する（上の「Cloudflare Pages へ公開する」）。
+
+`--check` は、HTML に `release.json` と違う版が 1 つでも残っていれば失敗する。
