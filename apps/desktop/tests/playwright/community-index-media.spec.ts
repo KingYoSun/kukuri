@@ -17,6 +17,50 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: `${SHOT_DIR}/${SHOT_PREFIX}-${name}.png` });
 }
 
+async function expectViewerContained(page: Page, expectedNaturalSize: [number, number]) {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const dialog = page.getByRole('dialog');
+  const stage = dialog.locator('.media-viewer-stage');
+  const image = dialog.locator('.media-viewer-image');
+  const [dialogBox, stageBox, imageBox] = await Promise.all([
+    dialog.boundingBox(),
+    stage.boundingBox(),
+    image.boundingBox(),
+  ]);
+  expect(dialogBox).not.toBeNull();
+  expect(stageBox).not.toBeNull();
+  expect(imageBox).not.toBeNull();
+
+  const tolerance = 1;
+  expect(dialogBox!.x).toBeGreaterThanOrEqual(-tolerance);
+  expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(viewport!.width + tolerance);
+  expect(dialogBox!.y).toBeGreaterThanOrEqual(-tolerance);
+  expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(viewport!.height + tolerance);
+  expect(imageBox!.x).toBeGreaterThanOrEqual(stageBox!.x - tolerance);
+  expect(imageBox!.x + imageBox!.width).toBeLessThanOrEqual(
+    stageBox!.x + stageBox!.width + tolerance
+  );
+  expect(imageBox!.y).toBeGreaterThanOrEqual(stageBox!.y - tolerance);
+  expect(imageBox!.y + imageBox!.height).toBeLessThanOrEqual(
+    stageBox!.y + stageBox!.height + tolerance
+  );
+
+  const naturalSize = await image.evaluate((element) => {
+    const current = element as HTMLImageElement;
+    return [current.naturalWidth, current.naturalHeight] as const;
+  });
+  expect(naturalSize).toEqual(expectedNaturalSize);
+  expect(imageBox!.width / imageBox!.height).toBeCloseTo(
+    expectedNaturalSize[0] / expectedNaturalSize[1],
+    2
+  );
+  const documentOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  expect(documentOverflow).toBeLessThanOrEqual(tolerance);
+}
+
 test('resolved Explore results render their attachment and open the image viewer', async ({
   page,
 }) => {
@@ -49,6 +93,32 @@ test('resolved Explore results keep the attachment inside a narrow column', asyn
   const overflow = await explore.evaluate((root) => root.scrollWidth - root.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await capture(page, 'ja-light-390');
+});
+
+test('a large landscape image stays fully contained in the viewer', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 980 });
+  await seedExploreMedia(page, { locale: 'ja', theme: 'dark', viewerImage: 'landscape' });
+  const explore = await runExploreSearch(page);
+
+  const trigger = explore.locator('.media-image-trigger').first();
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expectViewerContained(page, [1600, 900]);
+  await page.getByRole('dialog').locator('.media-viewer-close').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('a large portrait image stays contained in a narrow viewer', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seedExploreMedia(page, { locale: 'en', theme: 'light', viewerImage: 'portrait' });
+  const explore = await runExploreSearch(page);
+
+  await explore.locator('.media-image-trigger').first().click();
+  await expectViewerContained(page, [900, 1600]);
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Close image viewer' })
+  ).toBeVisible();
 });
 
 test('adult-labeled Explore results stay gated while the display setting is off', async ({

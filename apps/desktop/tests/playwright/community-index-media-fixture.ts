@@ -11,6 +11,12 @@ const IMAGE_HASH = 'b'.repeat(64);
 // #1055: 発行 node の manifest `node_id`(署名鍵の x-only 公開鍵 hex)。
 const ADVISORY_ISSUER_NODE_ID = 'd'.repeat(64);
 const AUTHOR_PUBKEY = 'a'.repeat(64);
+const LANDSCAPE_SVG_BASE64 = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#12202a"/><path d="M0 720 360 300l260 260 300-400 680 560v180H0z" fill="#03dac5"/><circle cx="1280" cy="210" r="120" fill="#d77d45"/></svg>'
+).toString('base64');
+const PORTRAIT_SVG_BASE64 = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600"><rect width="900" height="1600" fill="#20160e"/><path d="M0 1380 240 720l220 280 180-620 260 1000v220H0z" fill="#d77d45"/><circle cx="220" cy="260" r="130" fill="#03dac5"/></svg>'
+).toString('base64');
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAABmklEQVR42u3E0YaQYQBF0f04SZIkSZIkSZIkSZIkSZIkI0lGkowkSZIkSUaSjCQZSTKSZCTJJ0l6jb/zFvvmXKzFipkxlYeVqTysSuVhdSoPa1J5WJvKw7pUHtan8rBhdkzlYWMqD5tSedicysOWVB62pvKwLZWH7ak87JgbU3nYmcrDrlQedqfysCeVh72pPOxL5WF/Kg8H7oypPBxM5eFQKg+HU3k4ksrD0VQejqXycDyVhxMPx1QeTqbycCqVh9OpPJxJ5eFsKg/nUnk4n8rDzPyYysOFVB4upvJwKZWHy6k8zKbycCWVh6upPFxbGFN5uJ7Kw1wqDzdSebiZysOtVB5up/JwJ5WHu4tjKg/3Unm4n8rDg1QeHqby8CiVh8epPDxJ5eHp0pjKw3wqD89SeXieysOLVB5epvKwkMrDq1QeXi+PqTy8SeXhbSoPi6k8vEvl4X0qDx9SefiYysPSGFN5+JTKw+dUHr6k8vA1lYflVB6+pfLwPZWHH//GVB5+pvIwUnn4lcrD71Qe/qTy8DeVh3+pPP8B+DNqc6Zh66kAAAAASUVORK5CYII=';
 export const SHOT_PREFIX = process.env.KUKURI_1052_SHOT_PREFIX ?? 'after';
 export const SHOT_DIR = '../../docs/ui-reviews/assets/1052';
@@ -21,11 +27,19 @@ export type SeedOptions = {
   adultLabeled?: boolean;
   /// #1055: 設定済み Community Node が発行した content advisory を index 応答へ載せる。
   advisoryLabeled?: boolean;
+  /// #1171: viewerのviewport containmentを実寸に近い横長・縦長画像で確認する。
+  viewerImage?: 'landscape' | 'portrait';
 };
 
 export async function seedExploreMedia(
   page: Page,
-  { locale, theme, adultLabeled = false, advisoryLabeled = false }: SeedOptions
+  {
+    locale,
+    theme,
+    adultLabeled = false,
+    advisoryLabeled = false,
+    viewerImage,
+  }: SeedOptions
 ) {
   const scope = { topicId: 'kukuri:topic:general', channelId: null };
   const columns = (['timeline', 'explore'] as const).map((kind) => ({
@@ -49,6 +63,9 @@ export async function seedExploreMedia(
       authorPubkey,
       issuerNodeId,
       png,
+      landscapeSvg,
+      portraitSvg,
+      viewerImage,
     }) => {
       localStorage.setItem('kukuri.desktop.locale', locale);
       localStorage.setItem('kukuri.desktop.theme', theme);
@@ -64,13 +81,15 @@ export async function seedExploreMedia(
         set: (api: Record<string, unknown>) => {
           desktopApi = api;
           if (!api) return;
-          const attachment = {
-            hash: imageHash,
-            mime: 'image/png',
-            bytes: 467,
-            role: 'image_original',
-            status: 'Available',
-          };
+          const attachments = [
+            {
+              hash: imageHash,
+              mime: viewerImage ? 'image/svg+xml' : 'image/png',
+              bytes: viewerImage === 'portrait' ? 275 : viewerImage === 'landscape' ? 277 : 467,
+              role: 'image_original',
+              status: 'Available',
+            },
+          ];
           const post = {
             object_id: objectId,
             envelope_id: `envelope-${objectId}`,
@@ -87,7 +106,7 @@ export async function seedExploreMedia(
             content: 'clock man と kawaii gazou の添付つき投稿',
             content_status: 'Available',
             content_labels: adultLabeled ? ['adult'] : [],
-            attachments: [attachment],
+            attachments,
             created_at: 1_700_000_000,
             reply_to: null,
             reply_preview: null,
@@ -145,8 +164,18 @@ export async function seedExploreMedia(
               },
             })),
           });
-          api.getBlobMediaPayload = async (hash: string, mime: string) =>
-            hash === imageHash ? { bytes_base64: png, mime } : null;
+          api.getBlobMediaPayload = async (hash: string, mime: string) => {
+            if (hash === imageHash) {
+              const bytesBase64 =
+                viewerImage === 'landscape'
+                  ? landscapeSvg
+                  : viewerImage === 'portrait'
+                    ? portraitSvg
+                    : png;
+              return { bytes_base64: bytesBase64, mime };
+            }
+            return null;
+          };
           if (advisoryLabeled) {
             api.fetchCommunityNodeManifest = async () => ({
               status: 'ok',
@@ -195,6 +224,9 @@ export async function seedExploreMedia(
       authorPubkey: AUTHOR_PUBKEY,
       issuerNodeId: ADVISORY_ISSUER_NODE_ID,
       png: PNG_BASE64,
+      landscapeSvg: LANDSCAPE_SVG_BASE64,
+      portraitSvg: PORTRAIT_SVG_BASE64,
+      viewerImage,
     }
   );
 }

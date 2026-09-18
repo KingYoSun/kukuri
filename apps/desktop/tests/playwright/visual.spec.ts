@@ -14,6 +14,7 @@ import {
   TIMELINE_ADVISORY_URL,
   seedTimelineAdvisory,
 } from './timeline-advisory-fixture';
+import { runExploreSearch, seedExploreMedia } from './community-index-media-fixture';
 
 import { DEVELOPER_MODE_STORAGE_KEY } from '../../src/lib/developerMode';
 
@@ -178,6 +179,37 @@ for (const { locale, theme, width, title } of [
       'index.kukuri.example'
     );
     await expect(dialog).toHaveScreenshot(`advisory-details-${locale}-${theme}.png`);
+  });
+}
+
+// #1171: portal上の画像viewerは共通Dialogの42rem幅ではなく、画像のaspect ratioと
+// viewport上限で収まる。production bundleのwide / narrow両方で全体配置を固定する。
+for (const { locale, theme, width, height, viewerImage, snapshot } of [
+  {
+    locale: 'ja',
+    theme: 'dark',
+    width: 1400,
+    height: 980,
+    viewerImage: 'landscape',
+    snapshot: 'media-viewer-landscape-wide-dark.png',
+  },
+  {
+    locale: 'en',
+    theme: 'light',
+    width: 390,
+    height: 844,
+    viewerImage: 'portrait',
+    snapshot: 'media-viewer-portrait-narrow-light.png',
+  },
+] as const) {
+  test(`media viewer contains ${viewerImage} image at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await seedExploreMedia(page, { locale, theme, viewerImage });
+    const explore = await runExploreSearch(page);
+    await explore.locator('.media-image-trigger').first().click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await settleForShot(page, theme);
+    await expect(page).toHaveScreenshot(snapshot);
   });
 }
 
