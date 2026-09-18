@@ -75,11 +75,14 @@ test('a failed profile read offers retry instead of an empty public feed', async
   expect(within(column).queryByText('profile unavailable')).not.toBeInTheDocument();
 });
 
-test('profile overview aggregates public posts across topics and excludes private channel posts', async () => {
+// #1165: 1 本の長い操作列だと、負荷時に full App の再描画が積み重なって timeout するため、
+// private channel 投稿の除外と複数 topic の集約を別 test に分けている。
+// 入力は paste で渡す(打鍵ごとに App 全体が再描画され、入力操作はこれらの test の検証対象ではない)。
+test('profile overview shows public posts and excludes private channel posts', async () => {
   const user = userEvent.setup();
   render(<App api={createDesktopMockApi()} />);
 
-  await publishPost(user, 'demo public post');
+  await publishPost(user, 'demo public post', { input: 'paste' });
   await waitFor(() => {
     expect(within(getActiveColumn('Timeline')).getByText('demo public post')).toBeInTheDocument();
   });
@@ -98,39 +101,48 @@ test('profile overview aggregates public posts across topics and excludes privat
       screen.queryByRole('dialog', { name: 'Create / Join Private Channel' })
     ).not.toBeInTheDocument();
   });
-  await publishPost(user, 'demo private post');
+  await publishPost(user, 'demo private post', { input: 'paste' });
   await waitFor(() => {
     expect(screen.getByText('demo private post')).toBeInTheDocument();
   });
 
   await selectWorkspace(user, 'Profile');
-  let profileColumn = getActiveColumn('Profile');
+  const profileColumn = getActiveColumn('Profile');
   expect(within(profileColumn).getByText('demo public post')).toBeInTheDocument();
   expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
   expect(screen.getAllByText('general').length).toBeGreaterThan(0);
+  expect(within(profileColumn).getAllByRole('button', { name: 'Open original topic' }).length).toBe(1);
+});
+
+test('profile overview aggregates public posts across topics', async () => {
+  const user = userEvent.setup();
+  render(<App api={createDesktopMockApi()} />);
+
+  await publishPost(user, 'demo public post', { input: 'paste' });
+  await waitFor(() => {
+    expect(within(getActiveColumn('Timeline')).getByText('demo public post')).toBeInTheDocument();
+  });
 
   const controlCenter = await openControlCenter(user);
-  await user.type(within(controlCenter).getByPlaceholderText('general'), 'kukuri:topic:second');
+  await user.click(within(controlCenter).getByPlaceholderText('general'));
+  await user.paste('kukuri:topic:second');
   await user.click(within(controlCenter).getByRole('button', { name: 'Add' }));
   await waitFor(() => {
     expectActiveTopic('kukuri:topic:second');
   });
 
-  await selectWorkspace(user, 'Timeline');
-  await publishPost(user, 'second public post');
+  await publishPost(user, 'second public post', { input: 'paste' });
   await waitFor(() => {
     expect(within(getActiveColumn('Timeline')).getByText('second public post')).toBeInTheDocument();
   });
 
   await selectWorkspace(user, 'Profile');
-  profileColumn = getActiveColumn('Profile');
+  const profileColumn = getActiveColumn('Profile');
   expect(within(profileColumn).getByText('demo public post')).toBeInTheDocument();
   expect(within(profileColumn).getByText('second public post')).toBeInTheDocument();
-  expect(within(profileColumn).queryByText('demo private post')).not.toBeInTheDocument();
-  const profileSection = profileColumn;
-  expect(within(profileSection).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
-  expect(within(profileSection).getAllByRole('button', { name: 'Open original topic' }).length).toBe(2);
-}, 10_000);
+  expect(within(profileColumn).queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+  expect(within(profileColumn).getAllByRole('button', { name: 'Open original topic' }).length).toBe(2);
+});
 
 test('profile overview connection count buttons open the requested connections tab', async () => {
   const followedPubkey = 'b'.repeat(64);
