@@ -138,11 +138,15 @@ reloadable_service! {
 reloadable_service! {
     pub(crate) struct ReloadableBlobService wrapping IrohBlobService;
 
+    // 宣言の無い trait メソッドは内側へ転送されず、trait の既定実装に落ちる(#1157)。
+    // `fetch_blob_ephemeral_bounded` は CN の indexer 専用で desktop からは呼ばれないため
+    // 宣言しない(既定実装は bail なので、誤って呼ばれても無制限取得にはならない)。
     #[async_trait]
     impl BlobService {
         async fn put_blob(data: Vec<u8>, mime: &str) -> Result<StoredBlob>;
         async fn fetch_blob(hash: &BlobHash) -> Result<Option<Vec<u8>>>;
         async fn pin_blob(hash: &BlobHash) -> Result<()>;
+        async fn unpin_blob(hash: &BlobHash) -> Result<()>;
         async fn blob_status(hash: &BlobHash) -> Result<BlobStatus>;
         async fn import_peer_ticket(ticket: &str) -> Result<()>;
         async fn learn_peer(endpoint_id: &str) -> Result<()>;
@@ -567,6 +571,93 @@ mod tests {
             .await
             .expect("stack b shutdown timeout")
             .expect("stack b shutdown");
+    }
+
+    /// `ReloadableBlobService` 越しの `unpin_blob` が内側の `IrohBlobService` まで届き、
+    /// Metaverse の pin tag と pin 状態を解放すること（#1157）。宣言漏れだと trait の既定実装
+    /// （no-op の `Ok(())`）に落ち、GC 後も blob が pin されたまま残る。
+    #[tokio::test]
+    async fn reloadable_blob_service_forwards_unpin_to_inner_service() {
+        let dir = tempdir().expect("tempdir");
+        let stack = SharedIrohStack::new(
+            &dir.path().join("stack-unpin"),
+            TransportNetworkConfig::loopback(),
+            &DiscoveryConfig::static_peer_default(),
+            &[],
+            DhtDiscoveryOptions::disabled(),
+            TransportRelayConfig::default(),
+        )
+        .await
+        .expect("stack");
+        let (node, inner) = {
+            let current_guard = stack.current.lock().await;
+            let current = current_guard.as_ref().expect("current stack");
+            (current.node.clone(), current.blob_service.clone())
+        };
+        let pin_tag = |hash: &BlobHash| format!("kukuri/metaverse/pin/{}", hash.as_str());
+
+        let stored = stack
+            .blob_service
+            .put_blob(b"metaverse asset".to_vec(), "application/octet-stream")
+            .await
+            .expect("put blob");
+        stack
+            .blob_service
+            .pin_blob(&stored.hash)
+            .await
+            .expect("pin blob");
+        assert_eq!(
+            stack
+                .blob_service
+                .blob_status(&stored.hash)
+                .await
+                .expect("status after pin"),
+            BlobStatus::Pinned
+        );
+        assert!(
+            node.blobs()
+                .tags()
+                .get(pin_tag(&stored.hash))
+                .await
+                .expect("pin tag after pin")
+                .is_some()
+        );
+
+        stack
+            .blob_service
+            .unpin_blob(&stored.hash)
+            .await
+            .expect("unpin blob");
+
+        assert!(
+            node.blobs()
+                .tags()
+                .get(pin_tag(&stored.hash))
+                .await
+                .expect("pin tag after unpin")
+                .is_none(),
+            "unpin_blob must delete the metaverse pin tag of the inner service"
+        );
+        assert_eq!(
+            inner
+                .blob_status(&stored.hash)
+                .await
+                .expect("inner status after unpin"),
+            BlobStatus::Available
+        );
+        assert_eq!(
+            stack
+                .blob_service
+                .blob_status(&stored.hash)
+                .await
+                .expect("wrapper status after unpin"),
+            BlobStatus::Available
+        );
+
+        timeout(Duration::from_secs(30), stack.shutdown_checked())
+            .await
+            .expect("stack shutdown timeout")
+            .expect("stack shutdown");
     }
 
     #[tokio::test]
