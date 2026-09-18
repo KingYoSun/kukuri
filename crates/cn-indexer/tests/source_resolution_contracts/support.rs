@@ -131,6 +131,9 @@ impl BlobService for ObservedBlobs {
     async fn blob_status(&self, _hash: &BlobHash) -> Result<BlobStatus> {
         Ok(BlobStatus::Available)
     }
+    async fn local_blob_status(&self, _hash: &BlobHash) -> Result<BlobStatus> {
+        Ok(BlobStatus::Available)
+    }
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
         Ok(())
     }

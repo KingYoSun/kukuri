@@ -145,9 +145,13 @@ reloadable_service! {
     impl BlobService {
         async fn put_blob(data: Vec<u8>, mime: &str) -> Result<StoredBlob>;
         async fn fetch_blob(hash: &BlobHash) -> Result<Option<Vec<u8>>>;
+        // #1152: trait の既定実装は永続化する `fetch_blob` へ委譲するため、必ず実体へ転送する
+        // (成人向け表示 ON の取得は ephemeral で永続化しない。ADR 0046 §6.2)。
+        async fn fetch_blob_ephemeral(hash: &BlobHash) -> Result<Option<Vec<u8>>>;
         async fn pin_blob(hash: &BlobHash) -> Result<()>;
         async fn unpin_blob(hash: &BlobHash) -> Result<()>;
         async fn blob_status(hash: &BlobHash) -> Result<BlobStatus>;
+        async fn local_blob_status(hash: &BlobHash) -> Result<BlobStatus>;
         async fn import_peer_ticket(ticket: &str) -> Result<()>;
         async fn learn_peer(endpoint_id: &str) -> Result<()>;
         async fn set_seed_peers(peers: Vec<SeedPeer>) -> Result<()>;
@@ -438,6 +442,85 @@ mod tests {
     use kukuri_transport::Transport;
     use tempfile::tempdir;
     use tokio::time::{Duration, timeout};
+
+    // #1152 / ADR 0046 §6.2: desktop が実際に使う `ReloadableBlobService` 越しでも、
+    // ephemeral 取得は remote の bytes をローカルへ保存せず、状態確認は remote から取得しない。
+    // 既定実装へ落ちる method があると、黙って永続化する `fetch_blob` に戻る。
+    #[tokio::test]
+    async fn reloadable_blob_service_keeps_ephemeral_fetch_and_local_status_non_persistent() {
+        let sender_dir = tempdir().expect("sender tempdir");
+        let receiver_dir = tempdir().expect("receiver tempdir");
+        let config = TransportNetworkConfig::loopback();
+        let sender_node = IrohDocsNode::persistent_with_config(sender_dir.path(), config.clone())
+            .await
+            .expect("sender node");
+        let receiver_node =
+            IrohDocsNode::persistent_with_config(receiver_dir.path(), config.clone())
+                .await
+                .expect("receiver node");
+        let sender = IrohBlobService::new(sender_node.clone());
+        let receiver =
+            ReloadableBlobService::new(Arc::new(IrohBlobService::new(receiver_node.clone())));
+
+        let bound_port = sender_node
+            .endpoint()
+            .bound_sockets()
+            .into_iter()
+            .find(|addr| addr.port() != 0)
+            .map(|addr| addr.port());
+        let ticket = kukuri_transport::encode_endpoint_ticket(
+            &sender_node.endpoint().addr(),
+            &TransportNetworkConfig {
+                advertised_host: Some("127.0.0.1".to_string()),
+                advertised_port: bound_port,
+                ..config.clone()
+            },
+        )
+        .expect("sender ticket");
+        receiver
+            .import_peer_ticket(&ticket)
+            .await
+            .expect("import ticket");
+
+        let stored = sender
+            .put_blob(b"adult-display-enabled-media".to_vec(), "image/png")
+            .await
+            .expect("put blob");
+        let inner = receiver.current().await;
+
+        assert_eq!(
+            receiver
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("local status"),
+            BlobStatus::Missing
+        );
+        assert_eq!(
+            inner
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("inner local status"),
+            BlobStatus::Missing,
+            "local status check must not persist the remote blob"
+        );
+
+        let payload = timeout(
+            Duration::from_secs(20),
+            receiver.fetch_blob_ephemeral(&stored.hash),
+        )
+        .await
+        .expect("ephemeral fetch timeout")
+        .expect("ephemeral fetch");
+        assert_eq!(payload, Some(b"adult-display-enabled-media".to_vec()));
+        assert_eq!(
+            inner
+                .local_blob_status(&stored.hash)
+                .await
+                .expect("inner local status after ephemeral fetch"),
+            BlobStatus::Missing,
+            "ephemeral fetch through the reloadable wrapper must not persist the blob"
+        );
+    }
 
     #[test]
     fn runtime_connectivity_rebuild_helper_skips_rebuild_when_relay_urls_are_unchanged() {

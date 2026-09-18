@@ -49,6 +49,13 @@ pub trait BlobService: Send + Sync {
         Ok(())
     }
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
+    /// ローカルの有無だけを返す状態確認（#1152）。remote から取得せず、bytes も読まない。
+    ///
+    /// `blob_status` はローカルに無い blob を remote から取得・永続化して確かめる。投稿添付の
+    /// 状態確認でそれを使うと、成人向け表示の取得ゲート（ADR 0046 §4 / §6.2）を迂回するため、
+    /// 表示用 projection の状態はこちらを使う。既定実装を置かないのは、`blob_status` への委譲で
+    /// 黙って remote 取得へ戻る実装を作らないため。
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus>;
     async fn import_peer_ticket(&self, ticket: &str) -> Result<()>;
     async fn learn_peer(&self, _endpoint_id: &str) -> Result<()> {
         Ok(())
@@ -125,6 +132,17 @@ impl IrohBlobService {
         Ok(())
     }
 
+    async fn is_pinned(&self, hash: &BlobHash) -> Result<bool> {
+        Ok(self.pinned.read().await.contains(hash.as_str())
+            || self
+                .node
+                .blobs()
+                .tags()
+                .get(metaverse_pin_tag(hash))
+                .await?
+                .is_some())
+    }
+
     async fn available_fetch_peer_ids(&self) -> Vec<String> {
         self.peers.available_peer_ids().await
     }
@@ -190,6 +208,11 @@ impl BlobService for MemoryBlobService {
             Some(_) => BlobStatus::Available,
             None => BlobStatus::Missing,
         })
+    }
+
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        // in-memory 実装に remote は無いため、`blob_status` と同じくローカル参照だけで決まる。
+        self.blob_status(hash).await
     }
 
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
@@ -313,20 +336,24 @@ impl BlobService for IrohBlobService {
     }
 
     async fn blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
-        if self.pinned.read().await.contains(hash.as_str())
-            || self
-                .node
-                .blobs()
-                .tags()
-                .get(metaverse_pin_tag(hash))
-                .await?
-                .is_some()
-        {
+        if self.is_pinned(hash).await? {
             return Ok(BlobStatus::Pinned);
         }
         Ok(match self.fetch_blob(hash).await? {
             Some(_) => BlobStatus::Available,
             None => BlobStatus::Missing,
+        })
+    }
+
+    async fn local_blob_status(&self, hash: &BlobHash) -> Result<BlobStatus> {
+        if self.is_pinned(hash).await? {
+            return Ok(BlobStatus::Pinned);
+        }
+        let iroh_hash = iroh_blobs::Hash::from_str(hash.as_str())?;
+        Ok(if self.node.blobs().blobs().has(iroh_hash).await? {
+            BlobStatus::Available
+        } else {
+            BlobStatus::Missing
         })
     }
 
@@ -508,6 +535,9 @@ impl MetaverseBlobCacheIndex {
 }
 
 #[cfg(test)]
+mod local_status_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::net::SocketAddr;
@@ -517,7 +547,7 @@ mod tests {
     use tempfile::tempdir;
     use tokio::time::{Duration, sleep, timeout};
 
-    fn loopback_ticket(endpoint: &Endpoint, config: &TransportNetworkConfig) -> String {
+    pub(crate) fn loopback_ticket(endpoint: &Endpoint, config: &TransportNetworkConfig) -> String {
         let endpoint_addr = endpoint.addr();
         let bound_sockets = endpoint.bound_sockets();
         let ticket_config = TransportNetworkConfig {

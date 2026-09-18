@@ -522,13 +522,19 @@ pub(crate) async fn fetch_projection_blob_text(
     }
 }
 
+/// 表示用 projection に記録する blob の状態。ローカルの有無だけを見て、remote から取得しない。
+///
+/// #1152: 投稿の添付は受信・hydration の時点では成人向け advisory が未判明のため、ここで取得すると
+/// 表示設定 OFF の取得ゲート（ADR 0046 §4 / §6.2、`blob_media_payload`）を迂回して bytes を
+/// 永続化してしまう。remote 取得はゲートを持つ表示要求（`blob_media_payload`）と本文取得
+/// （`fetch_projection_blob_text`）に限る。
 pub(crate) async fn best_effort_blob_cache_status(
     blob_service: &dyn BlobService,
     hash: &kukuri_core::BlobHash,
 ) -> BlobCacheStatus {
     match tokio::time::timeout(
         projection_blob_status_timeout(),
-        blob_service.blob_status(hash),
+        blob_service.local_blob_status(hash),
     )
     .await
     {
@@ -537,13 +543,14 @@ pub(crate) async fn best_effort_blob_cache_status(
     }
 }
 
+/// view に載せる blob の状態。`best_effort_blob_cache_status` と同じく remote から取得しない（#1152）。
 pub(crate) async fn best_effort_blob_view_status(
     blob_service: &dyn BlobService,
     hash: &kukuri_core::BlobHash,
 ) -> BlobViewStatus {
     match tokio::time::timeout(
         projection_blob_status_timeout(),
-        blob_service.blob_status(hash),
+        blob_service.local_blob_status(hash),
     )
     .await
     {

@@ -163,6 +163,10 @@ impl BlobService for AssistedBlobService {
         Ok(BlobStatus::Missing)
     }
 
+    async fn local_blob_status(&self, _hash: &kukuri_core::BlobHash) -> Result<BlobStatus> {
+        Ok(BlobStatus::Missing)
+    }
+
     async fn import_peer_ticket(&self, _ticket: &str) -> Result<()> {
         Ok(())
     }
