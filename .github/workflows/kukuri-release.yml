@@ -150,7 +150,8 @@ jobs:
 
       - name: Install Playwright Chromium
         working-directory: apps/desktop
-        run: pnpm exec playwright install chromium
+        # #1180: Ubuntu 22.04 の release 用 profile では Chromium の依存 library を前提にしない。
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Rust tests
         run: cargo xtask rust-test

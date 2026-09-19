@@ -192,10 +192,13 @@ jobs:
           if [ -f /etc/apt/sources.list ]; then
             sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/kukuri-source.list >/dev/null
           fi
-          for sources in /etc/apt/sources.list.d/*.sources; do
-            if [ -e "$sources" ]; then sudo sed -i 's/^Types: deb$/Types: deb deb-src/' "$sources"; fi
-          done
-          grep -rqsE '^(deb-src |Types:.*deb-src)' /etc/apt/sources.list.d || { echo 'deb-src を有効にできません' >&2; exit 1; }
+          # 第三者の repository は source の index を持たないことがあるので、Ubuntu の分だけ書き換える。
+          ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
+          if [ -f "$ubuntu_sources" ]; then
+            sudo sed -i 's/^Types: deb$/Types: deb deb-src/' "$ubuntu_sources"
+          fi
+          grep -qsE '^(deb-src |Types:.*deb-src)' /etc/apt/sources.list.d/kukuri-source.list "$ubuntu_sources" ||
+            { echo 'deb-src を有効にできません' >&2; exit 1; }
           sudo apt-get update
           python3 scripts/release/native_compliance.py --package "$RUNNER_TEMP/kukuri-linux-package" \
             --appdir apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/kukuri.AppDir

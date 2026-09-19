@@ -147,9 +147,10 @@ class WorkflowTests(unittest.TestCase):
         # #1180: 外部 runner では依存 package の install script や setup 系 action から鍵を見せない。
         job = workflow("kukuri-release.yml")["jobs"]["windows-package"]
         self.assertNotIn("env", job)
-        holders = {step["name"]: set(step.get("env", {})) & {"TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"}
-                   for step in job["steps"] if "name" in step}
-        self.assertEqual({name for name, keys in holders.items() if keys}, {"Build Windows package"})
+        # 名前の無い step や `with:` 経由の参照も含め、秘密鍵の secret を参照する step を数える。
+        holders = [step.get("name", step.get("uses", "")) for step in job["steps"]
+                   if "secrets.TAURI_SIGNING_PRIVATE_KEY" in json.dumps(step)]
+        self.assertEqual(holders, ["Build Windows package"])
         build = next(step for step in job["steps"] if step.get("name") == "Build Windows package")
         # 鍵が無いと xtask は updater 成果物なしで成功してしまうため、step 内で空を拒否する。
         self.assertIn("IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)", build["run"])
