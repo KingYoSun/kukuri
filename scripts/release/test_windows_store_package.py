@@ -1,5 +1,6 @@
 import json
 import pathlib
+import platform
 import subprocess
 import tempfile
 import unittest
@@ -19,6 +20,39 @@ NS = {
 
 
 class WindowsStorePackageContracts(unittest.TestCase):
+    @unittest.skipUnless(platform.system() == "Windows", "System.Drawing shell assets require Windows; covered by Store package CI")
+    def test_shell_icons_have_transparent_targetsize_variants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            command = r'''
+param($repoRoot, $output)
+$ErrorActionPreference = 'Stop'
+. (Join-Path $repoRoot 'scripts/release/windows-store-assets.ps1')
+$names = @(New-StoreShellIcons (Join-Path $repoRoot 'apps/desktop/src-tauri/icons/icon.png') $output)
+if ($names.Count -ne 42) { throw 'Expected 14 sizes and 3 theme variants' }
+foreach ($size in @(16,20,24,30,32,36,40,48,60,64,72,80,96,256)) {
+    foreach ($suffix in @('', '_altform-unplated', '_altform-lightunplated')) {
+        $name = "Square44x44Logo.targetsize-${size}${suffix}.png"
+        if ($name -notin $names) { throw "Missing $name" }
+        $bitmap = [Drawing.Bitmap]::new((Join-Path $output $name))
+        try {
+            if ($bitmap.Width -ne $size -or $bitmap.Height -ne $size) { throw 'Wrong size' }
+            if ($bitmap.GetPixel(0,0).A -ne 0) { throw 'Opaque background' }
+            $visible = $false
+            for ($y=0; $y -lt $size; $y++) {
+                for ($x=0; $x -lt $size; $x++) {
+                    if ($bitmap.GetPixel($x,$y).A -gt 0) { $visible = $true }
+                }
+            }
+            if (-not $visible) { throw 'Empty icon' }
+        } finally { $bitmap.Dispose() }
+    }
+}
+'''
+            test_script = pathlib.Path(directory) / 'icons-test.ps1'
+            test_script.write_text(command, encoding='utf-8')
+            result = subprocess.run(['pwsh', '-NoProfile', '-File', str(test_script), str(ROOT), directory], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_output_guard_rejects_existing_directories_without_deleting_content(self):
         # Execute only the real guard, never the packaging/deletion entrypoint.
         with tempfile.TemporaryDirectory() as directory:

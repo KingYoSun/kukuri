@@ -42,7 +42,7 @@ cargo xtask windows-store-package
 commandは次を一つの工程として行う。
 
 1. `VITE_KUKURI_DISTRIBUTION=microsoft-store`とCargo feature `microsoft-store`でTauri x64 release binaryを`--no-bundle` buildする。
-2. 新しい空stagingへ`kukuri.exe`とmanifestが参照する3つのiconだけを配置する。
+2. 新しい空stagingへ`kukuri.exe`とmanifestが参照する3つのiconを配置し、既存`icon.png`からWindows shell向け14サイズのtargetsize／unplated／lightunplated資産42個を生成する。透過背景を維持し、Windowsのaccent plateを避ける。
 3. WinApp CLI 0.6.1の`pack`をcertificate optionなしで実行する。
 4. `dist/microsoft-store/KingYoSun.kukuri_<store-version>_x64.msix`と`store-package.json`を生成する。
 

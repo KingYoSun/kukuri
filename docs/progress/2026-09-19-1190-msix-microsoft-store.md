@@ -92,6 +92,12 @@ WindowsのTauri unit test executableの直接起動は当初`STATUS_ENTRYPOINT_N
 
 ## 残工程
 
+### 透過shell iconの修正
+
+- ユーザーのWindows実機で青い背景plateを観測。元PNGとmanifestは透明背景だったが、targetsize／unplated／lightunplatedが欠落していた。既存ロゴの意匠・app内UI・NSISを変えず、Store stagingだけに14サイズ×3 variantsを追加する。
+- 寸法、透明corner、非空画像、42資産の名前を検査するtestを先に追加しFAILを確認。生成処理追加後にpackage contracts全7件がPASSした。
+- 旧candidate `47e4026a...`はこの表示修正前のため、提出候補としては失効。修正後のclean buildと実機確認の結果をPRに記録する。
+
 - 固定unsigned candidateのPartner Center validation結果を記録する。
 - 区分Cの独立監査、必須CI、PR merge後tree照合。
 - ユーザーによるupload後、certification後のMicrosoft署名済みpackageでinstall／update／activationを確認する。certification提出とavailability／一般公開は外部状態を分離して記録する。

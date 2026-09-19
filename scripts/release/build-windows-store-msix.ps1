@@ -152,6 +152,8 @@ Copy-Item -LiteralPath $targetBinary -Destination (Join-Path $stagingDir "kukuri
 foreach ($asset in @("StoreLogo.png", "Square44x44Logo.png", "Square150x150Logo.png")) {
     Copy-Item -LiteralPath (Join-Path $desktopDir "src-tauri/icons/$asset") -Destination (Join-Path $assetDir $asset)
 }
+. (Join-Path $PSScriptRoot 'windows-store-assets.ps1')
+$shellIcons = @(New-StoreShellIcons (Join-Path $desktopDir 'src-tauri/icons/icon.png') $assetDir)
 
 $unsignedName = "${packageName}_${storeVersion}_${architecture}.msix"
 $unsignedPath = Join-Path $outputDir $unsignedName
@@ -188,7 +190,7 @@ try {
         "pri.resfiles",
         "priconfig.xml",
         "resources.pri"
-    ) | Sort-Object
+    ) + @($shellIcons | ForEach-Object { "Assets/$_" }) | Sort-Object
     if (Compare-Object $expectedEntries $actualEntries) {
         throw "MSIX payload does not match the fixed allowlist"
     }
