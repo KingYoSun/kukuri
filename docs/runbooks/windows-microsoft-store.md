@@ -81,7 +81,7 @@ cargo xtask windows-store-package --skip-build --sign-local --prompt-certificate
 
 非対話の隔離されたlocal jobでだけ、`KUKURI_MSIX_CERT_PASSWORD` process環境を代替入力にできる。persistent user／machine環境へ保存しない。
 
-scriptはPFXを`CurrentUser\My`へnon-exportableで一時importし、manifest Publisherとの一致、private key、期限、code-signing用途を検査する。unsigned candidateのcopyだけをthumbprint指定でSHA-256署名し、`SignTool verify`後にpublic `.cer`と別hashをprovenanceへ追加する。処理前から存在したcertificateは残し、この処理で新規importしたcertificateだけを`finally`で削除する。
+scriptはPFXを`CurrentUser\My`へnon-exportableで一時importし、manifest Publisherとの一致、private key、期限、code-signing用途を検査する。unsigned candidateのcopyだけをthumbprint指定でSHA-256署名する。自己署名chainの`SignTool verify`中だけpublic certificateを`CurrentUser\Root`へ一時importし、成功後にpublic `.cer`と別hashをprovenanceへ追加する。処理前から存在したcertificateは残し、この処理で新規importした`My`／`Root` certificateだけを`finally`でexact thumbprint削除し、残存0件を検査する。
 
 signed copyをinstallするtest user／VMでは、出力した`.cer`だけを`CurrentUser\TrustedPeople`へ一時importし、MSIXを`Add-AppxPackage`する。test後は対象packageと、このtestで追加したcertificateだけを正確なidentity／thumbprintで削除する。利用者の実profileや他certificateをcleanup対象にしない。
 

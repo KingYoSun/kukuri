@@ -262,10 +262,10 @@ if ($SignForLocalTest) {
         ConvertTo-SecureString -String $env:KUKURI_MSIX_CERT_PASSWORD -AsPlainText -Force
     }
     $beforeThumbprints = @(Get-ChildItem Cert:\CurrentUser\My | ForEach-Object { $_.Thumbprint })
-    $beforeTrustedThumbprints = @(Get-ChildItem Cert:\CurrentUser\TrustedPeople | ForEach-Object { $_.Thumbprint })
+    $beforeRootThumbprints = @(Get-ChildItem Cert:\CurrentUser\Root | ForEach-Object { $_.Thumbprint })
     $imported = $null
     $importedCertificates = @()
-    $trustedCertificates = @()
+    $rootCertificates = @()
     $signingSucceeded = $false
     try {
         $importedCertificates = @(Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false)
@@ -302,7 +302,7 @@ if ($SignForLocalTest) {
         $certificateName = "${packageName}_local-test.cer"
         $certificateOutputPath = Join-Path $outputDir $certificateName
         Export-Certificate -Cert $imported -FilePath $certificateOutputPath -Force | Out-Null
-        $trustedCertificates = @(Import-Certificate -FilePath $certificateOutputPath -CertStoreLocation Cert:\CurrentUser\TrustedPeople)
+        $rootCertificates = @(Import-Certificate -FilePath $certificateOutputPath -CertStoreLocation Cert:\CurrentUser\Root)
         Invoke-Native $signTool @("verify", "/pa", "/all", "/v", $signedPath) "MSIX signature verification"
         $provenance.signed_local_test = [ordered]@{
             file = $signedName
@@ -315,8 +315,12 @@ if ($SignForLocalTest) {
     }
     finally {
         $cleanupFailures = @()
-        if (-not $signingSucceeded -and $signedPath -and (Test-Path -LiteralPath $signedPath)) {
-            Remove-Item -LiteralPath $signedPath -Force
+        if (-not $signingSucceeded) {
+            foreach ($failedArtifact in @($signedPath, $certificateOutputPath)) {
+                if ($failedArtifact -and (Test-Path -LiteralPath $failedArtifact)) {
+                    Remove-Item -LiteralPath $failedArtifact -Force
+                }
+            }
         }
         foreach ($certificate in $importedCertificates) {
             if ($beforeThumbprints -notcontains $certificate.Thumbprint) {
@@ -327,12 +331,12 @@ if ($SignForLocalTest) {
                 }
             }
         }
-        foreach ($certificate in $trustedCertificates) {
-            if ($beforeTrustedThumbprints -notcontains $certificate.Thumbprint) {
-                & certutil.exe -user -delstore TrustedPeople $certificate.Thumbprint | Out-Null
+        foreach ($certificate in $rootCertificates) {
+            if ($beforeRootThumbprints -notcontains $certificate.Thumbprint) {
+                & certutil.exe -user -delstore Root $certificate.Thumbprint | Out-Null
                 if ($LASTEXITCODE -ne 0 -or
-                    (Test-Path -LiteralPath "Cert:\CurrentUser\TrustedPeople\$($certificate.Thumbprint)")) {
-                    $cleanupFailures += "CurrentUser/TrustedPeople:$($certificate.Thumbprint)"
+                    (Test-Path -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)")) {
+                    $cleanupFailures += "CurrentUser/Root:$($certificate.Thumbprint)"
                 }
             }
         }
