@@ -10,6 +10,8 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # Ubuntu 22.04、Cache Volume なしの Namespace profile（#1180）。
 LINUX_RELEASE_PROFILE = "namespace-profile-kukuri-linux-release"
+# Windows Server 2022、Cache Volume なし（#1180）。
+WINDOWS_RELEASE_PROFILE = "namespace-profile-kukuri-win-release"
 
 
 def workflow(name):
@@ -108,16 +110,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("apps/desktop/src-tauri/target", cached[0]["with"]["path"])
         prune = next(step for step in job["steps"] if step.get("name") == "Prune workspace build artifacts")
         self.assertEqual(prune["if"], not_distribution)
+        # `A && '' || B` は空文字が偽のため常に B になる。配布の run で空文字になる形だけを許す。
         node = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-node@"))
-        self.assertEqual(node["with"]["cache"], distribution + " && '' || 'pnpm' }}")
+        self.assertEqual(node["with"]["cache"], not_distribution.removesuffix(" }}") + " && 'pnpm' || '' }}")
         self.assertFalse(any("rust-cache" in step.get("uses", "") for step in job["steps"]))
 
     def test_release_build_jobs_run_on_namespace_and_publish_jobs_stay_github_hosted(self):
-        # #1180: build / verify は Namespace。contents: write を持つ末尾の job は GitHub-hosted のまま。
+        # #1180: build / verify は Cache Volume のない release 用 profile。公開まわりの末尾の job は
+        # GitHub-hosted のまま。Cache Volume 付きの profile（kukuri / kukuri-win）は mount だけで
+        # tool cache 等が PR の run と共有されるため使わない。
         jobs = workflow("kukuri-release.yml")["jobs"]
-        self.assertEqual(jobs["validate-release-inputs"]["runs-on"], "namespace-profile-kukuri")
-        self.assertEqual(jobs["linux-verify"]["runs-on"], "namespace-profile-kukuri")
-        self.assertEqual(jobs["windows-package"]["runs-on"], "namespace-profile-kukuri-win")
+        self.assertEqual(jobs["validate-release-inputs"]["runs-on"], LINUX_RELEASE_PROFILE)
+        self.assertEqual(jobs["linux-verify"]["runs-on"], LINUX_RELEASE_PROFILE)
+        self.assertEqual(jobs["windows-package"]["runs-on"], WINDOWS_RELEASE_PROFILE)
         for name in ("changelog", "release-assets", "publish-draft", "verify-published"):
             self.assertFalse(jobs[name]["runs-on"].startswith("namespace-"), name)
         # CLI も配布物なので、Ubuntu 22.04 の glibc で build する（ADR 0049）。
@@ -130,12 +135,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED", "SCCACHE_GHA_VERSION"} & set(release.get("env", {})))
         jobs = list(release["jobs"].items()) + [("cli-package.yml", workflow("kukuri-cli-package.yml")["jobs"]["cli-package"])]
         for name, job in jobs:
+            self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED"} & set(job.get("env", {})), name)
             for step in job.get("steps", []):
                 uses = step.get("uses", "")
                 for action in ("sccache", "rust-cache", "nscloud-cache-action", "actions/cache"):
                     self.assertNotIn(action, uses, f"{name}: {uses}")
-                if uses.startswith("actions/setup-node@"):
+                if uses.startswith(("actions/setup-node@", "actions/setup-python@")):
                     self.assertNotIn("cache", step.get("with", {}), name)
+
+    def test_windows_signing_key_reaches_only_the_package_build_step(self):
+        # #1180: 外部 runner では依存 package の install script や setup 系 action から鍵を見せない。
+        job = workflow("kukuri-release.yml")["jobs"]["windows-package"]
+        self.assertNotIn("env", job)
+        holders = {step["name"]: set(step.get("env", {})) & {"TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"}
+                   for step in job["steps"] if "name" in step}
+        self.assertEqual({name for name, keys in holders.items() if keys}, {"Build Windows package"})
+        build = next(step for step in job["steps"] if step.get("name") == "Build Windows package")
+        # 鍵が無いと xtask は updater 成果物なしで成功してしまうため、step 内で空を拒否する。
+        self.assertIn("IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)", build["run"])
 
     def test_platform_packages_start_without_waiting_for_linux_verify(self):
         # 公開は publish-draft の祖先（changelog 経由の linux-verify を含む）で担保する。

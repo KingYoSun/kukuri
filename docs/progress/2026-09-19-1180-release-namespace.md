@@ -5,7 +5,8 @@ Issue: https://github.com/kukuri-app/kukuri/issues/1180 ／ リスク区分 C（
 ## 判断（2026-09-19 ユーザー）
 
 - build / verify と署名する job を Namespace へ移す。#1148 の「配布鍵を渡す run は GitHub-hosted」を改める。
-- release の経路では cache を使わない。Linux の配布物は Ubuntu 22.04 の `namespace-profile-kukuri-linux-release`（8 vCPU / 16 GB、Cache Volume なし）で build する。
+- release の経路では cache を使わない。Linux の job は Ubuntu 22.04 の `namespace-profile-kukuri-linux-release`（8 vCPU / 16 GB、Cache Volume なし）で動かす。
+- 独立監査の指摘（Cache Volume 付きの `namespace-profile-kukuri-win` では PR run と tool cache 等を共有する）を受け、ユーザーが `namespace-profile-kukuri-win-release`（Windows Server 2022、8 vCPU / 16 GB、Cache Volume なし）を作成した。windows-package はこちらで動かす。
 - windows-package / linux-package は linux-verify を待たずに並行実行する。公開は全 job の成功が条件のまま。
 - 検証は v0.2.8-preview.1 の実 release で行ってよい。
 

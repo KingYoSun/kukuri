@@ -84,8 +84,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # #1180: 配布の run では cache を使わない（空文字で無効）。
-          cache: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution' && '' || 'pnpm' }}
+          # #1180: 配布の run では cache を使わない（空文字で無効）。`A && '' || B` は空文字が偽のため
+          # 常に B になる。空文字は必ず `||` の右に置く。
+          cache: ${{ !((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && inputs.signing == 'distribution') && 'pnpm' || '' }}
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       # `cache: rust` は Cargo registry / git と root の target を扱う。配布物を build する
       # src-tauri 側の target は別 directory なので path で明示する。
@@ -186,7 +187,15 @@ jobs:
         run: |
           set -euo pipefail
           # This changes only the disposable build runner, never a user's OS.
-          sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/kukuri-source.list >/dev/null
+          # #1180: runner の image によって APT の設定は一行形式と deb822 形式（*.sources）がある。
+          # どちらでも deb-src を有効にし、1 つも有効にならなければここで止める。
+          if [ -f /etc/apt/sources.list ]; then
+            sed -n 's/^deb /deb-src /p' /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/kukuri-source.list >/dev/null
+          fi
+          for sources in /etc/apt/sources.list.d/*.sources; do
+            if [ -e "$sources" ]; then sudo sed -i 's/^Types: deb$/Types: deb deb-src/' "$sources"; fi
+          done
+          grep -rqsE '^(deb-src |Types:.*deb-src)' /etc/apt/sources.list.d || { echo 'deb-src を有効にできません' >&2; exit 1; }
           sudo apt-get update
           python3 scripts/release/native_compliance.py --package "$RUNNER_TEMP/kukuri-linux-package" \
             --appdir apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/kukuri.AppDir

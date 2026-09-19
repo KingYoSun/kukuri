@@ -61,10 +61,11 @@ python scripts/release/test_verify_public_preview.py
 
 ### Runnerとcache（#1180）
 
-- build／verifyと署名するjob（`validate-release-inputs`、`linux-verify`、`windows-package`、Linux GUI package、CLI package）はNamespaceで動かす。Linuxの配布物は`namespace-profile-kukuri-linux-release`（Ubuntu 22.04、Cache Volumeなし）でbuildし、glibcの下限をUbuntu 22.04に保つ。Windowsは`namespace-profile-kukuri-win`。
-- 配布用の署名鍵はNamespaceのrunnerへ渡る。2026-09-19のユーザー判断で、#1148の「配布鍵を渡すrunはGitHub-hosted」を改めた。PRのrunには引き続き渡さない。
+- build／verifyと署名するjob（`validate-release-inputs`、`linux-verify`、`windows-package`、Linux GUI package、CLI package）は、Cache Volumeのないrelease用のNamespace profileで動かす。Linuxは`namespace-profile-kukuri-linux-release`（Ubuntu 22.04、8 vCPU／16 GB）で、配布物のglibcの下限をUbuntu 22.04に保つ。Windowsは`namespace-profile-kukuri-win-release`（Windows Server 2022、8 vCPU／16 GB）。
+- Cache Volume付きのprofile（`namespace-profile-kukuri`／`-kukuri-win`）は、cache actionを置かなくてもvolumeとtool／Git cacheが付き、PRのrunと共有される。releaseでは使わない。
+- 配布用の署名鍵はNamespaceのrunnerへ渡る。2026-09-19のユーザー判断で、#1148の「配布鍵を渡すrunはGitHub-hosted」を改めた。PRのrunには引き続き渡さない。Windowsでは鍵を`Build Windows package` stepのenvにだけ渡す。
 - releaseの経路ではbuild cache（sccache、rust-cache、pnpm cache、Cache Volume）を使わない。tagのrunは他のrunのcacheを読めず、復元・保存の時間だけかかっていた。PRのrunが書いた成果物を署名付きの配布物へ持ち込まない目的もある。
-- `contents: write`を持つ末尾のjob（`changelog`、`release-assets`、`publish-draft`、`verify-published`）はGitHub-hostedのまま。
+- 公開まわりの末尾のjob（`changelog`、`release-assets`、`publish-draft`、`verify-published`）はGitHub-hostedのまま。
 
 GitHub上の`prerelease` flagは既存互換のため`false`、公開時`make_latest=true`を維持する。製品としてはPreviewだが、`prerelease=true`へ変えると既存clientの`/releases/latest/download/latest-preview.json`に出なくなる。
 
