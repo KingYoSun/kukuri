@@ -148,3 +148,7 @@ operator-config.yaml
 # 告知素材の撮影・レンダリング出力 (#1038)
 promo-artifacts/
 apps/desktop/dist-promo/
+
+# Python の bytecode cache（scripts/release の test が import で生成する）
+__pycache__/
+*.pyc
