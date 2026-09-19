@@ -48,7 +48,7 @@ Issue添付画像のplain URL表示と一致した。実装後は同testが成�
 - `cargo xtask oversized-files`: PASS。production `link_preview.rs`は750行、test moduleは234行で閾値未満。既存baselineのwarningのみ
 - `git diff --check`: PASS
 - Windows Storybook実描画: dark／light、狭幅、長文、image、inline link／card focusを確認。初回確認でempty slotが`display:none`のためIntersectionObserverが発火しない不具合を再現し、親articleをobserveする修正後にcard表示を確認した
-- Linux visual baseline: `Kukuri Visual Baseline` run `35400030692`で生成し、legal bundle version 8の意図した差分 `app-consent-en-dark.png`／`app-consent-ja-light-narrow.png` だけを更新した
+- Linux visual baseline: 最終run `35411041556`（head `06a9dd74`）でmissing状態から強制再生成し、`app-consent-en-dark.png`／`app-consent-ja-light-narrow.png` がbadge `V8`、施行日`2026-09-19`、version 8変更要約を同時に表示することを確認した
 
 ## 独立監査と修正delta
 
@@ -60,7 +60,7 @@ Issue添付画像のplain URL表示と一致した。実装後は同testが成�
 
 監査のnon-blockerだったContent-Type欠落画像の許可もADR 0051へ厳密に合わせ、declared raster MIMEとmagic bytesの双方が一致する場合だけ許可するtestへ変更した。修正commitは同じ監査担当へdelta再監査する。
 
-修正head `f558c87d1d4a9984c52ea2ad4addc65f13e7fc5b` のdelta独立監査は `PASS`（inventory 6 / 適合6 / 不適合0 / 未分類0、blocker 0）。non-blockerとしてvisual専用app-consent fixtureのversion/dateが7／2026-09-18のまま残っていたため、productionと同じ8／2026-09-19、stale accepted version 7へ同期し、Linux baselineを再生成する。
+修正head `f558c87d1d4a9984c52ea2ad4addc65f13e7fc5b` のdelta独立監査は `PASS`（inventory 6 / 適合6 / 不適合0 / 未分類0、blocker 0）。non-blockerとしてvisual専用app-consent fixtureのversion/dateが7／2026-09-18のまま残っていたため、productionと同じ8／2026-09-19、stale accepted version 7へ同期し、Linux baselineを最終run `35411041556`で再生成した。
 
 ## 未確認と補完
 
