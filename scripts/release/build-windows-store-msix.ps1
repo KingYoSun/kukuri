@@ -1,5 +1,5 @@
+[CmdletBinding()]
 param(
-    [switch]$SkipBuild,
     [switch]$AllowDirty,
     [string]$OutputDirectory = "dist/microsoft-store"
 )
@@ -10,7 +10,8 @@ Set-StrictMode -Version Latest
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 $desktopDir = Join-Path $repoRoot "apps/desktop"
 $manifestPath = Join-Path $desktopDir "src-tauri/windows/store/Package.appxmanifest"
-$targetBinary = Join-Path $desktopDir "src-tauri/target/x86_64-pc-windows-msvc/release/kukuri-desktop-tauri.exe"
+$storeTargetDir = Join-Path $repoRoot "target/microsoft-store"
+$targetBinary = Join-Path $storeTargetDir "x86_64-pc-windows-msvc/release/kukuri-desktop-tauri.exe"
 $requiredWinAppVersion = "0.6.1"
 
 function Resolve-WorkspacePath([string]$Path) {
@@ -21,11 +22,27 @@ function Resolve-WorkspacePath([string]$Path) {
 }
 
 function Assert-WorkspaceChild([string]$Path, [string]$Label) {
-    $rootPrefix = $repoRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $rootPrefix = (Join-Path $repoRoot 'dist') + [IO.Path]::DirectorySeparatorChar
     if (-not $Path.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "$Label must stay inside the repository workspace"
+        throw "$Label must be a new directory below the repository dist directory"
+    }
+    if (Test-Path -LiteralPath $Path) {
+        throw "$Label already exists; choose a new output directory"
+    }
+    $ancestor = [IO.Path]::GetDirectoryName($Path)
+    while ($ancestor -and $ancestor.Length -ge $repoRoot.Length) {
+        if (Test-Path -LiteralPath $ancestor) {
+            if ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "$Label cannot pass through a reparse point"
+            }
+        }
+        $ancestor = [IO.Path]::GetDirectoryName($ancestor)
     }
 }
+
+# Refuse an occupied output before invoking tools or building. Never delete it.
+$outputDir = Resolve-WorkspacePath $OutputDirectory
+Assert-WorkspaceChild $outputDir "OutputDirectory"
 
 function Invoke-Native([string]$Executable, [string[]]$Arguments, [string]$Label) {
     & $Executable @Arguments
@@ -72,9 +89,13 @@ $architecture = [string]$identity.ProcessorArchitecture
 if ($packageName -ne "KingYoSun.kukuri" -or
     $publisher -ne "CN=33EB763C-4859-4E44-886F-1784E16DD6D5" -or
     $publisherDisplayName -ne "KingYoSun" -or
-    $storeVersion -ne "1.0.0.0" -or
     $architecture -ne "x64") {
     throw "Store manifest identity does not match the approved Partner Center product"
+}
+$versionParts = $storeVersion.Split('.')
+if ($versionParts.Count -ne 4 -or $versionParts.Where({ $_ -notmatch '^\d+$' -or [long]$_ -gt 65535 }).Count -gt 0 -or
+    [long]$versionParts[0] -lt 1 -or [long]$versionParts[3] -ne 0) {
+    throw 'Store version must contain four 16-bit integers, start above zero, and end in zero'
 }
 
 $gitStatus = (& git -C $repoRoot status --porcelain | Out-String).Trim()
@@ -89,22 +110,19 @@ if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[0-9a-f]{40}$') {
     throw "Could not resolve the source commit"
 }
 
-$outputDir = Resolve-WorkspacePath $OutputDirectory
-Assert-WorkspaceChild $outputDir "OutputDirectory"
-if (Test-Path -LiteralPath $outputDir) {
-    Remove-Item -LiteralPath $outputDir -Recurse -Force
-}
 New-Item -ItemType Directory -Path $outputDir | Out-Null
 $stagingDir = Join-Path $outputDir "staging"
 $assetDir = Join-Path $stagingDir "Assets"
 New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
 
-if (-not $SkipBuild) {
+& {
     $previousDistribution = $env:VITE_KUKURI_DISTRIBUTION
     $previousTelemetry = $env:WINAPP_CLI_TELEMETRY_OPTOUT
+    $previousTargetDir = $env:CARGO_TARGET_DIR
     try {
         $env:VITE_KUKURI_DISTRIBUTION = "microsoft-store"
         $env:WINAPP_CLI_TELEMETRY_OPTOUT = "1"
+        $env:CARGO_TARGET_DIR = $storeTargetDir
         Push-Location $desktopDir
         try {
             Invoke-Native "npx" @(
@@ -123,6 +141,7 @@ if (-not $SkipBuild) {
     finally {
         $env:VITE_KUKURI_DISTRIBUTION = $previousDistribution
         $env:WINAPP_CLI_TELEMETRY_OPTOUT = $previousTelemetry
+        $env:CARGO_TARGET_DIR = $previousTargetDir
     }
 }
 
@@ -200,11 +219,16 @@ finally {
 }
 
 $appPackage = Get-Content -LiteralPath (Join-Path $desktopDir "package.json") -Raw | ConvertFrom-Json
+$finalCommit = (& git -C $repoRoot rev-parse HEAD | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $finalCommit -ne $sourceCommit) { throw "Source commit changed during build" }
+$finalStatus = (& git -C $repoRoot status --porcelain | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Could not verify final source state" }
+if ($finalStatus -and -not $AllowDirty) { throw "Worktree changed during build" }
 $unsignedHash = (Get-FileHash -LiteralPath $unsignedPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $provenance = [ordered]@{
     schema_version = 1
     source_commit = $sourceCommit
-    dirty = [bool]$gitStatus
+    dirty = [bool]($gitStatus -or $finalStatus)
     app_version = [string]$appPackage.version
     store_version = $storeVersion
     package_name = $packageName

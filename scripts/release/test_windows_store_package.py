@@ -1,5 +1,7 @@
 import json
 import pathlib
+import subprocess
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -17,6 +19,30 @@ NS = {
 
 
 class WindowsStorePackageContracts(unittest.TestCase):
+    def test_output_guard_rejects_existing_directories_without_deleting_content(self):
+        # Execute only the real guard, never the packaging/deletion entrypoint.
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            existing = root / "dist" / "existing"
+            existing.mkdir(parents=True)
+            marker = existing / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+            command = r'''
+param($scriptPath, $repoRoot, $existing)
+$ast = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$null, [ref]$null)
+$function = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-WorkspaceChild'}, $true)
+. ([scriptblock]::Create($function.Extent.Text))
+Assert-WorkspaceChild (Join-Path $repoRoot 'dist/new') 'OutputDirectory'
+try { Assert-WorkspaceChild (Join-Path $repoRoot '.git/new') 'OutputDirectory'; exit 2 } catch {}
+try { Assert-WorkspaceChild $existing 'OutputDirectory' } catch { exit 0 }
+exit 1
+'''
+            test_script = root / "guard-test.ps1"
+            test_script.write_text(command, encoding="utf-8")
+            result = subprocess.run(["pwsh", "-NoProfile", "-File", str(test_script), str(SCRIPT), str(root), str(existing)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+
     def test_manifest_matches_the_registered_partner_center_identity(self):
         root = ET.parse(MANIFEST).getroot()
         identity = root.find("f:Identity", NS)
@@ -31,6 +57,14 @@ class WindowsStorePackageContracts(unittest.TestCase):
         self.assertEqual(properties.findtext("f:PublisherDisplayName", namespaces=NS), "KingYoSun")
         integrity = properties.find("uap10:PackageIntegrity/uap10:Content", NS)
         self.assertEqual(integrity.attrib["Enforcement"], "on")
+
+    def test_build_bypass_is_rejected_before_any_tool_or_output(self):
+        result = subprocess.run(["pwsh", "-NoProfile", "-File", str(SCRIPT), "-SkipBuild"], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SkipBuild", result.stderr)
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('$env:CARGO_TARGET_DIR = $storeTargetDir', source)
+        self.assertNotIn('Remove-Item', source)
 
     def test_manifest_exposes_only_the_required_full_trust_surface(self):
         root = ET.parse(MANIFEST).getroot()

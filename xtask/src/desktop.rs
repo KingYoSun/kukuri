@@ -85,7 +85,6 @@ pub(crate) fn windows_store_package(args: impl Iterator<Item = String>) -> Resul
     let mut args = args.peekable();
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--skip-build" => script_args.push("-SkipBuild".to_string()),
             "--allow-dirty" => script_args.push("-AllowDirty".to_string()),
             "--output" => {
                 let value = args

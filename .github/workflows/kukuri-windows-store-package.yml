@@ -11,6 +11,8 @@ on:
       - 'crates/**'
       - 'scripts/release/build-windows-store-msix.ps1'
       - 'scripts/release/test_windows_store_package.py'
+      - 'scripts/release/test-windows-store-updater.ps1'
+      - 'scripts/release/windows-test-runtime.manifest'
       - 'xtask/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -54,6 +56,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Store package contracts
         run: python scripts/release/test_windows_store_package.py
+      - name: Windows updater boundaries for both distributions
+        shell: pwsh
+        run: ./scripts/release/test-windows-store-updater.ps1
       - name: Build unsigned Store package
         shell: pwsh
         run: cargo xtask windows-store-package

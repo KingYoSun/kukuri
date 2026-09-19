@@ -59,7 +59,15 @@ pub(super) fn show(
     let doc = document(id, title, body, silent)?;
     let toast =
         ToastNotification::CreateToastNotification(&doc).map_err(|error| error.to_string())?;
-    ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))
+    #[cfg(feature = "microsoft-store")]
+    let notifier = {
+        let _ = app_id;
+        // Resolve the current package's AUMID, not the unpackaged NSIS identifier.
+        ToastNotificationManager::CreateToastNotifier()
+    };
+    #[cfg(not(feature = "microsoft-store"))]
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id));
+    notifier
         .and_then(|notifier| notifier.Show(&toast))
         .map_err(|error| error.to_string())
 }
@@ -67,6 +75,51 @@ pub(super) fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "microsoft-store")]
+    #[test]
+    #[ignore = "requires a registered MSIX test layout; sends one local test toast"]
+    fn packaged_notification_smoke() {
+        let result = std::panic::catch_unwind(packaged_notification_probe);
+        let evidence = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../test-results/kukuri/issue-1190-notification-result.txt");
+        std::fs::write(evidence, if result.is_ok() { "PASS" } else { "FAIL" }).unwrap();
+        result.unwrap();
+    }
+
+    #[cfg(feature = "microsoft-store")]
+    fn packaged_notification_probe() {
+        show(
+            "app.kukuri.desktop",
+            "issue-1190-smoke",
+            "kukuri MSIX notification test",
+            Some("Local package notification verification"),
+            true,
+        )
+        .expect("packaged notification must be accepted by Windows");
+        for _ in 0..20 {
+            let notifications = ToastNotificationManager::History()
+                .unwrap()
+                .GetHistory()
+                .unwrap();
+            for index in 0..notifications.Size().unwrap() {
+                if notifications
+                    .GetAt(index)
+                    .unwrap()
+                    .Content()
+                    .unwrap()
+                    .GetXml()
+                    .unwrap()
+                    .to_string()
+                    .contains("issue-1190-smoke")
+                {
+                    return;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("test toast was not delivered to the current package's notification history");
+    }
 
     #[test]
     fn activation_uri_survives_windows_canonicalization() {

@@ -48,6 +48,8 @@ commandは次を一つの工程として行う。
 
 `store-package.json`にはsource commit、dirty状態、app／Store version、identity、architecture、WinApp CLI version、unsigned candidateのSHA-256を記録する。`-AllowDirty`は実装中のlocal確認専用で、Partner Centerへ送る候補には使わない。
 
+出力先が存在する場合は停止し、既存candidateを削除・上書きしない。再実行は`--output dist/microsoft-store-<識別子>`で新しい出力先を指定する。`--skip-build`は受け付けず、毎回Store専用`target/microsoft-store`で現在sourceをbuildする。通常のNSIS build成果物を再利用しない。
+
 `winapp pack` 0.6.1は`--cert`を付けないとunsigned packageを作る。Store提出候補はこのunsigned MSIXであり、PFX、password、local署名copyをuploadしない。Microsoft Storeはcertification後にpackageを再署名する。
 
 ## identity付きloose smoke
@@ -112,6 +114,7 @@ Store upload、certification、一般公開は外部状態の異なる操作で�
 
 ```powershell
 python scripts/release/test_windows_store_package.py
+pwsh -NoProfile -File scripts/release/test-windows-store-updater.ps1
 cargo test -p xtask desktop::package_tests
 cd apps/desktop
 npx pnpm@10.16.1 test -- src/lib/distribution.test.ts src/components/settings/ReleasePanel.update.test.tsx src/shell/DesktopShellPage.updateSchedule.test.tsx

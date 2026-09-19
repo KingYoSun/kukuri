@@ -59,6 +59,15 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 
 ## Validation
 
+### 独立監査後の追加検証
+
+- 出力先guard単体の非破壊testで、既存directoryを誤って受理する旧実装のFAILを再現。修正後は`dist`内の新規directoryだけを受理し、既存出力やrepository内の他directoryを拒否する。既存出力の再帰削除は撤去した。
+- `--skip-build`を撤去し、Store専用`target/microsoft-store`で常にbuildする。build前後のcommit／worktreeを照合する。PowerShellの未知optionもparameter bindingで拒否する。
+- Windows library test実行時の`STATUS_ENTRYPOINT_NOT_FOUND`はCommon Controls v6 manifestの欠落と判明。test executableのcopyへSDK `mt.exe`でmanifestを埋めたうえで、Store featureのupdater test4件が成功した。製品binaryの変更やassertionの無効化は行っていない。
+- Store featureのcheck／download／install／restart gateを、updater plugin／session stateすら存在しないmock appで2回ずつ呼び、全てがStore管理エラーで先に拒否されるtestを追加。Direct専用state testはDirect featureで継続する。
+- 独立した`KingYoSun.kukuri.NotificationSmoke`のloose packageに実際のRust notification test executableを登録して`winapp run`から実行した。修正前のNSIS ID指定はpackageの通知履歴への到達がFAIL、修正後の引数なし`CreateToastNotifier()`ではPASS。表示overlayや通知クリック後のpost解決までの確認とは区別する。
+- MSIXではprotocol登録をmanifestへ委譲し、起動時に通常NSIS版のHKCU登録を上書きする`register_all`を呼ばない。
+
 | 対象 | 結果 |
 | --- | --- |
 | `python scripts/release/test_windows_store_package.py` | 4 tests PASS |
