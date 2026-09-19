@@ -316,7 +316,11 @@ if ($SignForLocalTest) {
         }
         foreach ($certificate in $importedCertificates) {
             if ($beforeThumbprints -notcontains $certificate.Thumbprint) {
-                Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force
+                & certutil.exe -user -delstore My $certificate.Thumbprint | Out-Null
+                if ($LASTEXITCODE -ne 0 -or
+                    (Test-Path -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)")) {
+                    throw "Failed to remove the temporary local-test certificate"
+                }
             }
         }
         $password.Dispose()
