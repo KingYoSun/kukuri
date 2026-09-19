@@ -608,7 +608,7 @@ mod tests {
         const PRIVACY: &str = include_str!("../../../../docs/legal/privacy-policy.md");
         const TAURI_CONFIG: &str = include_str!("../tauri.conf.json");
         const STORE_CONFIG: &str = include_str!("../tauri.microsoft-store.conf.json");
-        const DESKTOP_SHELL: &str = include_str!("../../src/shell/DesktopShellPage.tsx");
+        const UPDATE_SCHEDULER: &str = include_str!("../../src/shell/useAppUpdateScheduler.ts");
 
         let tauri_config: serde_json::Value =
             serde_json::from_str(TAURI_CONFIG).expect("tauri config must be valid json");
@@ -630,7 +630,7 @@ mod tests {
         }
         assert!(EXTERNAL_TRANSMISSION.contains("GitHub Releases"));
         assert!(PRIVACY.contains("GitHub Releases"));
-        assert!(DESKTOP_SHELL.contains("const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;"));
+        assert!(UPDATE_SCHEDULER.contains("const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;"));
         let store_config: serde_json::Value =
             serde_json::from_str(STORE_CONFIG).expect("Store config must be valid json");
         assert_eq!(

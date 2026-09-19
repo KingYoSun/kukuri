@@ -48,7 +48,7 @@ import { useDeveloperModeBridge } from '@/shell/useDeveloperModeBridge';
 import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
 import { useOsNotificationActivation } from '@/shell/useOsNotificationActivation';
 import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
-import { usesSelfManagedUpdater } from '@/lib/distribution';
+import { useAppUpdateScheduler } from '@/shell/useAppUpdateScheduler';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
   DesktopShellDetailSurfaceStack,
@@ -80,8 +80,6 @@ import {
 import { routeStateForColumn } from '@/shell/routing/initialWorkspaceRoute';
 
 const CLIPBOARD_TOAST_TIMEOUT_MS = 2200;
-const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
-
 export function DesktopShellPage({
   api = runtimeApi,
   theme,
@@ -493,20 +491,7 @@ export function DesktopShellPage({
     readinessKey: activeGameRooms.length,
     selector: gameFocusKey ? `[data-game-room-id="${gameFocusKey}"]` : null,
   });
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !('__TAURI_INTERNALS__' in window) ||
-      !usesSelfManagedUpdater()
-    ) {
-      return;
-    }
-    void checkForUpdate();
-    const intervalId = window.setInterval(() => {
-      void checkForUpdate();
-    }, UPDATE_CHECK_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
-  }, [checkForUpdate]);
+  useAppUpdateScheduler(checkForUpdate);
   const renderMessagesSurface = (
     surfaceKind: 'messages' | 'conversation',
     peerPubkey: string | undefined,
