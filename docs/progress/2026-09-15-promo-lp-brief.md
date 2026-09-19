@@ -3,36 +3,36 @@
 ## この文書の位置づけ
 
 - 所有Issue: #1037（統括 #1036）。本書は後続 #1039 / #1040 / #1041 / #1042 / #1043 / #1044 が参照する共通briefの正本。
-- Scope revision: 2026-09-18-promo-lp-brief-v6（v5からの変更: 配布候補を v0.2.7-preview.1 へ更新した。2026-09-18 の公開に合わせた操作者の依頼）。直前: 2026-09-18-promo-lp-brief-v5（v4からの変更: X の画像を #1041 の固定出力に合わせて 1600×900 の 1 枚から 1920×1080 の 2 枚へ変えた。各出力の設定の正本は `tools/promo/presets/stills.json`）。直前: 2026-09-18-promo-lp-brief-v4（v3からの変更: 配布候補を v0.2.6-preview.1 へ更新した。2026-09-18 の公開に合わせた操作者の依頼）。直前: 2026-09-18-promo-lp-brief-v3（v2からの変更: Dome予告を操作者が提供した実機の静止画1枚に限定し、動画から外した。S9の画面に限り、操作者本人とテスト用アカウントの名前の写り込みを許可した。いずれも 2026-09-18 の操作者の判断）
+- Scope revision: 2026-09-19-promo-lp-brief-v7（v6からの変更: 配布候補を v0.2.8-preview.2 へ更新した。2026-09-19 の公開に合わせた操作者の依頼）。直前: 2026-09-18-promo-lp-brief-v6（v5からの変更: 配布候補を v0.2.7-preview.1 へ更新した。2026-09-18 の公開に合わせた操作者の依頼）。直前: 2026-09-18-promo-lp-brief-v5（v4からの変更: X の画像を #1041 の固定出力に合わせて 1600×900 の 1 枚から 1920×1080 の 2 枚へ変えた。各出力の設定の正本は `tools/promo/presets/stills.json`）。直前: 2026-09-18-promo-lp-brief-v4（v3からの変更: 配布候補を v0.2.6-preview.1 へ更新した。2026-09-18 の公開に合わせた操作者の依頼）。直前: 2026-09-18-promo-lp-brief-v3（v2からの変更: Dome予告を操作者が提供した実機の静止画1枚に限定し、動画から外した。S9の画面に限り、操作者本人とテスト用アカウントの名前の写り込みを許可した。いずれも 2026-09-18 の操作者の判断）
 - 作業日: 2026-09-18
 - 作業時の main: `d455bdd8e03541de9734f06a8e050a72bdb01bfd`
-- 配布候補release: `v0.2.7-preview.1`（2026-09-18公開）。Issue起票時点の `v0.2.3-preview.2` から `v0.2.5-preview.3`、`v0.2.6-preview.1` を経て更新した（2026-09-18、公開に合わせて操作者が依頼）。LP が案内する release の正本は `apps/lp/release.json`。
-- 配布候補commit: `e820382da627688c5b31f56fec168d0de09f0d9f`（tag `v0.2.7-preview.1` のpeel先。main の祖先）。#1039 の画面は `v0.2.6-preview.1`（`4b7519460e8baf3c29d7ec0eadc6eb2c727a1065`）の上から撮った。v0.2.7-preview.1 の変更は告知素材・LP・CI と、画面の見た目を変えない修正（Windows 初回起動、添付の取得ゲート、Metaverse）なので撮り直さない。
+- 配布候補release: `v0.2.8-preview.2`（2026-09-19公開）。Issue起票時点の `v0.2.3-preview.2` から `v0.2.5-preview.3`、`v0.2.6-preview.1`、`v0.2.7-preview.1` を経て更新した（2026-09-19、公開に合わせて操作者が依頼）。`v0.2.8-preview.1` は release workflow の失敗で公開されていない。LP が案内する release の正本は `apps/lp/release.json`。
+- 配布候補commit: `a9536dfdf508bedcd69931fdebd4fb622bf75e5e`（tag `v0.2.8-preview.2` のpeel先。main の祖先）。#1039 の画面は `v0.2.6-preview.1`（`4b7519460e8baf3c29d7ec0eadc6eb2c727a1065`）の上から撮った。v0.2.7-preview.1 の変更は告知素材・LP・CI と、画面の見た目を変えない修正（Windows 初回起動、添付の取得ゲート、Metaverse）。v0.2.8-preview.2 の UI の変更（URL の OGP プレビュー #1179、リアクション名の tooltip #1178、composer への画像の貼り付け #1177、画像 viewer のクリッピング #1175）は、デモの投稿に URL が無く、tooltip・貼り付け・viewer も撮影する画面に写らないため、どちらも撮り直さない。
 - 本書は製品仕様の正本ではない。仕様は `docs/adr/`、実行手順は `docs/runbooks/`、視覚契約は `DESIGN.md` を正本とし、本書はそれらを素材制作の条件へ翻訳したものとする。
 
 ## AC-1: 配布候補の事実確認
 
 ### release と配布物
 
-出典: `gh release view v0.2.7-preview.1`（2026-09-18取得）、[release一覧](https://github.com/kukuri-app/kukuri/releases/latest)、`CHANGELOG.md`、`README.md`。
+出典: `gh release view v0.2.8-preview.2`（2026-09-19取得）、[release一覧](https://github.com/kukuri-app/kukuri/releases/latest)、`CHANGELOG.md`、`README.md`。
 
 | 事実 | 値 | 出典 |
 | --- | --- | --- |
-| tag | `v0.2.7-preview.1` | GitHub Release |
-| 公開日時 | 2026-09-18T10:22:35Z | GitHub Release |
-| commit | `e820382da627688c5b31f56fec168d0de09f0d9f` | `refs/tags/v0.2.7-preview.1^{}` |
-| 表示バージョン | `0.2.7`（asset名）／`v0.2.7-preview.1`（tag） | asset名とtag |
+| tag | `v0.2.8-preview.2` | GitHub Release |
+| 公開日時 | 2026-09-19T03:51:39Z | GitHub Release |
+| commit | `a9536dfdf508bedcd69931fdebd4fb622bf75e5e` | `refs/tags/v0.2.8-preview.2^{}` |
+| 表示バージョン | `0.2.8`（asset名）／`v0.2.8-preview.2`（tag） | asset名とtag |
 | channel | preview | release notes「Preview channel: preview」 |
 
 配布asset（素材に載せてよい配布物はこの一覧に限る）。
 
 | 対象 | asset | 備考 |
 | --- | --- | --- |
-| Windows 10 / 11 | `kukuri_0.2.7_x64-setup.exe`（+ `.sig`） | NSIS installer。x64のみ |
-| Linux GUI | `kukuri_0.2.7_amd64.AppImage`（+ `.sig`）、`kukuri_0.2.7_amd64.deb`（+ `.sig`） | x86_64 / amd64のみ |
-| Linux CLI | `kukuri-cli_0.2.7_x86_64-unknown-linux-gnu.tar.gz`、`kukuri-cli_0.2.7_aarch64-unknown-linux-gnu.tar.gz` | GUIとは別profile |
+| Windows 10 / 11 | `kukuri_0.2.8_x64-setup.exe`（+ `.sig`） | NSIS installer。x64のみ |
+| Linux GUI | `kukuri_0.2.8_amd64.AppImage`（+ `.sig`）、`kukuri_0.2.8_amd64.deb`（+ `.sig`） | x86_64 / amd64のみ |
+| Linux CLI | `kukuri-cli_0.2.8_x86_64-unknown-linux-gnu.tar.gz`、`kukuri-cli_0.2.8_aarch64-unknown-linux-gnu.tar.gz` | GUIとは別profile |
 | 更新 | `latest-preview.json`、`windows-x86_64-updater-key.pub`、`linux-x86_64-updater-key.pub` | 更新manifestは署名あり |
-| 検証・表示 | `SHA256SUMS.txt`、`THIRD_PARTY_NOTICES.md`、`release-provenance.json`、`kukuri_0.2.7_linux-native-compliance.json` | |
+| 検証・表示 | `SHA256SUMS.txt`、`THIRD_PARTY_NOTICES.md`、`release-provenance.json`、`kukuri_0.2.8_linux-native-compliance.json` | |
 
 macOS packageとaarch64 GUI packageは存在しない。素材でmacOS・Android・Web版を示唆しない。
 
@@ -122,7 +122,7 @@ macOS packageとaarch64 GUI packageは存在しない。素材でmacOS・Android
 | 副見出し | 気になる話題を選び、公開で語り、同じ話題の中で小さな輪へ移る。アカウントを識別する鍵は、あなたの端末にだけ置かれます。 | Pick a topic you care about, talk in the open, then move into a smaller circle inside the same topic. The key that identifies your account stays only on your device. |
 | CTA（主） | Windows版をダウンロード / Linux版をダウンロード | Download for Windows / Download for Linux |
 | CTA（副） | 3分で試す手順を見る | See the 3-minute quickstart |
-| 注記 | テスター向けのBuilder Preview（v0.2.7-preview.1）です。一般向けの安定版ではありません。 | This is a Builder Preview for testers (v0.2.7-preview.1), not a stable general release. |
+| 注記 | テスター向けのBuilder Preview（v0.2.8-preview.2）です。一般向けの安定版ではありません。 | This is a Builder Preview for testers (v0.2.8-preview.2), not a stable general release. |
 
 #### ② 3場面
 
@@ -158,7 +158,7 @@ macOS packageとaarch64 GUI packageは存在しない。素材でmacOS・Android
 | --- | --- | --- |
 | 見出し | いま試せること | What you can try today |
 | 対応OS | Windows 10 / 11（NSIS）、Linux x86_64（AppImage / deb）、Linux CLI x86_64・aarch64。macOS版はありません。 | Windows 10/11 (NSIS), Linux x86_64 (AppImage / deb), Linux CLI x86_64 and aarch64. There is no macOS package. |
-| 版 | v0.2.7-preview.1 | v0.2.7-preview.1 |
+| 版 | v0.2.8-preview.2 | v0.2.8-preview.2 |
 | 手順 | 1. 自分の環境向けのインストーラーを取得して起動する 2. 言語を選び、18歳以上であることを申告し、アプリ規約に同意する 3. コミュニティノードの文書を確認して同意する 4. プロフィールを設定する 5. 話題を開いて投稿・返信する 6. 同じ話題の中でプライベートチャンネルを作る・参加する | 1. Download and run the installer for your platform 2. Pick a language, confirm you are 18 or older, and accept the app terms 3. Review and accept the Community Node documents 4. Set up your profile 5. Open a topic, post, and reply 6. Create or join a private channel inside the same topic |
 | 注記 | 同意するまでネットワーク接続は始まりません。preview installerにOSのコード署名はなく、Windowsでは警告が出ることがあります。 | No network connection starts until you accept. Preview installers are unsigned, so Windows may show a warning. |
 
@@ -220,7 +220,7 @@ feedbackと運営・規約のリンクはAC-4の表に従う。
 - テーマ: アプリ画面はdarkで統一する（`DESIGN.md` §11.1の現行token。背景 `#121212`、パネル `#292929`、アクセント `#03dac5`、primaryボタン `#d77d45`）。LPの地の面は明るいニュートラル＋オレンジとし、デスクトップの高密度レイアウトをLPへ持ち込まない。
 - 文字セーフエリア: 静止画は各辺6%、動画は各辺8%を文字の外側余白として空ける。Product Huntのgalleryは上下に各10%を空け、1枚目の見出しは上から18%〜38%の帯に置く。
 - 字幕: 動画は無音で理解できることを必須とし、日本語版・英語版のどちらも焼き込み字幕を持つ。
-- release表示: 画面内にバージョンが写る場合は `v0.2.7-preview.1` と一致させる。
+- release表示: 画面内にバージョンが写る場合は `v0.2.8-preview.2` と一致させる。
 
 ### 固定出力一覧
 
@@ -294,9 +294,9 @@ LPを置く `kukuri.app` のapexは現在なにも配信していないため、
 | 用途 | URL | 状態 |
 | --- | --- | --- |
 | ダウンロード（全体） | `https://github.com/kukuri-app/kukuri/releases/latest` | 稼働中 |
-| Windows | 上記releaseの `kukuri_0.2.7_x64-setup.exe` | 稼働中 |
-| Linux AppImage / deb | 上記releaseの `kukuri_0.2.7_amd64.AppImage` / `kukuri_0.2.7_amd64.deb` | 稼働中 |
-| Linux CLI | 上記releaseの `kukuri-cli_0.2.7_*.tar.gz` | 稼働中 |
+| Windows | 上記releaseの `kukuri_0.2.8_x64-setup.exe` | 稼働中 |
+| Linux AppImage / deb | 上記releaseの `kukuri_0.2.8_amd64.AppImage` / `kukuri_0.2.8_amd64.deb` | 稼働中 |
+| Linux CLI | 上記releaseの `kukuri-cli_0.2.8_*.tar.gz` | 稼働中 |
 | quickstart | `https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-user-quickstart.md` | 稼働中 |
 | troubleshooting | `https://github.com/kukuri-app/kukuri/blob/main/docs/runbooks/mvp-troubleshooting.md` | 稼働中 |
 | 変更履歴 | `https://github.com/kukuri-app/kukuri/blob/main/CHANGELOG.md` | 稼働中 |
@@ -333,7 +333,7 @@ mobileからの閲覧では、ダウンロードの代わりに「PCで開くた
 
 ## 未確認・後続への引き継ぎ
 
-1. 撮影対象releaseは撮影直前に再照合する。`v0.2.7-preview.1` より新しいpreviewが出た場合、#1040 などの撮影の着手時に再固定し、本書のScope revisionを更新する。LP のダウンロードは `apps/lp/release.json` と `apps/lp/scripts/sync-release.mjs` で更新する（`docs/runbooks/lp-publish.md`）。Dome の静止画（S9）は `v0.2.5-preview.3` の実機で撮ったもので、開発中の実験機能の予告として使い続ける。
+1. 撮影対象releaseは撮影直前に再照合する。`v0.2.8-preview.2` より新しいpreviewが出た場合、#1040 などの撮影の着手時に再固定し、本書のScope revisionを更新する。LP のダウンロードは `apps/lp/release.json` と `apps/lp/scripts/sync-release.mjs` で更新する（`docs/runbooks/lp-publish.md`）。Dome の静止画（S9）は `v0.2.5-preview.3` の実機で撮ったもので、開発中の実験機能の予告として使い続ける。
 2. LPの実装先path（`apps/lp` など）とビルド方法は#1043が確定する。本書はホスティング（Cloudflare Pages）と正規URLだけを固定する。
 3. Cloudflare Pagesプロジェクトの作成とDNS切替はユーザーの操作であり、#1044の引継ぎ文書に手順を書くまでが本Issue群の範囲。
 4. 実機撮影（S4）に使うLinux実機の接続手段は#1040の着手時に確認する。本書では実機素材の由来表記の条件だけを固定した。
