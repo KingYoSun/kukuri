@@ -162,7 +162,8 @@ mod package_tests {
         for expected in [
             r#"Name="KingYoSun.kukuri""#,
             r#"Publisher="CN=33EB763C-4859-4E44-886F-1784E16DD6D5""#,
-            r#"Version="1.0.0.0""#,
+            // Packaging replaces this sentinel with the derived app version.
+            r#"Version="0.0.0.0""#,
             r#"ProcessorArchitecture="x64""#,
             r#"<uap:Protocol Name="kukuri" />"#,
             r#"<rescap:Capability Name="runFullTrust" />"#,

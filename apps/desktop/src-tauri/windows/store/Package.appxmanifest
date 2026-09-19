@@ -5,10 +5,11 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   IgnorableNamespaces="uap rescap uap10">
+  <!-- Version is a template sentinel. The Store build derives (app major + 1).minor.patch.0. -->
   <Identity
     Name="KingYoSun.kukuri"
     Publisher="CN=33EB763C-4859-4E44-886F-1784E16DD6D5"
-    Version="1.0.0.0"
+    Version="0.0.0.0"
     ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>kukuri</DisplayName>

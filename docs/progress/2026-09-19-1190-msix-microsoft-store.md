@@ -2,7 +2,11 @@
 
 ## Scope
 
-- Scope revision: `2026-09-19-v3`
+### 現行のversion方針（v4）
+
+ユーザー承認により独立したStore version管理を撤去。既存アプリversionを唯一の入力として`major.minor.patch → (major+1).minor.patch.0`を生成する（現在`0.2.8 → 1.2.8.0`）。以下のv3での`1.0.0.0`提出候補と`1.0.x.0`更新試験は過去証跡であり、現行提出候補ではない。manifestはtemplateの`0.0.0.0`をbuild時に置換し、出力directoryの`AppxManifest.xml`をpack／run／開発署名検証で使う。prereleaseと16-bit範囲外は拒否。変換の正常／境界／拒否testを追加し、package contracts全8件がPASS。
+
+- Scope revision: `2026-09-19-v4`
 - 基準 commit: `f3d481f0fda732941033275510e6598eda93f2ef`
 - リスク区分: C
 - Issue: [#1190](https://github.com/kukuri-app/kukuri/issues/1190)

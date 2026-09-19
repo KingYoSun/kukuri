@@ -17,10 +17,12 @@ Microsoftは[`StoreContext`によるpackage更新](https://learn.microsoft.com/e
 | `PublisherDisplayName` | `KingYoSun` |
 | PFN | `KingYoSun.kukuri_p8fpcaf1kx88g` |
 | Store ID | `9NQ18HML4GS3` |
-| 初回Store package version | `1.0.0.0` |
+| Store package version | アプリ`major.minor.patch` → `(major+1).minor.patch.0`（`0.2.8` → `1.2.8.0`） |
 | WinApp CLI | `0.6.1` |
 
-identityとStore versionの正本は`apps/desktop/src-tauri/windows/store/Package.appxmanifest`。Partner Centerの値はcase、空白、句読点を含め完全一致させる。Store versionはapp SemVerとは別の4整数で、末尾を0とし、既存x64 packageより上げる。
+identityの正本は`apps/desktop/src-tauri/windows/store/Package.appxmanifest`。Partner Centerの値はcase、空白、句読点を含め完全一致させる。versionの入力は既存の`apps/desktop/package.json`のみで、Tauri設定との一致もbuild時に確認する。Store versionはmajorに1を加えて末尾0を付け、自動生成した`dist/<出力先>/AppxManifest.xml`へ反映する。repositoryのmanifestの`0.0.0.0`はtemplate用の印で、直接pack／runには使わない。独立したStore用version bumpは行わない。
+
+Store用は安定版の`major.minor.patch`のみ受理する。prerelease／build metadataは同一番号への衝突を避けるため拒否する。変換後の各要素は65535以下（アプリmajorは65534以下）。同一バージョンの再提出で別カウンタを導入せず、必要なら通常のアプリversionを更新する。アプリ内表示は既存versionのまま。
 
 WinApp CLIの導入とversion確認:
 
@@ -58,7 +60,7 @@ PFXなしでpackage identity、activation、通知を先に確認できる。
 
 ```powershell
 winapp run .\dist\microsoft-store\staging `
-  --manifest .\apps\desktop\src-tauri\windows\store\Package.appxmanifest `
+  --manifest .\dist\microsoft-store\AppxManifest.xml `
   --executable kukuri.exe `
   --unregister-on-exit
 ```
@@ -66,7 +68,7 @@ winapp run .\dist\microsoft-store\staging `
 別processで確認するときは`--detach`を使い、終了後に次を実行する。
 
 ```powershell
-winapp unregister --manifest .\apps\desktop\src-tauri\windows\store\Package.appxmanifest
+winapp unregister --manifest .\dist\microsoft-store\AppxManifest.xml
 ```
 
 `winapp unregister`はdevelopment mode登録だけを対象にする。別project treeの登録へ`--force`を使わない。Issue #1190ではAUMID `KingYoSun.kukuri_p8fpcaf1kx88g!kukuri`、single processの`kukuri:`再activation、対象登録だけの解除を確認した。
@@ -82,8 +84,8 @@ repository rootにlocal PFXが存在しても、Store提出用package commandは
 既存の製品用PFXは使わず、Git除外された検証directoryで次を実行する。CLI既定passwordは使い捨て開発証明書のためのもので、配布鍵として利用しない。
 
 ```powershell
-winapp cert generate --manifest apps/desktop/src-tauri/windows/store/Package.appxmanifest --output test-results/kukuri/issue-1190-devcert/devcert.pfx --valid-days 7 --if-exists skip --export-cer
-winapp pack dist/microsoft-store/staging --manifest apps/desktop/src-tauri/windows/store/Package.appxmanifest --executable kukuri.exe --cert test-results/kukuri/issue-1190-devcert/devcert.pfx --output test-results/kukuri/issue-1190-devcert/kukuri-test.msix
+winapp cert generate --manifest dist/microsoft-store/AppxManifest.xml --output test-results/kukuri/issue-1190-devcert/devcert.pfx --valid-days 7 --if-exists skip --export-cer
+winapp pack dist/microsoft-store/staging --manifest dist/microsoft-store/AppxManifest.xml --executable kukuri.exe --cert test-results/kukuri/issue-1190-devcert/devcert.pfx --output test-results/kukuri/issue-1190-devcert/kukuri-test.msix
 ```
 
 続いて管理者PowerShellで`winapp cert install <devcert.pfxの絶対path>`を実行し、通常ユーザーで`Add-AppxPackage <kukuri-test.msixの絶対path>`を実行する。署名付きMSIXの起動、deep link、通知、restart、update、データ保持を検証する。証明書登録／解除対象は、この工程で生成した証明書のthumbprintで特定する。利用者の既存証明書と実データを削除しない。Store用unsigned candidateと検証用signed packageのpayload一致も照合する。

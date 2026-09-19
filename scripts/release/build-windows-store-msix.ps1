@@ -84,7 +84,15 @@ if (-not $identity) {
 }
 $packageName = [string]$identity.Name
 $publisher = [string]$identity.Publisher
-$storeVersion = [string]$identity.Version
+$appPackage = Get-Content -LiteralPath (Join-Path $desktopDir 'package.json') -Raw | ConvertFrom-Json
+$tauriConfig = Get-Content -LiteralPath (Join-Path $desktopDir 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json
+if ([string]$tauriConfig.version -cne [string]$appPackage.version) {
+    throw 'Tauri and app package versions must match before Store packaging'
+}
+. (Join-Path $PSScriptRoot 'windows-store-version.ps1')
+$storeVersion = ConvertTo-StoreVersion ([string]$appPackage.version)
+if ([string]$identity.Version -ne '0.0.0.0') { throw 'Store manifest template version must remain 0.0.0.0; version is generated' }
+$identity.SetAttribute('Version', $storeVersion)
 $architecture = [string]$identity.ProcessorArchitecture
 if ($packageName -ne "KingYoSun.kukuri" -or
     $publisher -ne "CN=33EB763C-4859-4E44-886F-1784E16DD6D5" -or
@@ -114,6 +122,8 @@ New-Item -ItemType Directory -Path $outputDir | Out-Null
 $stagingDir = Join-Path $outputDir "staging"
 $assetDir = Join-Path $stagingDir "Assets"
 New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
+$manifestPath = Join-Path $outputDir 'AppxManifest.xml'
+$manifest.Save($manifestPath)
 
 & {
     $previousDistribution = $env:VITE_KUKURI_DISTRIBUTION
@@ -220,7 +230,6 @@ finally {
     $archive.Dispose()
 }
 
-$appPackage = Get-Content -LiteralPath (Join-Path $desktopDir "package.json") -Raw | ConvertFrom-Json
 $finalCommit = (& git -C $repoRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $finalCommit -ne $sourceCommit) { throw "Source commit changed during build" }
 $finalStatus = (& git -C $repoRoot status --porcelain | Out-String).Trim()

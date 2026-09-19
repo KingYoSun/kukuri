@@ -11,6 +11,7 @@ on:
       - 'crates/**'
       - 'scripts/release/build-windows-store-msix.ps1'
       - 'scripts/release/windows-store-assets.ps1'
+      - 'scripts/release/windows-store-version.ps1'
       - 'scripts/release/test_windows_store_package.py'
       - 'scripts/release/test-windows-store-updater.ps1'
       - 'scripts/release/windows-test-runtime.manifest'

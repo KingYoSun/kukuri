@@ -20,6 +20,26 @@ NS = {
 
 
 class WindowsStorePackageContracts(unittest.TestCase):
+    def test_store_version_is_derived_without_a_separate_counter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            command = r'''
+param($repoRoot)
+$ErrorActionPreference = 'Stop'
+. (Join-Path $repoRoot 'scripts/release/windows-store-version.ps1')
+foreach ($case in @(@('0.2.8','1.2.8.0'), @('0.2.9','1.2.9.0'), @('1.0.0','2.0.0.0'), @('65534.65535.65535','65535.65535.65535.0'))) {
+    if ((ConvertTo-StoreVersion $case[0]) -ne $case[1]) { throw 'Wrong mapping' }
+}
+foreach ($invalid in @('65535.0.0','0.65536.0','0.0.65536','01.2.3','0.2.8-preview.1','0.2.8+build.1','0.2','-1.0.0','0.2.8.0','999999999999999999.0.0')) {
+    $rejected = $false
+    try { ConvertTo-StoreVersion $invalid | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw "Accepted unsupported version $invalid" }
+}
+'''
+            path = pathlib.Path(directory) / 'version-test.ps1'
+            path.write_text(command, encoding='utf-8')
+            result = subprocess.run(['pwsh', '-NoProfile', '-File', str(path), str(ROOT)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     @unittest.skipUnless(platform.system() == "Windows", "System.Drawing shell assets require Windows; covered by Store package CI")
     def test_shell_icons_have_transparent_targetsize_variants(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -84,7 +104,7 @@ exit 1
         self.assertEqual(identity.attrib, {
             "Name": "KingYoSun.kukuri",
             "Publisher": "CN=33EB763C-4859-4E44-886F-1784E16DD6D5",
-            "Version": "1.0.0.0",
+            "Version": "0.0.0.0",  # Template sentinel; build derives the version from package.json.
             "ProcessorArchitecture": "x64",
         })
         properties = root.find("f:Properties", NS)
