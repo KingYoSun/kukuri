@@ -262,8 +262,10 @@ if ($SignForLocalTest) {
         ConvertTo-SecureString -String $env:KUKURI_MSIX_CERT_PASSWORD -AsPlainText -Force
     }
     $beforeThumbprints = @(Get-ChildItem Cert:\CurrentUser\My | ForEach-Object { $_.Thumbprint })
+    $beforeTrustedThumbprints = @(Get-ChildItem Cert:\CurrentUser\TrustedPeople | ForEach-Object { $_.Thumbprint })
     $imported = $null
     $importedCertificates = @()
+    $trustedCertificates = @()
     $signingSucceeded = $false
     try {
         $importedCertificates = @(Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false)
@@ -297,10 +299,11 @@ if ($SignForLocalTest) {
         Invoke-Native $signTool @(
             "sign", "/fd", "SHA256", "/sha1", $imported.Thumbprint, "/s", "My", $signedPath
         ) "MSIX local-test signing"
-        Invoke-Native $signTool @("verify", "/pa", "/all", "/v", $signedPath) "MSIX signature verification"
         $certificateName = "${packageName}_local-test.cer"
         $certificateOutputPath = Join-Path $outputDir $certificateName
         Export-Certificate -Cert $imported -FilePath $certificateOutputPath -Force | Out-Null
+        $trustedCertificates = @(Import-Certificate -FilePath $certificateOutputPath -CertStoreLocation Cert:\CurrentUser\TrustedPeople)
+        Invoke-Native $signTool @("verify", "/pa", "/all", "/v", $signedPath) "MSIX signature verification"
         $provenance.signed_local_test = [ordered]@{
             file = $signedName
             sha256 = (Get-FileHash -LiteralPath $signedPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -311,6 +314,7 @@ if ($SignForLocalTest) {
         $signingSucceeded = $true
     }
     finally {
+        $cleanupFailures = @()
         if (-not $signingSucceeded -and $signedPath -and (Test-Path -LiteralPath $signedPath)) {
             Remove-Item -LiteralPath $signedPath -Force
         }
@@ -319,11 +323,23 @@ if ($SignForLocalTest) {
                 & certutil.exe -user -delstore My $certificate.Thumbprint | Out-Null
                 if ($LASTEXITCODE -ne 0 -or
                     (Test-Path -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)")) {
-                    throw "Failed to remove the temporary local-test certificate"
+                    $cleanupFailures += "CurrentUser/My:$($certificate.Thumbprint)"
+                }
+            }
+        }
+        foreach ($certificate in $trustedCertificates) {
+            if ($beforeTrustedThumbprints -notcontains $certificate.Thumbprint) {
+                & certutil.exe -user -delstore TrustedPeople $certificate.Thumbprint | Out-Null
+                if ($LASTEXITCODE -ne 0 -or
+                    (Test-Path -LiteralPath "Cert:\CurrentUser\TrustedPeople\$($certificate.Thumbprint)")) {
+                    $cleanupFailures += "CurrentUser/TrustedPeople:$($certificate.Thumbprint)"
                 }
             }
         }
         $password.Dispose()
+        if ($cleanupFailures.Count -gt 0) {
+            throw "Failed to remove temporary local-test certificates: $($cleanupFailures -join ', ')"
+        }
     }
 }
 elseif ($PromptForCertificatePassword) {
