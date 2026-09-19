@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn app_consent_satisfied_requires_every_document_at_current_or_newer_version() {
-        assert_eq!(LEGAL_BUNDLE_VERSION, 7);
+        assert_eq!(LEGAL_BUNDLE_VERSION, 8);
         assert!(!app_consent_documents_satisfied(&AppConsentStore::default()));
 
         // terms だけ同意しても不十分。
@@ -524,6 +524,9 @@ mod tests {
             // #1061: 信頼評価による折りたたみ(第 5 項)とブロック・ミュートの任意提供(第 6 項)。
             "信頼評価に基づいて",
             "任意の同意文書",
+            // #1174: 公開投稿のlink preview取得とprivate contentの非対象化。
+            "公開投稿の先頭の外部 URL",
+            "private channel／DM の URL は自動取得しません",
             "投稿コンテンツの権利帰属",
             "必要な権利または許諾",
             "投稿者の責任",
@@ -564,6 +567,10 @@ mod tests {
             // #1061: 信頼評価の照会とブロック・ミュートの提供で送る項目。
             "信頼評価の照会",
             "ブロック・ミュートの提供",
+            // #1174: previewの送信先、送信項目、対象外content、transient保持。
+            "OGP 画像",
+            "URL の path／query",
+            "process memory",
         ] {
             assert!(
                 PRIVACY.contains(required_clause),
@@ -577,6 +584,9 @@ mod tests {
             // #1061: 信頼評価の照会の送信先・項目(AC-5)。
             "信頼評価の照会",
             "ブロック・ミュートの提供",
+            // #1174: link先とOGP image hostへの自動送信。
+            "OGP 画像配信先",
+            "process-memory cache",
         ] {
             assert!(
                 EXTERNAL_TRANSMISSION.contains(required_clause),

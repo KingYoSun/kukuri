@@ -311,6 +311,7 @@ pub fn run() {
             app.manage(OsNotificationBackground::new(app.handle()));
             // #978: 開発者向けログ閲覧。buffer は init_tracing が組んだ process 全体の1つ。
             app.manage(DeveloperLogState::new(desktop_log_buffer()));
+            app.manage(commands::link_preview::LinkPreviewState::default());
             if let Err(error) = build_tray(app.handle()) {
                 error!(%error, "failed to build system tray");
             } else {
@@ -344,6 +345,7 @@ pub fn run() {
             app_update::download_app_update,
             app_update::install_app_update,
             commands::external_url::open_external_url,
+            commands::link_preview::fetch_link_preview,
             commands::app_consent::get_app_consent_status,
             commands::app_consent::accept_app_consents,
             commands::identity::export_account_key,

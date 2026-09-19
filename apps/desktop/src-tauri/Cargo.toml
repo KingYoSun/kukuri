@@ -13,6 +13,8 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 anyhow = "1.0.104"
+base64 = "0.23"
+html5ever = "0.38.0"
 kukuri-app-api = { path = "../../../crates/app-api" }
 kukuri-core = { path = "../../../crates/core" }
 kukuri-desktop-runtime = { path = "../../../crates/desktop-runtime" }
@@ -23,9 +25,10 @@ tauri-plugin-deep-link = "2.4.9"
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-single-instance = { version = "2.4.3", features = ["deep-link"] }
 tauri-plugin-updater = "2.10.1"
-tokio = { version = "1", features = ["time", "signal"] }
+tokio = { version = "1", features = ["time", "signal", "sync", "net", "macros", "rt"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls"] }
 
 [target.'cfg(windows)'.dependencies]
 open = { version = "5.4.3", features = ["shellexecute-on-windows"] }
@@ -44,7 +47,6 @@ ashpd = { version = "0.13.13", default-features = false, features = ["async-io",
 zbus = "5"
 
 [dev-dependencies]
-base64 = "0.23"
 minisign-verify = "0.2"
 tauri = { version = "2.11.5", features = ["test"] }
 tempfile = "3.27.0"

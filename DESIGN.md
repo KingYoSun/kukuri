@@ -76,6 +76,8 @@ Columnの外底面とCanvasの横スクロールバーの間には`--space-sm`�
 
 投稿カード右上には端末timezoneの年月日と時分秒を常時表示する。日付順は選択localeに従い、日本語は年月日順とする。狭幅では折り返しを許容し、投稿者・公開範囲・日時を重ねたり切り捨てたりしない。
 
+投稿本文の資格情報を含まない絶対HTTP(S) URLは、全文を折り返せるlinkとして表示する。公開・表示可能・settledな投稿がviewport内にある場合は、primary contentの先頭URL 1件だけにsite、title、任意description／imageのpreview cardを表示できる。取得中は本文を押し下げるskeletonを置かず、失敗時はinline linkだけを維持する。private channel／DM、Composer参照preview、adult-content gate／trust collapse中、withdrawn／missing／local pending、viewport外では自動取得しない。cardとinline linkはpointer／keyboardから元URLをOS browserへ開き、親のthread操作を重複発火しない。remote HTML／imageをWebViewから直接読み込まず、送信・取得境界はADR 0051に従う。
+
 #### 自分のアカウント操作（#1005）
 
 Control Center左隣の丸いアバターボタンからアカウントメニューを開く。最上部は「プロフィール表示」、中段は管理対象accountのアバター・表示名・ユーザー名、最下部は「アカウント追加」「アカウント管理」「ログアウト」。本人のプロフィールカラムがあれば画面とkeyboard focusを合わせ、なければ追加する。account行の選択は確認を挟まず切り替え、処理中と失敗を明示する。

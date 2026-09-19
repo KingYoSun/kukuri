@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   buildChannelAccessPreviewDeepLink,
   parseChannelAccessPreviewDeepLink,
+  parseSmartText,
 } from './internalLinks';
 
 describe('internal link parsing', () => {
@@ -27,5 +28,42 @@ describe('internal link parsing', () => {
     expect(parseChannelAccessPreviewDeepLink('kukuri://access-preview?token=unknown:x')).toBeNull();
     expect(parseChannelAccessPreviewDeepLink('kukuri://access-preview?token=invite:x&token=share:y')).toBeNull();
     expect(parseChannelAccessPreviewDeepLink('kukuri://access-preview?token=invite:x&debug=1')).toBeNull();
+  });
+
+  test('splits safe external HTTP URLs without swallowing surrounding punctuation', () => {
+    expect(
+      parseSmartText(
+        'before https://example.test/path?q=one). after kukuri:topic:demo'
+      )
+    ).toEqual([
+      [
+        { kind: 'text', text: 'before ' },
+        {
+          kind: 'external_url',
+          href: 'https://example.test/path?q=one',
+        },
+        { kind: 'text', text: '). after ' },
+        {
+          kind: 'reference',
+          reference: {
+            kind: 'topic',
+            topic: 'kukuri:topic:demo',
+            route: '#/timeline?topic=kukuri%3Atopic%3Ademo',
+          },
+        },
+      ],
+    ]);
+  });
+
+  test('keeps unsafe or unsupported URL-like values as text', () => {
+    for (const value of [
+      'javascript:alert(1)',
+      'file:///tmp/private',
+      'https://user:secret@example.test/path',
+      'https://example.test\\@other.test',
+      'https://',
+    ]) {
+      expect(parseSmartText(value)).toEqual([[{ kind: 'text', text: value }]]);
+    }
   });
 });

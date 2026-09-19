@@ -8,6 +8,7 @@ import {
   type InternalSmartReference,
 } from '@/lib/internalLinks';
 import { topicDisplayName } from '@/lib/topicId';
+import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -25,6 +26,7 @@ type SmartReferenceTextProps = {
   onActivateReference?: (reference: InternalSmartReference) => void;
   mentionAuthors?: Record<string, MentionAuthorView>;
   onOpenMention?: (pubkey: string) => void;
+  externalLinks?: boolean;
 };
 
 function tokenKindLabel(
@@ -95,8 +97,10 @@ export function SmartReferenceText({
   onActivateReference,
   mentionAuthors,
   onOpenMention,
+  externalLinks = false,
 }: SmartReferenceTextProps) {
   const { t } = useTranslation(['channels', 'common', 'shell']);
+  const externalLink = useExternalLinkOpener();
   const lines = parseSmartText(text);
 
   return (
@@ -140,6 +144,36 @@ export function SmartReferenceText({
                     {mentionLabel}
                   </button>
                 </MentionHoverCard>
+              );
+            }
+            if (segment.kind === 'external_url') {
+              if (!externalLinks) {
+                return (
+                  <span key={`${lineIndex}-${segmentIndex}`} className={className}>
+                    {segment.href}
+                  </span>
+                );
+              }
+              return (
+                <a
+                  key={`${lineIndex}-${segmentIndex}`}
+                  className='smart-external-link'
+                  href={segment.href}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  aria-disabled={externalLink.pending || undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    externalLink.linkProps.onClick(event);
+                  }}
+                  onAuxClick={(event) => {
+                    event.stopPropagation();
+                    externalLink.linkProps.onAuxClick(event);
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  {segment.href}
+                </a>
               );
             }
             const label = referenceLabel(segment.reference, t);

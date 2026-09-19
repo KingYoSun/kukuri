@@ -2,6 +2,8 @@
 // 構造化する小さな parser。HTML 文字列は生成せず、描画側は React 要素だけを組み立てる。
 // raw HTML は解釈しないため、`<script>` 等は通常の文字列として残る。
 
+export { safeExternalHref } from './externalUrls';
+
 export type MarkdownInline =
   | { type: 'text'; value: string }
   | { type: 'strong'; children: MarkdownInline[] }
@@ -34,7 +36,6 @@ function startsTable(lines: string[], index: number) {
   const delimiter = lines[index + 1];
   return lines[index].includes('|') && delimiter !== undefined && delimiter.includes('|') && TABLE_DELIMITER.test(delimiter);
 }
-
 // 段落を中断する block の開始行か。
 function interruptsParagraph(lines: string[], index: number) {
   const line = lines[index];
@@ -377,22 +378,4 @@ function parseEmphasis(source: string, start: number) {
     search = close + (sameRunContinues ? 2 : 1);
   }
   return null;
-}
-
-// 本文中のリンクは OS ブラウザで開ける絶対 HTTP(S) だけを anchor にする。
-// 判定は Tauri の open_external_url と同じく、資格情報・空白・制御文字を含む値を除外する。
-export function safeExternalHref(href: string): string | null {
-  const value = href.trim();
-  if (!/^https?:\/\//i.test(value) || /[\s\\]/.test(value) || [...value].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)) {
-    return null;
-  }
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) {
-      return null;
-    }
-    return value;
-  } catch {
-    return null;
-  }
 }

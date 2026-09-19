@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 
-import type { SubmitCommunityNodeReportResult } from '@/lib/api';
+import type { LinkPreviewFetcher, SubmitCommunityNodeReportResult } from '@/lib/api';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
@@ -39,6 +39,19 @@ const inviteTokenPostContent = JSON.stringify({
       owner_pubkey: 'b'.repeat(64),
       epoch_id: 'epoch-1',
     }),
+  },
+});
+
+const storyLinkPreviewFetcher: LinkPreviewFetcher = async (url) => ({
+  status: 'available',
+  preview: {
+    url,
+    source_label: 'Kukuri Preview Notes',
+    title: 'A bounded OGP preview for public posts with a deliberately long title',
+    description:
+      'The post stays readable while metadata is fetched, and falls back to the inline link when a preview is unavailable.',
+    image_data_url:
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA0SURBVFhH7c4hEQBACABBZugfixJf5vEEALPizKmNfPUvizm2AwAAAAAAAAAAAAAAAAAAaInJhJdNUjWLAAAAAElFTkSuQmCC',
   },
 });
 
@@ -143,6 +156,30 @@ export const ImageReady: Story = {
       },
     }),
   },
+};
+
+export const ExternalLinkPreview: Story = {
+  args: {
+    view: createView({
+      post: {
+        ...basePost,
+        content:
+          'URL parsing and OGP preview notes https://example.test/releases/1174?source=public-post',
+      },
+    }),
+  },
+  render: ({ view }) => (
+    <div className='w-[min(30rem,calc(100vw-2rem))]'>
+      <PostCard
+        enableLinkPreview
+        linkPreviewFetcher={storyLinkPreviewFetcher}
+        view={view}
+        onOpenAuthor={() => undefined}
+        onOpenThread={() => undefined}
+        onReply={() => undefined}
+      />
+    </div>
+  ),
 };
 
 export const CustomReactionSummary: Story = {

@@ -5,6 +5,7 @@ import { expect, test, vi } from 'vitest';
 
 import { PostCard } from './PostCard';
 import { type PostCardView } from './types';
+import type { LinkPreviewOutcome } from '@/lib/api';
 
 import { createView } from './PostCard.testHelpers';
 function setViewportWidth(width: number) {
@@ -29,6 +30,122 @@ test('post card hides the object kind and shows a placeholder avatar when no pic
   expect(screen.queryByText(/^post$/i)).not.toBeInTheDocument();
   expect(screen.getByText('core contributors')).toHaveClass('post-meta-chip');
   expect(screen.getByTestId('post-1-author-avatar')).toHaveTextContent('A');
+});
+
+test('post card renders an absolute HTTP URL as an external link without changing adjacent text', () => {
+  const url = 'https://example.test/articles/1174?q=ogp';
+  const base = createView();
+  const onOpenThread = vi.fn();
+
+  render(
+    <PostCard
+      view={createView({
+        post: {
+          ...base.post,
+          content: `URL before ${url}. URL after`,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={onOpenThread}
+      onReply={() => undefined}
+    />
+  );
+
+  const link = screen.getByRole('link', { name: url });
+  expect(link).toHaveAttribute('href', url);
+  expect(screen.getByText('URL before')).toBeInTheDocument();
+  expect(screen.getByText('. URL after')).toBeInTheDocument();
+  link.addEventListener('click', (event) => event.preventDefault());
+  fireEvent.click(link);
+  expect(onOpenThread).not.toHaveBeenCalled();
+});
+
+test('post card requests one preview for an eligible public primary URL', async () => {
+  const url = 'https://example.test/articles/1174';
+  const base = createView();
+  const onOpenThread = vi.fn();
+  const fetcher = vi.fn(async (requestedUrl: string): Promise<LinkPreviewOutcome> => ({
+    status: 'available',
+    preview: {
+      url: requestedUrl,
+      source_label: 'example.test',
+      title: 'Issue 1174 preview',
+      description: null,
+      image_data_url: null,
+    },
+  }));
+
+  render(
+    <PostCard
+      enableLinkPreview
+      linkPreviewFetcher={fetcher}
+      view={createView({
+        post: {
+          ...base.post,
+          content: `first ${url} second https://second.example/path`,
+          channel_id: null,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={onOpenThread}
+      onReply={() => undefined}
+    />
+  );
+
+  const preview = await screen.findByRole('link', {
+    name: 'Issue 1174 preview — example.test',
+  });
+  expect(preview).toHaveAttribute('href', url);
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledWith(url);
+  expect(screen.getByRole('link', { name: 'https://second.example/path' })).toBeInTheDocument();
+  preview.addEventListener('click', (event) => event.preventDefault());
+  fireEvent.click(preview);
+  expect(onOpenThread).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['private channel', { channel_id: 'private-1' }, {}],
+  ['local pending', { channel_id: null, local_state: 'pending' as const }, {}],
+  ['adult gate', { channel_id: null }, { adultContentGated: true }],
+  [
+    'trust gate',
+    { channel_id: null },
+    {
+      trustGate: {
+        authorPubkey: 'a'.repeat(64),
+        nodeBaseUrl: 'https://node.example',
+        reasons: ['risk_signals' as const],
+        fromRepostSource: false,
+      },
+    },
+  ],
+])('post card does not request a preview for %s content', async (_label, postOverride, viewOverride) => {
+  const base = createView();
+  const fetcher = vi.fn(async (): Promise<LinkPreviewOutcome> => ({
+    status: 'unavailable',
+    reason: 'network',
+  }));
+
+  render(
+    <PostCard
+      enableLinkPreview
+      linkPreviewFetcher={fetcher}
+      view={createView({
+        ...viewOverride,
+        post: {
+          ...base.post,
+          content: 'https://example.test/private',
+          ...postOverride,
+        },
+      })}
+      onOpenAuthor={() => undefined}
+      onOpenThread={() => undefined}
+      onReply={() => undefined}
+    />
+  );
+
+  await waitFor(() => expect(fetcher).not.toHaveBeenCalled());
 });
 
 test('post card renders the author image when one is available', () => {

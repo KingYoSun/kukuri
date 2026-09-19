@@ -188,7 +188,8 @@ export function TimelineFeed({
       ) : null}
       {posts.map((view) => (
         <li key={view.post.object_id} className={itemClassName}>
-          <PostCard
+        <PostCard
+          enableLinkPreview
             view={view}
             onOpenAuthor={onOpenAuthor}
             onOpenThread={onOpenThread}

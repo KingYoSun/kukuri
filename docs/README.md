@@ -97,6 +97,7 @@ Issue・PR・セッションの記述だけで「実装済み」「検証成功�
 - 18歳以上の自己申告と成人向け表現の既定非表示(#858): 仕様は `docs/adr/0046-age-attestation-adult-content-gating.md`、分類は `docs/legal/age-attestation-data-classification.md` / `docs/legal/adult-content-display-data-classification.md`
 - 端末バックアップ / 復元(#855): 仕様・脅威モデルは `docs/adr/0048-device-backup-restore.md`、移行対象分類は `docs/legal/device-backup-data-classification.md`
 - 開発者向けアプリ内ログの閲覧・書き出し(#978): 分類は `docs/legal/developer-log-viewer-data-classification.md`、外部送信一覧の行は `docs/legal/app-data-flow-inventory.md`
+- 公開投稿の外部URL link／OGP preview(#1174): 取得・SSRF・cache境界は `docs/adr/0051-link-preview-fetch-boundary.md`、分類は `docs/legal/link-preview-data-classification.md`、外部送信一覧は `docs/legal/external-transmission-notice.md` / `docs/legal/app-data-flow-inventory.md`
 
 ## UI/UX
 - flow: `docs/adr/0014-uiux-dev-flow.md`

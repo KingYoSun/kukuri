@@ -102,7 +102,11 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
   });
   await user.type(within(explore).getByLabelText('Search query'), 'hello');
   await user.click(within(explore).getByRole('button', { name: 'Show results' }));
-  const result = await within(explore).findByText(`canonical post from ${NODE_B}`);
+  const canonicalResultText = `canonical post from ${NODE_B}`;
+  const canonicalResultMatcher = (_content: string, element: Element | null) =>
+    element?.classList.contains('post-title') === true &&
+    element.textContent === canonicalResultText;
+  const result = await within(explore).findByText(canonicalResultMatcher);
   expect(within(explore).queryByText(`result from ${NODE_B}`)).not.toBeInTheDocument();
   const resultCard = result.closest('article');
   if (!(resultCard instanceof HTMLElement)) throw new Error('Explore result card not found');
@@ -115,7 +119,7 @@ test('Explore header selects named eligible nodes, clears stale results, and ret
 
   await user.selectOptions(nodeSelect, NODE_A);
   await waitFor(() => {
-    expect(within(explore).queryByText(`canonical post from ${NODE_B}`)).not.toBeInTheDocument();
+    expect(within(explore).queryByText(canonicalResultMatcher)).not.toBeInTheDocument();
     expect(within(explore).queryByRole('button', { name: 'Report' })).not.toBeInTheDocument();
   });
 
