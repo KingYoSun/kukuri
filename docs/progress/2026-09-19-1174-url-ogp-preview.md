@@ -60,6 +60,8 @@ Issue添付画像のplain URL表示と一致した。実装後は同testが成�
 
 監査のnon-blockerだったContent-Type欠落画像の許可もADR 0051へ厳密に合わせ、declared raster MIMEとmagic bytesの双方が一致する場合だけ許可するtestへ変更した。修正commitは同じ監査担当へdelta再監査する。
 
+修正head `f558c87d1d4a9984c52ea2ad4addc65f13e7fc5b` のdelta独立監査は `PASS`（inventory 6 / 適合6 / 不適合0 / 未分類0、blocker 0）。non-blockerとしてvisual専用app-consent fixtureのversion/dateが7／2026-09-18のまま残っていたため、productionと同じ8／2026-09-19、stale accepted version 7へ同期し、Linux baselineを再生成する。
+
 ## 未確認と補完
 
 - `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib -- link_preview`はcompile完了後、test executable起動時にWindowsの`STATUS_ENTRYPOINT_NOT_FOUND`で終了した。既存target削除はせず、freshな`target/issue-1174-tauri`でも同じだったため、test logicのFAILとは区別する。
