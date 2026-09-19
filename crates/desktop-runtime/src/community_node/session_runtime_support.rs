@@ -15,7 +15,7 @@ impl DesktopRuntime {
         force_refresh: bool,
     ) -> Result<CommunityNodeSessionOutcome> {
         let base_url = normalize_http_url(base_url)?;
-        let _guard = self.community_node_session_guard.lock().await;
+        let _guard = self.community_node_session_guard.lock(&base_url).await;
         let preflight = self
             .preflight_community_node_consent(base_url.as_str())
             .await?;
@@ -341,6 +341,7 @@ impl DesktopRuntime {
     }
 
     async fn apply_runtime_connectivity_assist_with_mode(&self, force: bool) -> Result<()> {
+        let _apply = self.community_node_connectivity_guard.lock().await;
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =
@@ -356,8 +357,13 @@ impl DesktopRuntime {
                 .collect(),
         );
         if !force {
-            let current_state = self.last_runtime_connectivity_assist_state.lock().await;
-            if current_state.as_ref() == Some(&next_state) {
+            let unchanged = self
+                .last_runtime_connectivity_assist_state
+                .lock()
+                .await
+                .as_ref()
+                == Some(&next_state);
+            if unchanged && self.iroh_stack.local_docs_available().await? {
                 debug!(
                     relay_url_count = next_state.relay_urls.len(),
                     bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
@@ -369,6 +375,7 @@ impl DesktopRuntime {
         let relay_config = TransportRelayConfig {
             iroh_relay_urls: next_state.relay_urls.clone(),
         };
+        let generation = self.iroh_stack.generation();
         self.iroh_stack
             .apply_runtime_connectivity(
                 &discovery_config,
@@ -376,6 +383,11 @@ impl DesktopRuntime {
                 relay_config.clone(),
             )
             .await?;
+        if self.iroh_stack.generation() != generation {
+            // Even unchanged peer inputs must recreate subscriptions/capabilities
+            // against the new docs actor, not keep streams from the old stack.
+            *self.last_effective_seed_peer_apply_state.lock().await = None;
+        }
         debug!(
             relay_url_count = relay_config.iroh_relay_urls.len(),
             bootstrap_seed_peer_count = next_state.bootstrap_seed_peers.len(),
@@ -393,7 +405,12 @@ impl DesktopRuntime {
             .await
     }
 
+    pub(crate) async fn force_apply_runtime_connectivity_assist(&self) -> Result<()> {
+        self.apply_runtime_connectivity_assist_with_mode(true).await
+    }
+
     pub(crate) async fn force_rebuild_runtime_connectivity_assist(&self) -> Result<()> {
+        let _apply = self.community_node_connectivity_guard.lock().await;
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =
@@ -431,6 +448,7 @@ impl DesktopRuntime {
     }
 
     async fn apply_effective_seed_peers_with_mode(&self, force: bool) -> Result<()> {
+        let _apply = self.community_node_connectivity_guard.lock().await;
         let discovery_config = self.discovery_config.lock().await.clone();
         let community_node_config = self.active_community_node_connectivity_config().await;
         let mut next_state =

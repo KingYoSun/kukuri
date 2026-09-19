@@ -199,16 +199,9 @@ impl DesktopRuntime {
             .local_community_node_seed_peer("metadata-refresh-baseline")
             .await
             .ok();
-        let config = self.community_node_config.lock().await.clone();
-        let Some(index) = config
-            .nodes
-            .iter()
-            .position(|node| node.base_url == base_url)
-        else {
-            return Err(CommunityNodeRequestError::Other(anyhow!(
-                "community node `{base_url}` is not configured"
-            )));
-        };
+        self.require_community_node(&base_url)
+            .await
+            .map_err(CommunityNodeRequestError::Other)?;
         let client = community_node_http_client().map_err(CommunityNodeRequestError::Other)?;
         let response = client
             .get(format!("{base_url}{BOOTSTRAP_NODES_PATH}"))
@@ -253,7 +246,19 @@ impl DesktopRuntime {
             seed_peer_count = resolved_urls.seed_peers.len(),
             "community-node metadata sync resolved bootstrap metadata"
         );
-        let mut next_config = config;
+        // Other nodes can now refresh concurrently. Merge only this node into
+        // the latest config, and never resurrect a node removed during the I/O.
+        let mut current_config = self.community_node_config.lock().await;
+        let mut next_config = current_config.clone();
+        let index = next_config
+            .nodes
+            .iter()
+            .position(|node| node.base_url == base_url)
+            .ok_or_else(|| {
+                CommunityNodeRequestError::Other(anyhow!(
+                    "community node was removed during metadata refresh"
+                ))
+            })?;
         next_config.nodes[index].resolved_urls = Some(
             refresh_community_node_resolved_urls(
                 next_config.nodes[index].resolved_urls.clone(),
@@ -265,7 +270,8 @@ impl DesktopRuntime {
             .map_err(CommunityNodeRequestError::Other)?;
         save_community_node_config(&self.db_path, &normalized)
             .map_err(CommunityNodeRequestError::Other)?;
-        *self.community_node_config.lock().await = normalized.clone();
+        *current_config = normalized.clone();
+        drop(current_config);
         self.apply_runtime_connectivity_assist()
             .await
             .map_err(CommunityNodeRequestError::Other)?;

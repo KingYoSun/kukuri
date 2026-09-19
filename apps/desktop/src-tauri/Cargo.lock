@@ -3939,6 +3939,7 @@ dependencies = [
  "base64 0.23.1",
  "blake3",
  "chrono",
+ "futures-util",
  "image",
  "keyring",
  "kukuri-app-api",

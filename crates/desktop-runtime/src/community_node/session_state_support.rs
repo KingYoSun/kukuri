@@ -46,6 +46,7 @@ impl DesktopRuntime {
         entry.current_policy_verified_for = Some(verified_local_consent);
         if schedule_immediate_refresh {
             entry.ready_refresh_pending = true;
+            info!(target: "kukuri_connectivity", base_url, "community-node session ready");
             debug!(
                 %base_url,
                 previous_phase = ?previous,
@@ -184,6 +185,11 @@ impl DesktopRuntime {
             let entry = sessions
                 .entry(base_url.to_string())
                 .or_insert_with(CommunityNodeSessionState::default);
+            if entry.last_error.as_deref() != Some(error.to_string().as_str()) {
+                warn!(target: "kukuri_connectivity", base_url,
+                    phase = ?entry.session_phase, %error,
+                    "community-node session failed; retry scheduled");
+            }
             entry.last_error = Some(error.to_string());
             entry.admission_rejection = None;
             entry.session_retry_deadline = now.saturating_add(COMMUNITY_NODE_SESSION_RETRY_SECONDS);

@@ -2,6 +2,7 @@ mod admission;
 mod config;
 mod connectivity;
 mod dome_hosting;
+mod idle_connectivity;
 mod index_query;
 mod indexing_status;
 mod metadata;

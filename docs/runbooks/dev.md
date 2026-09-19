@@ -535,6 +535,16 @@ cd apps/desktop && npx pnpm@10.16.1 test
 - `node_id@host:port` は addr_hint 付き接続を含む。DHT 自体の確認は `node_id` のみで行う。
 
 ## Windows native smoke
+### 無操作時のCN維持・接続復旧を調べる（#1176）
+
+- CNのnode別session、観測送信、self-healは独立laneで実行される。応答待ちのCNがある場合は、`kukuri_connectivity`の失敗段階・retryと、正常CNのheartbeat/rendezvous期限を分けて確認する。共通HTTP clientの上限は接続5秒・本文込み10秒。上限を長くするだけで回復したと判定しない。
+- `kukuri_connectivity=info`は既定filterに含まれる。scheduler開始/停止、session ready/失敗、local docs actor不通、stack再構築の世代/commitを記録する。明示的な`RUST_LOG`を使う場合は必要に応じこのtargetを追加する。token・鍵・本文をログへ追加しない。
+- `sending to iroh_docs actor failed`はCNのHTTP失敗とは別層。正規のstack切替中か、再構築失敗後かを世代とcommit記録で確認する。remote peerがofflineなだけならlocal actorは維持される。local probeのtimeoutはactor破損の証拠にしない。
+- dedicated profileで表示/非表示のみ/画面ロック/suspendを区別し、開始・格納・復帰時刻、版・OS/WebView、CN期限、peer数、実投稿/返信/blobの到達を記録する。既定bufferは2000件/1MiBで過去が落ちるので、調査中は明示的に標準出力を保存する。製品が常時ログファイルを書き出す機能ではない。
+- 回帰testは先に原因を特定し、channel制御・一回のfuture poll・仮想時間で確認する。CIへ長時間の放置・実時間sleepを追加しない。`cargo test --locked -p kukuri-desktop-runtime idle_`、`cargo test --locked -p kukuri-desktop-runtime stalled_`が本件の最小確認。実peerの接続確認には既存のconnectivity scenarioを使う。
+
+### 一般的なWindows動作確認
+
 1. native Windows host で `cargo xtask doctor`、`cargo xtask check`、`cargo xtask test` を通す。
 2. `cd apps/desktop && npx pnpm@10.16.1 tauri:dev` を起動し、`post -> restart -> persist` と author pubkey 不変を確認する。
 3. `KUKURI_DISABLE_KEYRING` を外した状態でも author pubkey が維持されることを確認する。
