@@ -197,7 +197,7 @@
           "heading": "Link previews, automatic update checks, and diagnostic reports",
           "paragraphs": [
             "After consent, when an eligible settled public post enters the viewport, the app may contact the destination of its first URL and an OGP image host to show a preview. They can observe your IP address, HTTP/TLS request metadata, and the URL path and query. Cookies, authorization, Referer, account/topic/post identifiers, and other post text are not sent. Private channels, DMs, and collapsed content are not fetched automatically, and preview data does not survive an app restart.",
-            "After consent, the app checks GitHub Releases automatically at startup and every 30 minutes, and when you request a check. GitHub and network providers can observe your IP address and HTTP/TLS request metadata.",
+            "After consent, Direct/NSIS and Linux builds check GitHub Releases automatically at startup, every 30 minutes, and when you request a check. GitHub and network providers can observe your IP address and HTTP/TLS request metadata. Microsoft Store builds delegate updates to the Store and Windows and do not send update checks from kukuri to GitHub or a separate Store update API.",
             "A diagnostic report can include app version, platform/user agent, connectivity state, peer and topic counts, and Node URL/session/error information. Copying or exporting does not send it automatically. Secret keys, auth tokens, private capabilities, invitations, DM bodies, and local database paths are excluded by default."
           ]
         },

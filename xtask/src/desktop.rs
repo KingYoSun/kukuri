@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 #[allow(unused_imports)]
 use crate::*;
@@ -68,6 +68,45 @@ pub(crate) fn desktop_package() -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn windows_store_package(args: impl Iterator<Item = String>) -> Result<()> {
+    if !cfg!(target_os = "windows") {
+        bail!("windows-store-package requires a Windows host");
+    }
+    let mut script_args = vec![
+        "-NoProfile".to_string(),
+        "-File".to_string(),
+        root_dir()
+            .join("scripts")
+            .join("release")
+            .join("build-windows-store-msix.ps1")
+            .to_string_lossy()
+            .into_owned(),
+    ];
+    let mut args = args.peekable();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--skip-build" => script_args.push("-SkipBuild".to_string()),
+            "--allow-dirty" => script_args.push("-AllowDirty".to_string()),
+            "--sign-local" => script_args.push("-SignForLocalTest".to_string()),
+            "--prompt-certificate-password" => {
+                script_args.push("-PromptForCertificatePassword".to_string())
+            }
+            "--certificate" | "--output" => {
+                let value = args
+                    .next()
+                    .with_context(|| format!("{arg} requires a value"))?;
+                script_args.push(match arg.as_str() {
+                    "--certificate" => "-CertificatePath".to_string(),
+                    _ => "-OutputDirectory".to_string(),
+                });
+                script_args.push(value);
+            }
+            _ => bail!("unsupported windows-store-package flag: {arg}"),
+        }
+    }
+    run("pwsh", script_args, &root_dir())
+}
+
 fn desktop_package_args(os: &str, signed: bool) -> Result<Vec<String>> {
     let target = match os {
         "windows" => "x86_64-pc-windows-msvc",
@@ -120,6 +159,24 @@ mod package_tests {
     #[test]
     fn unsupported_package_host_is_rejected() {
         assert!(desktop_package_args("macos", true).is_err());
+    }
+
+    #[test]
+    fn store_manifest_fixes_the_partner_center_identity() {
+        let manifest = std::fs::read_to_string(
+            root_dir().join("apps/desktop/src-tauri/windows/store/Package.appxmanifest"),
+        )
+        .expect("Store manifest exists");
+        for expected in [
+            r#"Name="KingYoSun.kukuri""#,
+            r#"Publisher="CN=33EB763C-4859-4E44-886F-1784E16DD6D5""#,
+            r#"Version="1.0.0.0""#,
+            r#"ProcessorArchitecture="x64""#,
+            r#"<uap:Protocol Name="kukuri" />"#,
+            r#"<rescap:Capability Name="runFullTrust" />"#,
+        ] {
+            assert!(manifest.contains(expected), "missing {expected}");
+        }
     }
 
     #[test]

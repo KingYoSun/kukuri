@@ -5,6 +5,15 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
 
 const DEB_TARGET: &str = "linux-x86_64-deb";
+const STORE_MANAGED_UPDATE: &str = "update_managed_by_microsoft_store";
+
+fn require_self_managed_updates() -> Result<(), String> {
+    if cfg!(feature = "microsoft-store") {
+        Err(STORE_MANAGED_UPDATE.into())
+    } else {
+        Ok(())
+    }
+}
 
 struct Pending {
     id: u32,
@@ -60,6 +69,7 @@ fn validate_deb_manifest(
 pub(crate) async fn check_app_update<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<Option<UpdateMetadata>, String> {
+    require_self_managed_updates()?;
     let state = app.state::<AppUpdateState>();
     let mut session = state.0.try_lock().map_err(|_| "update_busy")?;
     if session.installed
@@ -113,6 +123,7 @@ pub(crate) async fn download_app_update<R: Runtime>(
     id: u32,
     on_event: Channel<serde_json::Value>,
 ) -> Result<(), String> {
+    require_self_managed_updates()?;
     let state = app.state::<AppUpdateState>();
     let mut session = state.0.try_lock().map_err(|_| "update_busy")?;
     let pending = session
@@ -153,6 +164,7 @@ pub(crate) async fn install_app_update<R: Runtime>(
     app: AppHandle<R>,
     id: u32,
 ) -> Result<(), String> {
+    require_self_managed_updates()?;
     install_checked(app, id, is_deb()).await
 }
 
@@ -186,6 +198,7 @@ async fn install_checked<R: Runtime>(app: AppHandle<R>, id: u32, deb: bool) -> R
 }
 
 pub(crate) fn require_installed<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    require_self_managed_updates()?;
     let state = app.state::<AppUpdateState>();
     let session = state.0.try_lock().map_err(|_| "update_busy")?;
     if session.installed {
@@ -202,6 +215,16 @@ mod boundary_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distribution_feature_owns_the_update_boundary() {
+        let result = require_self_managed_updates();
+        if cfg!(feature = "microsoft-store") {
+            assert_eq!(result.unwrap_err(), STORE_MANAGED_UPDATE);
+        } else {
+            result.expect("direct distributions keep the self-managed updater");
+        }
+    }
 
     #[test]
     fn deb_manifest_requires_exact_format_version_and_embedded_signature() {

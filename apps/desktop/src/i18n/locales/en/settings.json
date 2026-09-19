@@ -445,12 +445,16 @@
   "release": {
     "title": "Release",
     "summary": "Preview channel, updater, diagnostics, and resources.",
+    "storeSummary": "Microsoft Store updates, diagnostics, and resources.",
     "update": {
       "title": "Updates",
       "version": "Version",
       "channel": "Channel",
+      "storeChannel": "Microsoft Store",
       "manifest": "Manifest",
       "status": "Status",
+      "storeManagedStatus": "Managed by Microsoft Store",
+      "storeManaged": "Microsoft Store manages updates for this build. Get the latest version from your Store library and Windows automatic update settings.",
       "statuses": {
         "available": "Update available",
         "checking": "Checking",

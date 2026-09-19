@@ -8,6 +8,9 @@ on:
       - '.github/workflows/kukuri-cli-package.yml'
       - 'scripts/release/**'
       - 'apps/desktop/src-tauri/tauri.conf.json'
+      - 'apps/desktop/src-tauri/tauri.microsoft-store.conf.json'
+      - 'apps/desktop/src-tauri/windows/store/**'
+      - '.github/workflows/kukuri-windows-store-package.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +28,7 @@ jobs:
           python3 scripts/release/test_release_assets.py
           python3 scripts/release/test_cli_archive.py
           python3 scripts/release/test_release_workflow.py
+          python3 scripts/release/test_windows_store_package.py
           python3 scripts/release/test_publish_preview.py
           python3 scripts/release/test_native_compliance.py
           python3 scripts/release/test_verify_public_preview.py

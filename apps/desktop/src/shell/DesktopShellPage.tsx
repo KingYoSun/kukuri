@@ -48,6 +48,7 @@ import { useDeveloperModeBridge } from '@/shell/useDeveloperModeBridge';
 import { useOsNotificationBridge } from '@/shell/useOsNotificationBridge';
 import { useOsNotificationActivation } from '@/shell/useOsNotificationActivation';
 import { selectUpdateAvailable, useAppUpdateStore } from '@/shell/useAppUpdateStore';
+import { usesSelfManagedUpdater } from '@/lib/distribution';
 import { useDesktopShellViewModels } from '@/shell/useDesktopShellViewModels';
 import {
   DesktopShellDetailSurfaceStack,
@@ -493,7 +494,11 @@ export function DesktopShellPage({
     selector: gameFocusKey ? `[data-game-room-id="${gameFocusKey}"]` : null,
   });
   useEffect(() => {
-    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    if (
+      typeof window === 'undefined' ||
+      !('__TAURI_INTERNALS__' in window) ||
+      !usesSelfManagedUpdater()
+    ) {
       return;
     }
     void checkForUpdate();
