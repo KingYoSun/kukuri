@@ -234,7 +234,7 @@ $finalCommit = (& git -C $repoRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $finalCommit -ne $sourceCommit) { throw "Source commit changed during build" }
 $finalStatus = (& git -C $repoRoot status --porcelain | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Could not verify final source state" }
-if ($finalStatus -and -not $AllowDirty) { throw "Worktree changed during build" }
+if ($finalStatus -and -not $AllowDirty) { throw "Worktree changed during build:`n$finalStatus" }
 $unsignedHash = (Get-FileHash -LiteralPath $unsignedPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $provenance = [ordered]@{
     schema_version = 1
