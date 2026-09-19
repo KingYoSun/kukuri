@@ -24,4 +24,12 @@ Issue: https://github.com/kukuri-app/kukuri/issues/1180 ／ リスク区分 C（
 
 ## 変更後の実測
 
-v0.2.8-preview.1 の release run で記録する。
+### v0.2.8-preview.1（run 35415877964、失敗）
+
+- linux-verify の `Package and asset notices check` で `pwsh: command not found`。Namespace の Ubuntu 22.04 image に PowerShell が無い。publish 系は skipped で Release は作成されていない。tag の上書きはしない規則のため、修正後は v0.2.8-preview.2 で release する。
+- 他の job は成功: validate-release-inputs 2 分 30 秒、windows-package 16 分 40 秒（変更前 65 分 50 秒）、linux-package 13 分、CLI 4〜4 分 30 秒。runner の割り当て待ちは 1 分未満。
+- 対応: PowerShell を Microsoft の apt repository から入れる。linux-verify を reusable workflow `kukuri-release-verify.yml` に切り出し、その file を変えた PR で 22.04 の上の検証全体を tag 前に流す。
+
+### v0.2.8-preview.2
+
+公開 run で記録する。
