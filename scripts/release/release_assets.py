@@ -24,6 +24,35 @@ def release_input(event, tag, ref):
     return match[1]
 
 
+def previous_release(tag, published_tags, repository_dir=None):
+    """#1186: changelog の起点を、公開済み Release の tag のうち `tag` の祖先で最も近いものにする。
+
+    Release の無い tag（失敗した release）は git 上に残るため、`git describe` で選ぶと起点を誤る。
+    公開済み Release が無ければ None（全履歴）、あるのに祖先が無ければ全履歴を載せずに失敗する。
+    """
+    import subprocess
+
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=repository_dir, text=True, capture_output=True)
+
+    candidates = [name for name in dict.fromkeys(published_tags) if name != tag]
+    if not candidates:
+        return None
+    nearest = None
+    for name in candidates:
+        if git("merge-base", "--is-ancestor", f"refs/tags/{name}", f"refs/tags/{tag}").returncode != 0:
+            continue
+        distance = git("rev-list", "--count", f"refs/tags/{name}..refs/tags/{tag}")
+        if distance.returncode != 0:
+            raise ValueError(f"git rev-list failed for {name}..{tag}")
+        count = int(distance.stdout.strip())
+        if nearest is None or count < nearest[0]:
+            nearest = (count, name)
+    if nearest is None:
+        raise ValueError(f"No published release is an ancestor of {tag}")
+    return nearest[1]
+
+
 def file_record(directory, name):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
         raise ValueError("Unsafe asset filename")
@@ -237,8 +266,20 @@ def main():
     validate.add_argument("--repository", required=True)
     validate.add_argument("--version", required=True)
     validate.add_argument("--source", required=True)
+    previous = commands.add_parser("previous-release")
+    previous.add_argument("--tag", required=True)
+    previous.add_argument("--published-tags", type=pathlib.Path, required=True,
+                          help="公開済み（draft でない）Release の tag を 1 行に 1 つ並べた file")
     args = parser.parse_args()
-    if args.command == "package":
+    if args.command == "previous-release":
+        preview = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+")
+        if not preview.fullmatch(args.tag):
+            raise ValueError("Invalid preview tag")
+        # step の出力へ書くので、preview tag の形でない名前は候補にしない。
+        published = [line.strip() for line in args.published_tags.read_text(encoding="utf-8").splitlines()
+                     if preview.fullmatch(line.strip())]
+        print(f"previous_tag={previous_release(args.tag, published) or ''}")
+    elif args.command == "package":
         write_package(args.directory, args.target, args.version, args.source, args.file,
                       args.updater, args.public_key_file, args.signing, args.deb_updater)
     elif args.command == "plan":

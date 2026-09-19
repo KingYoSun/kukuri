@@ -178,5 +178,68 @@ class ReleaseTests(unittest.TestCase):
                 with self.assertRaises(ValueError): release.file_record(root, name)
 
 
+class PreviousReleaseTests(unittest.TestCase):
+    """#1186: changelog の起点は、公開済み Release の tag のうち今回の tag の祖先で最も近いもの。"""
+
+    def setUp(self):
+        import subprocess
+        self.work = tempfile.TemporaryDirectory()
+        self.repo = pathlib.Path(self.work.name)
+
+        def git(*args):
+            return subprocess.run(["git", "-C", str(self.repo), *args], check=True, text=True,
+                                  capture_output=True).stdout.strip()
+
+        self.git = git
+        git("init", "--quiet", "--initial-branch=main")
+        git("config", "user.email", "test@example.com")
+        git("config", "user.name", "Test User")
+        for message, tag in (("feat: first (#1)", "v0.1.0-preview.1"),   # 公開済み
+                             ("feat: second (#2)", "v0.1.1-preview.1"),   # release が失敗し Release なし
+                             ("fix: third (#3)", "v0.1.1-preview.2")):    # 今回の release
+            git("commit", "--quiet", "--allow-empty", "-m", message)
+            git("tag", tag)
+        # 別の branch にだけある公開済み tag は祖先ではない。
+        git("switch", "--quiet", "-c", "side", "v0.1.0-preview.1")
+        git("commit", "--quiet", "--allow-empty", "-m", "fix: side (#9)")
+        git("tag", "v0.1.0-preview.9")
+        git("switch", "--quiet", "main")
+
+    def tearDown(self):
+        self.work.cleanup()
+
+    def test_git_describe_picks_the_unpublished_tag(self):
+        # 変更前の選び方（update-changelog.ps1 の既定）は Release の無い tag を起点にしてしまう。
+        self.assertEqual(self.git("describe", "--tags", "--abbrev=0", "v0.1.1-preview.2^"), "v0.1.1-preview.1")
+
+    def test_nearest_published_ancestor_is_chosen(self):
+        published = ["v0.1.1-preview.2", "v0.1.0-preview.9", "v0.1.0-preview.1"]
+        self.assertEqual(release.previous_release("v0.1.1-preview.2", published, self.repo), "v0.1.0-preview.1")
+
+    def test_nearest_of_several_published_ancestors(self):
+        # 失敗した tag にも後から Release が作られていれば、そちらが最も近い。
+        published = ["v0.1.0-preview.1", "v0.1.1-preview.1"]
+        self.assertEqual(release.previous_release("v0.1.1-preview.2", published, self.repo), "v0.1.1-preview.1")
+
+    def test_no_published_release_means_whole_history(self):
+        self.assertIsNone(release.previous_release("v0.1.1-preview.2", [], self.repo))
+        self.assertIsNone(release.previous_release("v0.1.1-preview.2", ["v0.1.1-preview.2"], self.repo))
+
+    def test_published_releases_without_an_ancestor_fail(self):
+        with self.assertRaisesRegex(ValueError, "ancestor"):
+            release.previous_release("v0.1.1-preview.2", ["v0.1.0-preview.9"], self.repo)
+
+    def test_cli_prints_step_output_and_ignores_malformed_names(self):
+        import subprocess
+        import sys
+        tags = self.repo / "published-tags.txt"
+        tags.write_text("v0.1.0-preview.1\nv0.1.1-preview.2\n$(echo injected)\n\n", encoding="utf-8")
+        result = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("release_assets.py")),
+                                 "previous-release", "--tag", "v0.1.1-preview.2", "--published-tags", str(tags)],
+                                cwd=self.repo, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "previous_tag=v0.1.0-preview.1\n")
+
+
 if __name__ == "__main__":
     unittest.main()

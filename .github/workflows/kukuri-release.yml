@@ -282,11 +282,28 @@ jobs:
           RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
         run: test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_SOURCE"
 
+      # #1186: 起点は公開済み Release の tag のうち最も近い祖先。Release の無い tag（失敗した
+      # release）は git 上に残るので、update-changelog.ps1 の既定（git describe）に任せない。
+      - name: Resolve previous published release
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release-inputs.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+            --jq '.[] | select(.draft == false) | .tag_name' > "$RUNNER_TEMP/published-tags.txt"
+          python3 scripts/release/release_assets.py previous-release --tag "$RELEASE_TAG" \
+            --published-tags "$RUNNER_TEMP/published-tags.txt" >> "$GITHUB_OUTPUT"
+
       - name: Generate changelog section
         shell: pwsh
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.previous_tag }}
         run: >
           ./scripts/release/update-changelog.ps1
           -Tag '${{ needs.validate-release-inputs.outputs.release_tag }}'
+          -PreviousTag $env:PREVIOUS_TAG
           -Repository '${{ github.repository }}'
           -SectionOutputPath 'dist/changelog/CHANGELOG_SECTION.md'
 
