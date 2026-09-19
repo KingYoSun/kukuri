@@ -8,6 +8,10 @@ import unittest
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# Ubuntu 22.04、Cache Volume なしの Namespace profile（#1180）。
+LINUX_RELEASE_PROFILE = "namespace-profile-kukuri-linux-release"
+# Windows Server 2022、Cache Volume なし（#1180）。
+WINDOWS_RELEASE_PROFILE = "namespace-profile-kukuri-win-release"
 
 
 def workflow(name):
@@ -91,18 +95,72 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(cli["jobs"]["cli-package"]["strategy"]["matrix"]["arch"], ["x86_64", "aarch64"])
         self.assertNotIn("secrets", cli["on"].get("workflow_call", {}))
 
-    def test_linux_package_keeps_distribution_keys_on_github_hosted(self):
-        # 検証の run は Namespace の Cache Volume、配布鍵を渡す run は GitHub-hosted（#1148）。
+    def test_linux_package_distribution_builds_on_ubuntu_22_04_without_cache(self):
+        # 検証の run は Namespace の Cache Volume。配布鍵を渡す run は Ubuntu 22.04 の release 用
+        # profile（Cache Volume なし）で、PR の run が書いた cache を配布物へ持ち込まない（#1180）。
         job = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]
-        runs_on = job["runs-on"]
         signing = next(step for step in job["steps"] if step.get("name") == "Build and verify AppImage and Deb")
         distribution = signing["env"]["SIGNING_MODE"].removesuffix(" && 'distribution' || 'test' }}")
-        self.assertTrue(runs_on.startswith(distribution + " && 'ubuntu-22.04' || 'namespace-profile-"), runs_on)
+        self.assertEqual(job["runs-on"], distribution + " && '" + LINUX_RELEASE_PROFILE
+                         + "' || 'namespace-profile-kukuri;overrides.cache-tag=kukuri-linux-package' }}")
+        not_distribution = "${{ !(" + distribution.removeprefix("${{ ") + ") }}"
         cached = [step for step in job["steps"] if step.get("uses", "").startswith("namespacelabs/nscloud-cache-action@")]
         self.assertEqual(len(cached), 1)
-        self.assertEqual(cached[0]["if"], "${{ runner.environment != 'github-hosted' }}")
+        self.assertEqual(cached[0]["if"], not_distribution)
         self.assertIn("apps/desktop/src-tauri/target", cached[0]["with"]["path"])
+        prune = next(step for step in job["steps"] if step.get("name") == "Prune workspace build artifacts")
+        self.assertEqual(prune["if"], not_distribution)
+        # `A && '' || B` は空文字が偽のため常に B になる。配布の run で空文字になる形だけを許す。
+        node = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-node@"))
+        self.assertEqual(node["with"]["cache"], not_distribution.removesuffix(" }}") + " && 'pnpm' || '' }}")
         self.assertFalse(any("rust-cache" in step.get("uses", "") for step in job["steps"]))
+
+    def test_release_build_jobs_run_on_namespace_and_publish_jobs_stay_github_hosted(self):
+        # #1180: build / verify は Cache Volume のない release 用 profile。公開まわりの末尾の job は
+        # GitHub-hosted のまま。Cache Volume 付きの profile（kukuri / kukuri-win）は mount だけで
+        # tool cache 等が PR の run と共有されるため使わない。
+        jobs = workflow("kukuri-release.yml")["jobs"]
+        self.assertEqual(jobs["validate-release-inputs"]["runs-on"], LINUX_RELEASE_PROFILE)
+        self.assertEqual(jobs["linux-verify"]["runs-on"], LINUX_RELEASE_PROFILE)
+        self.assertEqual(jobs["windows-package"]["runs-on"], WINDOWS_RELEASE_PROFILE)
+        for name in ("changelog", "release-assets", "publish-draft", "verify-published"):
+            self.assertFalse(jobs[name]["runs-on"].startswith("namespace-"), name)
+        # CLI も配布物なので、Ubuntu 22.04 の glibc で build する（ADR 0049）。
+        cli = workflow("kukuri-cli-package.yml")["jobs"]["cli-package"]
+        self.assertEqual(cli["runs-on"], LINUX_RELEASE_PROFILE)
+
+    def test_release_path_uses_no_build_cache(self):
+        # release は不定期で他 run の cache を読めず、保存と復元の時間だけかかっていた（#1180）。
+        release = workflow("kukuri-release.yml")
+        self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED", "SCCACHE_GHA_VERSION"} & set(release.get("env", {})))
+        jobs = list(release["jobs"].items()) + [("cli-package.yml", workflow("kukuri-cli-package.yml")["jobs"]["cli-package"])]
+        for name, job in jobs:
+            self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED"} & set(job.get("env", {})), name)
+            for step in job.get("steps", []):
+                uses = step.get("uses", "")
+                for action in ("sccache", "rust-cache", "nscloud-cache-action", "actions/cache"):
+                    self.assertNotIn(action, uses, f"{name}: {uses}")
+                if uses.startswith(("actions/setup-node@", "actions/setup-python@")):
+                    self.assertNotIn("cache", step.get("with", {}), name)
+
+    def test_windows_signing_key_reaches_only_the_package_build_step(self):
+        # #1180: 外部 runner では依存 package の install script や setup 系 action から鍵を見せない。
+        job = workflow("kukuri-release.yml")["jobs"]["windows-package"]
+        self.assertNotIn("env", job)
+        # 名前の無い step や `with:` 経由の参照も含め、秘密鍵の secret を参照する step を数える。
+        holders = [step.get("name", step.get("uses", "")) for step in job["steps"]
+                   if "secrets.TAURI_SIGNING_PRIVATE_KEY" in json.dumps(step)]
+        self.assertEqual(holders, ["Build Windows package"])
+        build = next(step for step in job["steps"] if step.get("name") == "Build Windows package")
+        # 鍵が無いと xtask は updater 成果物なしで成功してしまうため、step 内で空を拒否する。
+        self.assertIn("IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)", build["run"])
+
+    def test_platform_packages_start_without_waiting_for_linux_verify(self):
+        # 公開は publish-draft の祖先（changelog 経由の linux-verify を含む）で担保する。
+        jobs = workflow("kukuri-release.yml")["jobs"]
+        for name in ("windows-package", "linux-package"):
+            needs = jobs[name]["needs"]
+            self.assertEqual([needs] if isinstance(needs, str) else needs, ["validate-release-inputs"], name)
 
     def test_updater_endpoint_is_the_canonical_repository_stable_url(self):
         # 2026-09-16 移管後の正本。旧 owner の URL は GitHub redirect に依存するため設定へ保存しない。

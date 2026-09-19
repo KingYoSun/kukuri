@@ -18,14 +18,15 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTC_WRAPPER: sccache
-  SCCACHE_GHA_ENABLED: 'true'
-  SCCACHE_GHA_VERSION: v1
   PNPM_VERSION: 10.16.1
 
+# #1180: release は不定期で、tag の run は他の run の cache を読めない。cache の復元・保存は
+# 時間だけかかるため使わない。build / verify と署名する job は Cache Volume のない release 用の
+# Namespace profile（Linux は Ubuntu 22.04）で動かし、PR の run が書いた cache を署名付きの
+# 配布物へ持ち込まない。公開まわりの末尾の短い job は GitHub-hosted のまま。
 jobs:
   validate-release-inputs:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-kukuri-linux-release
     timeout-minutes: 15
     outputs:
       release_tag: ${{ steps.release.outputs.release_tag }}
@@ -80,15 +81,12 @@ jobs:
           librsvg2-dev
           patchelf
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Release version gate
         run: cargo xtask release-check ${{ steps.release.outputs.release_tag }}
 
   linux-verify:
     needs: validate-release-inputs
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-kukuri-linux-release
     timeout-minutes: 90
     steps:
       - name: Checkout release tag
@@ -126,16 +124,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/pnpm-lock.yaml
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: kukuri-release-${{ runner.os }}-${{ github.job }}
 
       - name: Install nextest
         uses: taiki-e/install-action@nextest
@@ -162,7 +150,8 @@ jobs:
 
       - name: Install Playwright Chromium
         working-directory: apps/desktop
-        run: pnpm exec playwright install chromium
+        # #1180: Ubuntu 22.04 の release 用 profile では Chromium の依存 library を前提にしない。
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Rust tests
         run: cargo xtask rust-test
@@ -199,8 +188,10 @@ jobs:
           path: test-results/kukuri/
           if-no-files-found: warn
 
+  # #1180: 署名する package job は linux-verify を待たずに始める。公開は publish-draft が
+  # changelog 経由で linux-verify の成功を必要とすることで担保する。
   linux-package:
-    needs: [validate-release-inputs, linux-verify]
+    needs: validate-release-inputs
     uses: ./.github/workflows/kukuri-linux-package.yml
     with:
       source_ref: ${{ needs.validate-release-inputs.outputs.release_source }}
@@ -217,17 +208,15 @@ jobs:
       source_ref: ${{ needs.validate-release-inputs.outputs.release_source }}
 
   windows-package:
-    needs: [validate-release-inputs, linux-verify]
-    runs-on: windows-latest
+    needs: validate-release-inputs
+    runs-on: namespace-profile-kukuri-win-release
     timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
       attestations: write
-    env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+    # #1180: 署名鍵は job 全体ではなく、使う step の env にだけ渡す（依存 package の install
+    # script や setup 系 action から見えないようにする）。
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -250,19 +239,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+      # package の記録 step が python を使う。Namespace の Windows image に入っている前提にしない。
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          shared-key: kukuri-release-${{ runner.os }}-${{ github.job }}
-          workspaces: |
-            . -> target
-            apps/desktop/src-tauri -> target
+          python-version: '3.12'
 
       - name: Install desktop dependencies
         working-directory: apps/desktop
@@ -273,10 +255,9 @@ jobs:
 
       - name: Configure updater signing key
         shell: pwsh
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            throw "TAURI_SIGNING_PRIVATE_KEY secret is required for preview updater artifacts"
-          }
           if ([string]::IsNullOrWhiteSpace($env:TAURI_UPDATER_PUBLIC_KEY)) {
             throw "TAURI_UPDATER_PUBLIC_KEY secret is required and must match TAURI_SIGNING_PRIVATE_KEY"
           }
@@ -289,7 +270,17 @@ jobs:
         run: cargo xtask tauri-check
 
       - name: Build Windows package
-        run: cargo xtask desktop-package
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # 鍵が無いと xtask は updater 成果物なしで build を続けるため、ここで止める。
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY secret is required for preview updater artifacts"
+          }
+          cargo xtask desktop-package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify updater signature trust boundary
         shell: pwsh
@@ -315,6 +306,7 @@ jobs:
         env:
           RELEASE_SOURCE: ${{ needs.validate-release-inputs.outputs.release_source }}
           RELEASE_VERSION: ${{ needs.validate-release-inputs.outputs.release_version }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: |
           $bundleDir = 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
           $files = @(Get-ChildItem -LiteralPath $bundleDir -File | Where-Object { $_.Extension -in '.exe', '.msi', '.zip', '.sig' })

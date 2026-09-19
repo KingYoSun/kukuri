@@ -9,3 +9,7 @@ self-hosted-runner:
     - namespace-profile-kukuri-win;overrides.cache-tag=*
     - namespace-profile-kukuri-4v;overrides.cache-tag=*
     - namespace-profile-kukuri-cn-images
+    # Ubuntu 22.04、Cache Volume なし。配布物を build する release 用（#1180）。
+    - namespace-profile-kukuri-linux-release
+    # Windows Server 2022、Cache Volume なし。署名する Windows package の release 用（#1180）。
+    - namespace-profile-kukuri-win-release
