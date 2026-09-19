@@ -33,7 +33,7 @@ impl DesktopRuntime {
 
         match self.reconnect_community_node_connectivity().await {
             Ok(()) => {
-                info!("community-node connectivity self-heal completed");
+                info!(target: "kukuri_connectivity", "community-node connectivity self-heal completed");
                 self.reset_community_node_reconnect_state().await;
                 true
             }
@@ -92,7 +92,17 @@ impl DesktopRuntime {
                 .await?;
         }
 
-        self.force_rebuild_runtime_connectivity_assist().await?;
+        self.repair_community_node_connectivity().await
+    }
+
+    pub(crate) async fn repair_community_node_connectivity(&self) -> Result<()> {
+        // A missing remote peer is not a failed local actor. Reapply discovery
+        // and subscriptions first; only a failed local probe warrants rebuilding.
+        if self.iroh_stack.local_docs_available().await? {
+            self.force_apply_runtime_connectivity_assist().await?;
+        } else {
+            self.force_rebuild_runtime_connectivity_assist().await?;
+        }
         self.force_apply_effective_seed_peers().await?;
         Ok(())
     }

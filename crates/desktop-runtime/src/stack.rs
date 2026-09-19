@@ -1,8 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use kukuri_blob_service::{BlobService, BlobStatus, IrohBlobService, StoredBlob};
 use kukuri_core::{BlobHash, GossipHint, ReplicaId, TopicId};
 use kukuri_docs_sync::{
@@ -161,6 +163,7 @@ reloadable_service! {
 
 pub(crate) struct SharedIrohStack {
     pub(crate) current: Mutex<Option<BoundIrohStack>>,
+    generation: AtomicU64,
     pub(crate) transport: Arc<ReloadableTransport>,
     pub(crate) docs_sync: Arc<ReloadableDocsSync>,
     pub(crate) blob_service: Arc<ReloadableBlobService>,
@@ -204,6 +207,10 @@ pub(crate) fn effective_dht_options(
 }
 
 impl SharedIrohStack {
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
     pub(crate) async fn new(
         root: &Path,
         network_config: TransportNetworkConfig,
@@ -220,6 +227,7 @@ impl SharedIrohStack {
             bootstrap_seed_peers,
             dht_options.clone(),
             relay_config,
+            false,
         )
         .await?;
         let transport = Arc::new(ReloadableTransport::new(current.transport.clone()));
@@ -227,6 +235,7 @@ impl SharedIrohStack {
         let blob_service = Arc::new(ReloadableBlobService::new(current.blob_service.clone()));
         Ok(Self {
             current: Mutex::new(Some(current)),
+            generation: AtomicU64::new(0),
             transport,
             docs_sync,
             blob_service,
@@ -245,16 +254,18 @@ impl SharedIrohStack {
         let relay_config = relay_config.normalized();
         let dht_options =
             effective_dht_options(&self.dht_options, bootstrap_seed_peers, &relay_config);
-        let previous = self
-            .current
-            .lock()
-            .await
-            .take()
+        // Keep the last stack and its peer snapshots until replacement commits.
+        // A failed/cancelled bind must not leave current=None forever. Holding
+        // the lock also serializes concurrent rebuild/shutdown operations.
+        let mut current = self.current.lock().await;
+        let previous = current
+            .as_ref()
             .context("missing active iroh stack during rebuild")?;
         let transport_peer_state = previous.transport.peer_state().await;
         let docs_peer_state = previous.docs_sync.peer_state().await;
         let blob_peer_state = previous.blob_service.peer_state().await;
-        info!(
+        info!(target: "kukuri_connectivity",
+            generation = self.generation.load(Ordering::Relaxed),
             relay_url_count = relay_config.iroh_relay_urls.len(),
             discovery_mode = ?discovery_config.mode,
             "rebuilding iroh stack after runtime relay connectivity change"
@@ -267,6 +278,7 @@ impl SharedIrohStack {
             bootstrap_seed_peers,
             dht_options,
             relay_config,
+            true,
         )
         .await?;
         next.transport
@@ -279,8 +291,31 @@ impl SharedIrohStack {
         self.transport.replace(next.transport.clone()).await;
         self.docs_sync.replace(next.docs_sync.clone()).await;
         self.blob_service.replace(next.blob_service.clone()).await;
-        *self.current.lock().await = Some(next);
+        *current = Some(next);
+        let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        info!(target: "kukuri_connectivity", generation, "iroh stack replacement committed");
         Ok(())
+    }
+
+    /// Read-only actor probe. A slow actor is not proof that its store needs
+    /// rebuilding: a timeout is an error and the caller retries with backoff.
+    pub(crate) async fn local_docs_available(&self) -> Result<bool> {
+        let current = self.current.lock().await;
+        let node = &current.as_ref().context("missing active iroh stack")?.node;
+        let probe = async {
+            let mut namespaces = node.docs().list().await?;
+            namespaces.try_next().await?;
+            Ok::<_, anyhow::Error>(())
+        };
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), probe)
+            .await
+            .context("local docs actor health probe timed out")?;
+        if let Err(error) = &result {
+            tracing::warn!(target: "kukuri_connectivity",
+                generation = self.generation.load(Ordering::Relaxed), %error,
+                "local docs actor unavailable; stack repair required");
+        }
+        Ok(result.is_ok())
     }
 
     pub(crate) async fn apply_runtime_connectivity(
@@ -307,7 +342,9 @@ impl SharedIrohStack {
                 .map(|url| url.to_string())
                 .collect::<Vec<_>>()
         };
-        if should_rebuild_runtime_connectivity(&current_relay_urls, &next_relay_urls) {
+        if should_rebuild_runtime_connectivity(&current_relay_urls, &next_relay_urls)
+            || !self.local_docs_available().await?
+        {
             info!(
                 current_relay_url_count = current_relay_urls.len(),
                 next_relay_url_count = next_relay_urls.len(),
@@ -388,15 +425,26 @@ impl BoundIrohStack {
         bootstrap_seed_peers: &[SeedPeer],
         dht_options: DhtDiscoveryOptions,
         relay_config: TransportRelayConfig,
+        reopening: bool,
     ) -> Result<Self> {
         let relay_config = relay_config.normalized();
-        let node = IrohDocsNode::persistent_with_discovery_config(
-            root,
-            network_config.clone(),
-            dht_options,
-            relay_config.clone(),
-        )
-        .await?;
+        let node = if reopening {
+            IrohDocsNode::reopen_with_discovery_config(
+                root,
+                network_config.clone(),
+                dht_options,
+                relay_config.clone(),
+            )
+            .await?
+        } else {
+            IrohDocsNode::persistent_with_discovery_config(
+                root,
+                network_config.clone(),
+                dht_options,
+                relay_config.clone(),
+            )
+            .await?
+        };
         let transport = Arc::new(IrohGossipTransport::from_shared_parts(
             node.endpoint().clone(),
             node.gossip().clone(),

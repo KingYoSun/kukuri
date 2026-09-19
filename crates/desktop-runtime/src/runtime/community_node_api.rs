@@ -582,6 +582,7 @@ impl DesktopRuntime {
         if let Some(handle) = self.community_node_scheduler_task.lock().await.take() {
             handle.abort();
             let _ = handle.await;
+            tracing::info!(target: "kukuri_connectivity", "community-node maintenance scheduler stopped");
         }
         self.app_service.shutdown().await;
         self.iroh_stack.shutdown_checked().await?;

@@ -1,43 +1,55 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use super::maintenance_tasks::{MaintenanceJob, MaintenanceTasks};
 use super::*;
 
 impl DesktopRuntime {
-    /// CN セッション維持の 1 tick。設定済みの全 node へ registration refresh(if_due)を回し、
-    /// 続けて connectivity self-heal 判定を実行する。従来 `get_sync_status` の副作用として
-    /// UI ポーリング経由でのみ駆動されていた内容を、ポーリング非依存で駆動する(WP-C1)。
-    /// refresh は deadline ゲート済みの冪等設計のため、短い間隔で繰り返し呼んでも安全。
+    /// 設定変更とtest向けの1回実行。常駐schedulerと同じ独立laneを使用する。
     pub(crate) async fn run_community_node_session_maintenance_once(&self) {
-        let config = self.community_node_config.lock().await.clone();
+        let mut tasks = MaintenanceTasks::default();
+        for job in self.community_node_maintenance_jobs().await {
+            tasks.insert(job.clone(), self.run_community_node_maintenance_job(job));
+        }
+        while tasks.next().await.is_some() {}
+    }
+
+    async fn community_node_maintenance_jobs(&self) -> Vec<MaintenanceJob> {
+        let config = self.community_node_config.lock().await;
         if config.nodes.is_empty() {
-            return;
+            return Vec::new();
         }
-        for node in config.nodes {
-            if let Err(error) = self
-                .refresh_community_node_registration_if_due(node.base_url.as_str())
-                .await
-            {
-                warn!(
-                    base_url = %node.base_url,
-                    error = %error,
-                    "failed to refresh community-node registration from session scheduler"
-                );
+        let mut jobs = config
+            .nodes
+            .iter()
+            .map(|node| MaintenanceJob::Session(node.base_url.clone()))
+            .collect::<Vec<_>>();
+        jobs.extend([MaintenanceJob::Observations, MaintenanceJob::Connectivity]);
+        jobs
+    }
+
+    async fn run_community_node_maintenance_job(&self, job: MaintenanceJob) {
+        match job {
+            MaintenanceJob::Session(base_url) => {
+                if let Err(error) = self
+                    .refresh_community_node_registration_if_due(&base_url)
+                    .await
+                {
+                    warn!(base_url, %error, "failed to refresh community-node registration from session scheduler");
+                }
             }
-        }
-        // #1061: 提供中の CN へ観測を送り、未完了の削除要求を再送する。
-        self.flush_community_node_trust_observations_once().await;
-        match self.app_service.get_sync_status().await {
-            Ok(status) => {
-                self.maybe_self_heal_community_node_connectivity(&status)
-                    .await;
+            MaintenanceJob::Observations => {
+                self.flush_community_node_trust_observations_once().await
             }
-            Err(error) => {
-                warn!(
-                    error = %error,
-                    "failed to load sync status for community-node self-heal from session scheduler"
-                );
-            }
+            MaintenanceJob::Connectivity => match self.app_service.get_sync_status().await {
+                Ok(status) => {
+                    self.maybe_self_heal_community_node_connectivity(&status)
+                        .await;
+                }
+                Err(error) => {
+                    warn!(%error, "failed to load sync status for community-node self-heal from session scheduler");
+                }
+            },
         }
     }
 
@@ -66,13 +78,23 @@ impl DesktopRuntime {
         // 自然終了する(shutdown 忘れでもリークしない)。upgrade した Arc は tick 実行中のみ保持。
         let weak: Weak<Self> = Arc::downgrade(self);
         *task = Some(tokio::spawn(async move {
+            let mut timer = tokio::time::interval(tick);
+            timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut tasks = MaintenanceTasks::default();
+            info!(target: "kukuri_connectivity", "community-node maintenance scheduler started");
             loop {
-                let Some(runtime) = weak.upgrade() else {
-                    return;
-                };
-                runtime.run_community_node_session_maintenance_once().await;
-                drop(runtime);
-                tokio::time::sleep(tick).await;
+                tokio::select! {
+                    _ = timer.tick() => {
+                        let Some(runtime) = weak.upgrade() else { return; };
+                        for job in runtime.community_node_maintenance_jobs().await {
+                            let runtime = runtime.clone();
+                            tasks.insert(job.clone(), async move {
+                                runtime.run_community_node_maintenance_job(job).await;
+                            });
+                        }
+                    }
+                    _ = tasks.next(), if !tasks.is_empty() => {}
+                }
             }
         }));
     }

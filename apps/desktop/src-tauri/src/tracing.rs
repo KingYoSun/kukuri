@@ -11,7 +11,7 @@ use tracing_subscriber::{
 };
 
 pub(crate) const DEFAULT_TRACING_DIRECTIVES: &str =
-    "warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info";
+    "warn,kukuri_desktop_tauri_lib=info,kukuri_app_api=info,kukuri_connectivity=info";
 pub(crate) const DEFAULT_SUPPRESS_DIRECTIVES: &[&str] = &[
     "mainline::rpc::socket=error",
     "noq_proto::connection=error",
@@ -315,6 +315,24 @@ mod tests {
         for suppress_directive in DEFAULT_SUPPRESS_DIRECTIVES {
             assert!(directives.contains(suppress_directive));
         }
+    }
+
+    #[test]
+    fn default_filter_keeps_connectivity_transitions_without_verbose_runtime_logs() {
+        let buffer = Arc::new(DesktopLogBuffer::with_limits(10, usize::MAX, usize::MAX));
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new(resolve_tracing_directives(None)))
+            .with_writer(std::io::sink)
+            .finish()
+            .with(DesktopLogBufferLayer::new(buffer.clone()));
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "kukuri_connectivity", generation = 1, "stack recovered");
+            tracing::info!(target: "kukuri_desktop_runtime", "verbose runtime detail");
+        });
+        let snapshot = buffer.snapshot(None, 10);
+        assert_eq!(snapshot.entries.len(), 1);
+        assert_eq!(snapshot.entries[0].target, "kukuri_connectivity");
+        assert!(snapshot.entries[0].message.contains("stack recovered"));
     }
 
     #[test]

@@ -120,7 +120,8 @@ pub struct DesktopRuntime {
         Arc<Mutex<HashMap<String, kukuri_core::SignedDomeHostHeartbeatV1>>>,
     pub(crate) community_node_rendezvous_seed_peers:
         Arc<Mutex<HashMap<String, Vec<kukuri_transport::SeedPeer>>>>,
-    pub(crate) community_node_session_guard: Arc<Mutex<()>>,
+    pub(crate) community_node_session_guard: crate::community_node::SessionLocks,
+    pub(crate) community_node_connectivity_guard: Mutex<()>,
     pub(crate) community_node_reconnect_state: Arc<Mutex<CommunityNodeReconnectState>>,
     pub(crate) community_node_reconnect_guard: Arc<Mutex<()>>,
     pub(crate) community_node_scheduler_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -449,7 +450,8 @@ impl DesktopRuntime {
             community_node_sessions: Arc::new(Mutex::new(HashMap::new())),
             community_node_dome_heartbeats: Arc::new(Mutex::new(HashMap::new())),
             community_node_rendezvous_seed_peers: Arc::new(Mutex::new(HashMap::new())),
-            community_node_session_guard: Arc::new(Mutex::new(())),
+            community_node_session_guard: Default::default(),
+            community_node_connectivity_guard: Mutex::new(()),
             community_node_reconnect_state: Arc::new(Mutex::new(
                 CommunityNodeReconnectState::default(),
             )),

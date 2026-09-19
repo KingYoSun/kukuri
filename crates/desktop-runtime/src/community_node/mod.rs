@@ -36,11 +36,13 @@ mod index_query_support;
 mod indexing_request_support;
 mod indexing_status_support;
 mod invite_storage_support;
+mod maintenance_tasks;
 mod manifest_support;
 mod reconnect_support;
 mod report_routing_support;
 mod requests_support;
 mod scheduler_support;
+mod session_locks;
 mod session_runtime_support;
 mod session_state_support;
 mod tester_feedback_support;
@@ -88,6 +90,7 @@ pub use report_routing_support::{
     CommunityNodeReportError, SubmitCommunityNodeReportRequest, SubmitCommunityNodeReportResult,
     SubmitCommunityNodeReportStatus,
 };
+pub(crate) use session_locks::SessionLocks;
 pub use tester_feedback_support::{
     CommunityNodeTesterFeedbackError, CommunityNodeTesterFeedbackSubmission,
 };

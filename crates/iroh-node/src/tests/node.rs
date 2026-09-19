@@ -6,6 +6,20 @@ use tempfile::tempdir;
 use crate::IrohDocsNode;
 
 #[tokio::test]
+async fn runtime_reopen_requires_existing_data_without_initializing_a_profile() {
+    let dir = tempdir().expect("tempdir");
+    let result = IrohDocsNode::reopen_with_discovery_config(
+        dir.path(),
+        kukuri_transport::TransportNetworkConfig::loopback(),
+        kukuri_transport::DhtDiscoveryOptions::disabled(),
+        kukuri_transport::TransportRelayConfig::default(),
+    )
+    .await;
+    assert!(result.is_err());
+    assert_eq!(fs::read_dir(dir.path()).expect("unchanged root").count(), 0);
+}
+
+#[tokio::test]
 async fn cancelled_shutdown_caller_still_waits_for_owned_cleanup_on_retry() {
     let dir = tempdir().unwrap();
     let node = IrohDocsNode::persistent(dir.path()).await.unwrap();
