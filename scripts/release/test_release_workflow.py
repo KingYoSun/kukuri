@@ -163,6 +163,20 @@ class WorkflowTests(unittest.TestCase):
                 if uses.startswith(("actions/setup-node@", "actions/setup-python@")):
                     self.assertNotIn("cache", step.get("with", {}), name)
 
+    def test_changelog_starts_from_the_previous_published_release(self):
+        # #1186: Release の無い tag（失敗した release）を起点にしない。git describe に任せず、
+        # 公開済み（draft でない）Release から選んだ起点を必ず渡す。
+        steps = workflow("kukuri-release.yml")["jobs"]["changelog"]["steps"]
+        names = [step.get("name") for step in steps]
+        previous = steps[names.index("Resolve previous published release")]
+        generate = steps[names.index("Generate changelog section")]
+        self.assertLess(names.index("Resolve previous published release"), names.index("Generate changelog section"))
+        self.assertEqual(previous["id"], "previous")
+        self.assertIn("select(.draft == false)", previous["run"])
+        self.assertIn("release_assets.py previous-release", previous["run"])
+        self.assertEqual(generate["env"]["PREVIOUS_TAG"], "${{ steps.previous.outputs.previous_tag }}")
+        self.assertIn("-PreviousTag $env:PREVIOUS_TAG", generate["run"])
+
     def test_release_verify_installs_powershell_before_using_it(self):
         # Namespace の Ubuntu 22.04 image には pwsh が無い（#1180、run 35415877964）。
         steps = workflow("kukuri-release-verify.yml")["jobs"]["linux-verify"]["steps"]

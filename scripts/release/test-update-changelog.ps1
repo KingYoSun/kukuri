@@ -113,6 +113,21 @@ try {
       throw "Auto-detected previous tag dropped the release commits"
     }
 
+    # #1186: an explicitly empty -PreviousTag (no published release yet) means the whole
+    # history, not the git describe fallback.
+    & $scriptPath `
+      -Tag "v0.1.1-preview.1" `
+      -Repository "kukuri-app/kukuri" `
+      -PreviousTag "" `
+      -ChangelogPath $changelogPath `
+      -SectionOutputPath $sectionPath `
+      -Date "2026-06-15" | Out-Null
+
+    $wholeSection = Get-Content -LiteralPath $sectionPath -Raw -Encoding UTF8
+    if ($wholeSection -notmatch '#100' -or $wholeSection -notmatch '#340') {
+      throw "Explicitly empty previous tag did not use the whole history"
+    }
+
     Write-Host "update-changelog smoke test passed"
   }
   finally {

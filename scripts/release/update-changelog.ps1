@@ -33,8 +33,11 @@ $tagRef = "refs/tags/$Tag"
 $tagExists = (Invoke-Git @("rev-parse", "--verify", "--quiet", $tagRef)).ExitCode -eq 0
 $endRef = if ($tagExists) { $Tag } else { "HEAD" }
 
-# Resolve the previous release tag if it was not supplied explicitly.
-if (-not $PreviousTag) {
+# Resolve the previous release tag only when the parameter was omitted (local dry runs).
+# The release workflow always passes the nearest published release (#1186), and an
+# explicitly empty value means "no published release yet": use the whole history.
+# `git describe` would also pick tags whose release failed and was never published.
+if (-not $PSBoundParameters.ContainsKey('PreviousTag')) {
   $describe = Invoke-Git @("describe", "--tags", "--abbrev=0", "$endRef^")
   if ($describe.ExitCode -eq 0 -and $describe.Output) {
     $PreviousTag = ($describe.Output | Select-Object -First 1).Trim()
