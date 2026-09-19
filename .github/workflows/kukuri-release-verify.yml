@@ -36,7 +36,8 @@ jobs:
         env:
           REQUESTED_SOURCE: ${{ inputs.source_ref }}
         run: |
-          if [ -n "$REQUESTED_SOURCE" ]; then
+          # release から呼ばれたときは固定した source が必須。PR の run だけ照合を省く。
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || [ -n "$REQUESTED_SOURCE" ]; then
             [[ "$REQUESTED_SOURCE" =~ ^[0-9a-f]{40}$ ]] && test "$(git rev-parse HEAD)" = "$REQUESTED_SOURCE"
           fi
 
@@ -92,9 +93,10 @@ jobs:
       - name: Doctor
         run: cargo xtask doctor
 
-      # PR の run には tag が無いので、version gate は release から呼ばれたときだけ行う。
+      # PR の run には tag が無いので、version gate は PR 以外（release から呼ばれたとき）に行う。
+      # tag が空なら release-check が失敗する。
       - name: Release version gate
-        if: ${{ inputs.release_tag != '' }}
+        if: ${{ github.event_name != 'pull_request' }}
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: cargo xtask release-check "$RELEASE_TAG"
