@@ -1,5 +1,11 @@
-export const RELEASE_CHANNEL = 'preview';
-export const RELEASE_MANIFEST_NAME = 'latest-preview.json';
+import { DESKTOP_DISTRIBUTION } from './distribution';
+
+export const RELEASE_CHANNEL =
+  DESKTOP_DISTRIBUTION === 'microsoft-store' ? 'microsoft-store' : 'preview';
+export const RELEASE_MANIFEST_NAME =
+  DESKTOP_DISTRIBUTION === 'microsoft-store'
+    ? 'managed-by-microsoft-store'
+    : 'latest-preview.json';
 export const RELEASE_FEEDBACK_URL =
   'https://github.com/kukuri-app/kukuri/issues/new?template=preview-feedback.md';
 export const RELEASE_LATEST_URL = 'https://github.com/kukuri-app/kukuri/releases/latest';
@@ -165,7 +171,7 @@ export function buildSafeDiagnosticReport(input: {
   lastDiscoveryError?: string | null;
 }): string {
   const lines = [
-    '# kukuri preview diagnostic report',
+    '# kukuri diagnostic report',
     '',
     `app_version: ${input.appVersion}`,
     `release_channel: ${RELEASE_CHANNEL}`,

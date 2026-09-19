@@ -62,7 +62,7 @@ Community Node 運営者と kukuri 運営者が同一とは限りません。Nod
 
 同意後、公開投稿の本文が表示可能な状態で画面内に入ると、先頭の絶対 HTTP(S) URL 1件について概要を表示するため、リンク先と、そのページが OGP 画像として指定した配信先へアクセスする場合があります。相手方と通信経路事業者から、IP address、HTTP／TLS request metadata、URL の path／query、固定 User-Agent、preview 閲覧の発生が観測され得ます。cookie、Authorization、Referer、公開鍵、account／topic／channel／post ID、他の投稿本文は送りません。private channel／DM、成人向け表示または信頼評価で折りたたまれた内容、未確定投稿は自動取得しません。取得結果は端末の process memory にだけ上限付きで一時保持し、再起動後へ残しません。
 
-アプリは同意後の起動時と30分ごと、および利用者の手動操作時に GitHub Releases へ自動更新確認を行います。更新確認では IP address と HTTP／TLS request metadata が GitHub や経路事業者から観測されます。送信先、目的、項目、保持主体の一覧は `docs/legal/external-transmission-notice.md` に記載します。
+Direct／NSIS・Linux版のアプリは、同意後の起動時と30分ごと、および利用者の手動操作時にGitHub Releasesへ自動更新確認を行います。更新確認ではIP addressとHTTP／TLS request metadataがGitHubや経路事業者から観測されます。Microsoft Store版の更新はMicrosoft Store／Windowsへ委譲し、kukuri内からGitHub Releasesや別のStore update APIへ更新確認を送りません。送信先、目的、項目、保持主体の一覧は`docs/legal/external-transmission-notice.md`に記載します。
 
 ## 8. 診断レポート
 
@@ -91,7 +91,7 @@ local data の削除や投稿撤回は、対応する client／Node が認識す
 
 ## 13. 変更履歴
 
-- version 8（2026-09-19）: 公開投稿の先頭 URL の preview を表示するためにリンク先と OGP 画像配信先へ送る情報、送らない情報、private／非表示内容を自動取得しないこと、端末内の一時保持を追記しました。利用規約 version 8 と版・施行日を同期しました。
+- version 8（2026-09-19）: 公開投稿の先頭 URL の preview を表示するためにリンク先と OGP 画像配信先へ送る情報、送らない情報、private／非表示内容を自動取得しないこと、端末内の一時保持を追記しました。利用規約 version 8 と版・施行日を同期しました。#1190で、GitHub Releasesへの更新確認はDirect／NSIS・Linux版だけで、Microsoft Store版はStore／Windowsへ委譲してkukuri内から送信しない配布差を明記しました。この補記は外部送信を増やさないためbundle versionを変更しません。
 - version 7（2026-09-18）: 採用順位に選んだ Community Node へ、表示した投稿と引用元の作成者の公開鍵、および表示した live／game 一覧の主催者の公開鍵を信頼評価の照会として送る場合があること、任意の同意文書へ同意した Node へ自分のブロック・ミュートを提供できること、いずれも送らない情報、応答を期限で作り直すこと、取消で削除を要求することを追記しました。利用規約 version 7 と版・施行日を同期しました。
 - version 6（2026-09-16）: 設定した Community Node へ、表示した投稿の ID と添付ファイルの識別子を成人向け表現の推定の照会として送る場合があること、送らない情報、保存しないこと、Node ごとに採用を選べることを追記しました。利用規約 version 6 と版・施行日を同期しました。
 - version 5（2026-09-03）: 利用規約の全面改訂に合わせ、legal bundle の版・施行日と、アプリ本体／Community Node／P2P 上の第三者の責任分界に関する用語を同期しました。データフローと外部送信の実質的な変更はありません。

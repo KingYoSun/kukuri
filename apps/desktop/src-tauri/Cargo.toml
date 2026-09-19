@@ -8,6 +8,10 @@ default-run = "kukuri-desktop-tauri"
 name = "kukuri_desktop_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+microsoft-store = []
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 

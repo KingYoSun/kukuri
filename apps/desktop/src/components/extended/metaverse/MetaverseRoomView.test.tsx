@@ -228,6 +228,25 @@ describe('MetaverseRoomView', () => {
     expect(selected).toBeVisible();
   });
 
+  test('delayed category focus preserves navigation performed before the frame', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const { container } = render(<MetaverseRoomView {...viewProps()} />);
+    const stage = container.querySelector('.metaverse-room-stage') as HTMLElement;
+    act(() => stage.focus());
+    fireEvent.keyDown(stage, { key: 'Tab' });
+    const dome = screen.getByRole('button', { name: 'Dome settings' });
+    const hosting = screen.getByRole('button', { name: 'Hosting' });
+    expect(dome).toHaveFocus();
+    fireEvent.keyDown(dome, { key: 'ArrowRight' });
+    expect(hosting).toHaveFocus();
+    act(() => frames.forEach((callback) => callback(0)));
+    expect(hosting).toHaveFocus();
+  });
+
   test('#1139 Enter focuses the chat input before the next frame', () => {
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
     const view = render(<MetaverseRoomView {...viewProps({ initialHudOpen: false, initialChatOpen: false })} />);

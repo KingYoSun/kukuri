@@ -69,6 +69,7 @@ Issue・PR・セッションの記述だけで「実装済み」「検証成功�
 入口の短い要約は正本へのリンクとともに維持し、正本の変更時に参照元・雛形・例を同じ差分で確認する。機械検査されるミラーは同期検査を維持する。規則の見直しでは観測した効果・負担・環境変化を根拠に維持・強化・緩和・統合・撤廃を選び、理由を作業記録へ残す。過去の判断本文は書き換えず、再流入する経路に後継先や失効範囲を示す。
 
 ## Ops
+- Windows x64 MSIXのbuild、identity、local署名、WACK、Microsoft Store提出: `docs/runbooks/windows-microsoft-store.md`
 - Dome Hosting の有効化・割当・終了・split-brain復旧: `docs/runbooks/dome-hosting.md`
 - Dome prop、layout commit、manifest/asset保持: `docs/adr/0040-dome-prop-layout-retention.md`
 - Metaverse resource budget: `docs/adr/0041-metaverse-resource-budget.md`

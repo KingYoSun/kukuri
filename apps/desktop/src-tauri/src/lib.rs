@@ -19,6 +19,7 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+#[cfg(any(all(windows, not(feature = "microsoft-store")), target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::{
@@ -320,7 +321,8 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             desktop_lifecycle::watch_hidden_tray(app.handle().clone());
             commands::background_notifications::spawn(app.handle().clone());
-            #[cfg(any(windows, target_os = "linux"))]
+            // MSIX owns protocol registration through its package manifest.
+            #[cfg(any(all(windows, not(feature = "microsoft-store")), target_os = "linux"))]
             app.deep_link().register_all()?;
             if initialize_runtime {
                 let app_handle = app.handle().clone();

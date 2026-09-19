@@ -4,6 +4,8 @@
 
 Preview tagは`vX.Y.Z-preview.N`。Windows NSIS／updater、Linux AppImage／Deb x86_64、CLI x86_64／aarch64を同じsourceから生成する。Linux資材が公開済みかはReleaseのasset一覧を正とし、workflow実装だけで公開済みとしない。
 
+Windows x64のMicrosoft Store版は、このGitHub Release経路とは別に[Windows Microsoft Store配布](windows-microsoft-store.md)でMSIXを作る。Store版の更新はMicrosoft Store／Windowsへ委譲し、GitHub updaterや別のapp内Store updaterを動かさない。Store用identity、version、PFX、Partner Center候補をNSIS assetへ混在させない。
+
 version／tag／source SHAと公開の依頼範囲を先に確定する。実装PRの承認はRelease公開の承認と区別する。既存tag／公開assetの上書き、検証用一時鍵の転用はしない。
 
 GUIはWindows／Linuxとも既存`cargo xtask desktop-package`を使う。Ubuntu 22.04はLinux build基盤で、全Linux環境の保証ではない。確認済み範囲と延期環境は[AppImage作業記録](../progress/2026-09-05-issue-889-linux-appimage.md)、利用方法は[quickstart](./mvp-user-quickstart.md)と[Linux CLI](./linux-cli.md)を参照する。
@@ -30,6 +32,7 @@ path別の選定は[REFACTORING.md](../../REFACTORING.md#path別検証マトリ�
 ```bash
 cargo xtask release-check v0.1.8-preview.2
 python scripts/release/test_release_assets.py
+python scripts/release/test_windows_store_package.py
 python scripts/release/test_cli_archive.py
 python scripts/release/test_native_compliance.py
 python scripts/release/test_deb_package.py

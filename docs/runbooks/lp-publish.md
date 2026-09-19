@@ -8,6 +8,8 @@ LP は依存もビルドも無い静的ファイルで、`apps/lp/public` をそ
 | --- | --- |
 | `/` | 日本語 |
 | `/en/` | 英語 |
+| `/privacy/` | クライアント用プライバシーポリシー全文（日本語正文） |
+| `/terms/` | クライアント用利用規約全文（日本語正文） |
 | `/assets/` | CSS・JS・画像（画面の静止画と OGP は `assets/screens/`） |
 | `_headers` | Cloudflare Pages のセキュリティヘッダーとキャッシュ |
 
@@ -20,6 +22,16 @@ cd tools/promo && node scripts/render-stills.mjs lp- ogp-
 ```
 
 ## 手元で確認する
+
+法務ページは`docs/legal/privacy-policy.md`と`docs/legal/terms-of-service.md`を正本とし、生成HTMLを直接編集しない。正文を変更したら同期する。英語LPも日本語正文へのリンクであることを明記する。
+
+```bash
+node apps/lp/scripts/sync-legal.mjs
+node apps/lp/scripts/sync-legal.mjs --check
+node --test apps/lp/scripts/legal.test.mjs
+```
+
+LP Contracts CIが本文と生成HTMLのずれを検査する。公開前には既存のrelease同期検査も実行する。
 
 ```bash
 python -m http.server 4180 --bind 127.0.0.1 --directory apps/lp/public
@@ -65,7 +77,7 @@ Pages プロジェクトの Custom domains で `kukuri.app` を追加する。`k
 
 - `https://kukuri.app/` と `https://kukuri.app/en/` が開く
 - ダウンロードのリンクが GitHub Release の配布物を指している
-- `https://api.kukuri.app/terms` など規約のリンクが開く
+- `https://kukuri.app/terms/` と `https://kukuri.app/privacy/` がクライアント用全文を表示する。Community Node専用のリンクと混同しない
 - OGP（`https://kukuri.app/assets/screens/ogp-ja.png`）が取得できる
 
 ## 版を上げるとき

@@ -20,7 +20,7 @@ Legal bundle version: 8
 | 送信先 | 送信契機 | 目的 | 送信・観測され得る項目 | 保持の考え方 |
 |---|---|---|---|---|
 | 公開投稿の先頭 URL のリンク先と OGP 画像配信先 | アプリ同意後、公開・表示可能・送信確定済みの投稿 card が画面内に入り、先頭 URL の preview を初めて必要とするとき。同一 URL は一時 cache 中に再送しません | 投稿内リンクの site、title、説明、任意画像の preview 表示 | IP address、HTTP／TLS request metadata、URL path／query、固定 User-Agent、preview 閲覧の発生。cookie、Authorization、Referer、公開鍵、account／topic／channel／post ID、他の投稿本文は送りません。private channel／DM、折りたたみ中の内容は自動取得しません | kukuri は sanitized metadata／画像を process memory に success 最大10分、failure 最大60秒、合計128件かつ16 MiBまで保持し、再起動後へ残しません。相手方と経路事業者の保持は各主体の方針に従います |
-| GitHub Releases | アプリ同意後の起動時、30分ごとの自動更新確認、手動確認、更新 download | 署名済み Preview update の確認・取得 | IP address、HTTP／TLS 通信に必要な request metadata、更新確認に必要な app／platform 情報 | GitHub と通信経路事業者の方針に従います。kukuri は結果と error を runtime state と診断表示に使用します |
+| GitHub Releases | Direct／NSIS・Linux版だけで、アプリ同意後の起動時、30分ごとの自動更新確認、手動確認、更新download。Microsoft Store版はkukuri内から送信しません | Direct配布の署名済みPreview updateの確認・取得 | IP address、HTTP／TLS通信に必要なrequest metadata、更新確認に必要なapp／platform情報 | GitHubと通信経路事業者の方針に従います。kukuriはDirect版の結果とerrorをruntime stateと診断表示に使用します。Store版の更新はMicrosoft Store／Windowsへ委譲します |
 | Mainline DHT | `seeded_dht` を有効にして接続先を探索するとき | P2P endpoint の発見 | endpoint ID、署名済み address record、通信元 IP address 等 | DHT 参加者に分散して扱われるため、kukuri が一括した保持・削除を制御しません |
 | P2P 接続相手 | topic、profile、public post、private channel、DM、live／game／Dome 等へ参加するとき | 選択した audience 内の同期・表示・添付取得・real-time 通信 | 公開鍵、endpoint／IP address、対象範囲の署名済み metadata・本文・reaction・添付。private channel／DM は対応する capability／暗号鍵の範囲 | 受信端末が copy を保持し得ます。送信後の完全な遠隔回収・一括削除は保証できません |
 | 構成された iroh relay | Direct P2P の接続補助、または Direct P2P と Relay Supported P2P が成立しない場合 | hole punching／endpoint assist、必要時の Relay Fallback | IP address、endpoint ID、接続 metadata。Relay Fallback では暗号化された実データ traffic | relay 運営者の方針に従います。relay URL があるだけでは実データが relay を通ったことを意味しません |
@@ -42,7 +42,7 @@ Legal bundle version: 8
 
 ## 5. 変更履歴
 
-- version 8（2026-09-19）: 公開投稿の先頭 URL の preview を表示するため、リンク先と OGP 画像配信先へ自動で送信され得る項目、非対象内容、process-memory cacheの上限を追加しました（#1174）。
+- version 8（2026-09-19）: 公開投稿の先頭 URL の preview を表示するため、リンク先と OGP 画像配信先へ自動で送信され得る項目、非対象内容、process-memory cacheの上限を追加しました（#1174）。#1190で、GitHub Releasesへの更新確認はDirect／NSIS・Linux版だけで、Microsoft Store版はStore／Windowsへ委譲してkukuri内から送信しない配布差を明記しました。この補記は外部送信を増やさないためbundle versionを変更しません。
 - version 7（2026-09-18）: Community Node の送信契機に「信頼評価の照会」を追加しました。採用順位に選んだ Node へ、表示した投稿と引用元の作成者の公開鍵、および表示した live / game 一覧の主催者の公開鍵を送ります。本文・閲覧履歴・ブロック / ミュートの一覧は送りません（#1061）。
 - version 6 補記（2026-09-18）: Community Node の送信契機に「ブロック・ミュートの提供」を追記しました（#1061）。送信は、その Node が公開する任意同意文書へ利用者が個別に同意した場合だけ行い、同意を取り消すと保存済みの記録の削除を要求します。同意済みの Node capability の範囲内で、送信先・目的・保持主体は変わらないため版・施行日は変更していません。
 - version 6（2026-09-16）: Community Node の送信契機に「成人向け表現の推定の照会」を追加しました。推定の採用を選んだ Node へ、タイムライン・スレッド・通知等に表示した投稿の ID と添付ファイルの識別子を送ります（#1056）。

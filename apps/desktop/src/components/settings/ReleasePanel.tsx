@@ -7,6 +7,11 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { copyTextToClipboard } from '@/lib/utils';
 import { downloadTextFile } from '@/lib/downloadTextFile';
+import {
+  DESKTOP_DISTRIBUTION,
+  type DesktopDistribution,
+  usesSelfManagedUpdater,
+} from '@/lib/distribution';
 import { useAcknowledgedPending } from '@/lib/useAcknowledgedPending';
 import { useExternalLinkOpener } from '@/lib/useExternalLinkOpener';
 import { formatLocalizedTime } from '@/i18n/format';
@@ -36,9 +41,13 @@ function updateErrorTranslationKey(errorMessage?: string | null): string {
 
 type ReleasePanelProps = {
   showDiagnostics?: boolean;
+  distribution?: DesktopDistribution;
 };
 
-export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
+export function ReleasePanel({
+  showDiagnostics = true,
+  distribution = DESKTOP_DISTRIBUTION,
+}: ReleasePanelProps) {
   const { t } = useTranslation(['common', 'settings']);
   const externalLink = useExternalLinkOpener();
   const syncStatus = useDesktopShellStore((state) => state.syncStatus);
@@ -54,6 +63,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
   const [diagnosticReport, setDiagnosticReport] = useState('');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null);
   const [restartPromptDismissed, setRestartPromptDismissed] = useState(false);
+  const selfManagedUpdater = usesSelfManagedUpdater(distribution);
   // #962: 受信設定の編集は通知 section へ移した。ここでは診断レポート用に現在値だけ読む。
   const [osNotificationSettings] = useOsNotificationSettings();
   const { permission: osNotificationPermission } = useOsNotificationPermission();
@@ -131,17 +141,25 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
     },
     {
       label: t('settings:release.update.channel'),
-      value: RELEASE_CHANNEL,
+      value: selfManagedUpdater
+        ? RELEASE_CHANNEL
+        : t('settings:release.update.storeChannel'),
     },
-    {
-      label: t('settings:release.update.manifest'),
-      value: RELEASE_MANIFEST_NAME,
-      monospace: true,
-    },
+    ...(selfManagedUpdater
+      ? [{
+          label: t('settings:release.update.manifest'),
+          value: RELEASE_MANIFEST_NAME,
+          monospace: true,
+        }]
+      : []),
     {
       label: t('settings:release.update.status'),
-      value: formatUpdateStatus(updateState.status, t),
-      tone: updateState.status === 'failed' ? ('danger' as const) : ('default' as const),
+      value: selfManagedUpdater
+        ? formatUpdateStatus(updateState.status, t)
+        : t('settings:release.update.storeManagedStatus'),
+      tone: selfManagedUpdater && updateState.status === 'failed'
+        ? ('danger' as const)
+        : ('default' as const),
     },
   ];
   const updateErrorMessage = updateState.status === 'failed'
@@ -166,7 +184,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
     <Card className='min-w-0 space-y-5'>
       <CardHeader>
         <h3>{t('settings:release.title')}</h3>
-        <small>{t('settings:release.summary')}</small>
+        <small>{t(selfManagedUpdater ? 'settings:release.summary' : 'settings:release.storeSummary')}</small>
       </CardHeader>
 
       {externalLink.pending ? <Notice role='status'>{t('common:externalLink.opening')}</Notice> : null}
@@ -177,6 +195,10 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
           {t('settings:release.update.title')}
         </h4>
         {showDiagnostics ? <SettingsDiagnosticList items={updateDiagnostics} columns={2} /> : null}
+        {!selfManagedUpdater ? (
+          <Notice role='status'>{t('settings:release.update.storeManaged')}</Notice>
+        ) : null}
+        {selfManagedUpdater ? <>
         <div role='status' aria-live='polite' aria-atomic='true'>
           {['checking', 'up_to_date', 'downloading', 'installing'].includes(updateState.status) ? (
             <Notice>
@@ -279,6 +301,7 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
             </Button>
           )}
         </SettingsActionRow>
+        </> : null}
       </section>
 
       <section className='min-w-0 space-y-3'>
@@ -290,14 +313,14 @@ export function ReleasePanel({ showDiagnostics = true }: ReleasePanelProps) {
         </p>
         <div className='grid gap-3 lg:grid-cols-2'>
           {[
-            {
+            ...(selfManagedUpdater ? [{
               key: 'update',
               destination: t('settings:release.externalTransmission.updateDestination'),
               purpose: t('settings:release.externalTransmission.updatePurpose'),
               items: t('settings:release.externalTransmission.updateItems'),
               retention: t('settings:release.externalTransmission.updateRetention'),
               href: RELEASE_LATEST_URL,
-            },
+            }] : []),
             {
               key: 'p2p',
               destination: t('settings:release.externalTransmission.p2pDestination'),

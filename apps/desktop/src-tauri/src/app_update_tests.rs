@@ -1,6 +1,8 @@
 use super::*;
+#[cfg(not(feature = "microsoft-store"))]
 use std::io::{Read, Write};
 
+#[cfg(not(feature = "microsoft-store"))]
 fn app() -> tauri::App<tauri::test::MockRuntime> {
     let mut context = tauri::test::mock_context(tauri::test::noop_assets());
     context.config_mut().plugins.0.insert(
@@ -18,6 +20,7 @@ fn app() -> tauri::App<tauri::test::MockRuntime> {
         .unwrap()
 }
 
+#[cfg(not(feature = "microsoft-store"))]
 fn pending(app: &tauri::App<tauri::test::MockRuntime>) -> Pending {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}/manifest", listener.local_addr().unwrap());
@@ -59,6 +62,7 @@ fn pending(app: &tauri::App<tauri::test::MockRuntime>) -> Pending {
 }
 
 #[test]
+#[cfg(not(feature = "microsoft-store"))]
 fn direct_commands_reject_stale_unverified_and_busy_sessions_without_restart() {
     let app = app();
     let state = app.state::<AppUpdateState>();
@@ -97,6 +101,7 @@ fn direct_commands_reject_stale_unverified_and_busy_sessions_without_restart() {
 }
 
 #[test]
+#[cfg(not(feature = "microsoft-store"))]
 fn completed_install_cannot_be_overwritten_by_a_new_check() {
     let app = app();
     app.state::<AppUpdateState>().0.blocking_lock().installed = true;
@@ -148,7 +153,7 @@ fn webview_cannot_reach_upstream_install_or_download_commands() {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "microsoft-store")))]
 #[test]
 fn failed_deb_attempt_consumes_payload_and_keeps_restart_forbidden() {
     let app = app();
@@ -168,4 +173,39 @@ fn failed_deb_attempt_consumes_payload_and_keeps_restart_forbidden() {
         require_installed(app.handle()).unwrap_err(),
         "update_not_installed"
     );
+}
+
+#[cfg(feature = "microsoft-store")]
+#[test]
+fn store_commands_reject_before_accessing_updater_or_session_state() {
+    // Neither plugin nor session/operation state exists: reaching them would panic.
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            tauri::async_runtime::block_on(check_app_update(app.handle().clone()))
+                .err()
+                .unwrap(),
+            STORE_MANAGED_UPDATE
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(download_app_update(
+                app.handle().clone(),
+                1,
+                Channel::new(|_| panic!("no download events"))
+            ))
+            .unwrap_err(),
+            STORE_MANAGED_UPDATE
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(install_app_update(app.handle().clone(), 1))
+                .unwrap_err(),
+            STORE_MANAGED_UPDATE
+        );
+        assert_eq!(
+            require_installed(app.handle()).unwrap_err(),
+            STORE_MANAGED_UPDATE
+        );
+    }
 }

@@ -1,0 +1,75 @@
+name: Kukuri Windows Store Package
+
+on:
+  pull_request:
+    paths:
+      - '.gitattributes'
+      - '.github/workflows/kukuri-windows-store-package.yml'
+      - 'apps/desktop/package.json'
+      - 'apps/desktop/pnpm-lock.yaml'
+      - 'apps/desktop/src/**'
+      - 'apps/desktop/src-tauri/**'
+      - 'crates/**'
+      - 'scripts/release/build-windows-store-msix.ps1'
+      - 'scripts/release/windows-store-assets.ps1'
+      - 'scripts/release/windows-store-version.ps1'
+      - 'scripts/release/test_windows_store_package.py'
+      - 'scripts/release/test-windows-store-updater.ps1'
+      - 'scripts/release/windows-test-runtime.manifest'
+      - 'xtask/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  store-package:
+    runs-on: namespace-profile-kukuri-win
+    timeout-minutes: 60
+    env:
+      WINAPP_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.92
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.16.1
+          run_install: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Setup WinApp CLI
+        uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7
+        with:
+          version: v0.6.1
+      - name: Verify WinApp CLI version
+        shell: pwsh
+        run: |
+          $version = (& winapp --version 2>&1 | Select-Object -Last 1).Trim()
+          if ($version -ne '0.6.1') { throw "Expected WinApp CLI 0.6.1, got $version" }
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+      - name: Store package contracts
+        run: python scripts/release/test_windows_store_package.py
+      - name: Windows updater boundaries for both distributions
+        shell: pwsh
+        run: ./scripts/release/test-windows-store-updater.ps1
+      - name: Build unsigned Store package
+        shell: pwsh
+        run: cargo xtask windows-store-package
+      - name: Upload unsigned Store candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: kukuri-windows-store-x64
+          if-no-files-found: error
+          path: |
+            dist/microsoft-store/*.msix
+            dist/microsoft-store/store-package.json

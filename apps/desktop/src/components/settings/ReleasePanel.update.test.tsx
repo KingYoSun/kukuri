@@ -14,6 +14,7 @@ vi.mock('@/lib/api/osNotificationPermission', () => ({
 }));
 
 import i18n from '@/i18n';
+import type { DesktopDistribution } from '@/lib/distribution';
 import { createDesktopShellStore, DesktopShellStoreContext } from '@/shell/store';
 import { appUpdateStore, INITIAL_UPDATE_STATE } from '@/shell/useAppUpdateStore';
 
@@ -51,13 +52,27 @@ function findEnabledCheckButton() {
   );
 }
 
-function renderPanel(showDiagnostics = false) {
+function renderPanel(showDiagnostics = false, distribution?: DesktopDistribution) {
   return render(
     <DesktopShellStoreContext.Provider value={createDesktopShellStore()}>
-      <ReleasePanel showDiagnostics={showDiagnostics} />
+      <ReleasePanel showDiagnostics={showDiagnostics} distribution={distribution} />
     </DesktopShellStoreContext.Provider>
   );
 }
+
+test.each(['en', 'ja', 'zh-CN'])('Store builds delegate updates without invoking the GitHub updater in %s', async (locale) => {
+  await i18n.changeLanguage(locale);
+  renderPanel(true, 'microsoft-store');
+  expect(screen.getByRole('status')).toHaveTextContent(
+    i18n.t('settings:release.update.storeManaged')
+  );
+  expect(screen.getByText(i18n.t('settings:release.update.storeManagedStatus'))).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: i18n.t('settings:release.update.check') })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: i18n.t('settings:release.update.install') })).not.toBeInTheDocument();
+  expect(screen.queryByText(i18n.t('settings:release.externalTransmission.updateDestination'))).not.toBeInTheDocument();
+  expect(check).not.toHaveBeenCalled();
+  expect(updaterCheck).not.toHaveBeenCalled();
+});
 
 test.each(['en', 'ja', 'zh-CN'])('normal mode reports a pending check and its completed result in %s', async (locale) => {
   await i18n.changeLanguage(locale);

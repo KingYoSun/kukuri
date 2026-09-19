@@ -1,0 +1,21 @@
+name: Kukuri LP Contracts
+on:
+  pull_request:
+    paths:
+      - 'apps/lp/**'
+      - 'docs/legal/privacy-policy.md'
+      - 'docs/legal/terms-of-service.md'
+      - '.github/workflows/kukuri-lp-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lp-contracts:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test apps/lp/scripts/legal.test.mjs
+      - run: node apps/lp/scripts/sync-release.mjs --check
