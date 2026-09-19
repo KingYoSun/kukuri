@@ -72,6 +72,7 @@ class WindowsStorePackageContracts(unittest.TestCase):
             "uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7",
             source,
         )
+        self.assertIn("version: v0.6.1", source)
         self.assertIn("Expected WinApp CLI 0.6.1", source)
         self.assertIn("run: cargo xtask windows-store-package", source)
         self.assertNotIn("--sign-local", source)
