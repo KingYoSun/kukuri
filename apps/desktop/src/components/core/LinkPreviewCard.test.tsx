@@ -82,18 +82,20 @@ test('does not render an unapproved data image MIME returned by the bridge', asy
 test('does not request an offscreen preview until it intersects', async () => {
   let notify: IntersectionObserverCallback = () => undefined;
   let observed: Element | null = null;
+  let observerOptions: IntersectionObserverInit | undefined;
   vi.stubGlobal(
     'IntersectionObserver',
     class {
-      constructor(callback: IntersectionObserverCallback) {
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
         notify = callback;
+        observerOptions = options;
       }
       observe(target: Element) { observed = target; }
       disconnect() {}
       unobserve() {}
       takeRecords() { return []; }
       readonly root = null;
-      readonly rootMargin = '160px 0px';
+      readonly rootMargin = '0px';
       readonly thresholds = [0];
     }
   );
@@ -107,6 +109,7 @@ test('does not request an offscreen preview until it intersects', async () => {
   expect(fetcher).not.toHaveBeenCalled();
   const target = container.querySelector('article')!;
   expect(observed).toBe(target);
+  expect(observerOptions?.rootMargin).toBe('0px');
   notify(
     [{ target, isIntersecting: true } as unknown as IntersectionObserverEntry],
     {} as IntersectionObserver

@@ -29,6 +29,7 @@ const MAX_TITLE_CHARS: usize = 200;
 const MAX_DESCRIPTION_CHARS: usize = 500;
 const MAX_SITE_NAME_CHARS: usize = 100;
 const MAX_CONCURRENT_FETCHES: usize = 4;
+const MAX_IN_FLIGHT_ENTRIES: usize = 32;
 const MAX_CACHE_ENTRIES: usize = 128;
 const MAX_CACHE_BYTES: usize = 16 * 1024 * 1024;
 const SUCCESS_TTL: Duration = Duration::from_secs(10 * 60);
@@ -53,6 +54,7 @@ pub enum LinkPreviewUnavailableReason {
     BlockedTarget,
     RedirectRejected,
     TooManyRedirects,
+    Busy,
     Timeout,
     Network,
     HttpStatus,
@@ -204,6 +206,8 @@ impl LinkPreviewState {
             let mut in_flight = self.inner.in_flight.lock().await;
             if let Some(sender) = in_flight.get(&key) {
                 sender.subscribe()
+            } else if in_flight.len() >= MAX_IN_FLIGHT_ENTRIES {
+                return LinkPreviewOutcome::unavailable(LinkPreviewUnavailableReason::Busy);
             } else {
                 let (sender, receiver) = watch::channel(None);
                 in_flight.insert(key.clone(), sender);
@@ -446,10 +450,17 @@ fn is_public_ipv6(ip: Ipv6Addr) -> bool {
     if segments[0] & 0xe000 != 0x2000 {
         return false;
     }
+    // IANA IPv6 special-purpose registry: 2001::/23 contains protocol assignments,
+    // benchmarking and ORCHID ranges. None are valid link-preview destinations.
+    if segments[0] == 0x2001 && segments[1] <= 0x01ff {
+        return false;
+    }
     if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return false;
     }
-    if segments[0] == 0x2001 && segments[1] == 0x0002 {
+    // 6to4 is deprecated and embeds an IPv4 destination. Reject the whole range
+    // instead of allowing an encoded private/non-global IPv4 target.
+    if segments[0] == 0x2002 {
         return false;
     }
     if segments[0] == 0x3fff && segments[1] & 0xf000 == 0 {
@@ -652,7 +663,7 @@ fn raster_mime(bytes: &[u8], declared: Option<&str>) -> Option<&'static str> {
     } else {
         return None;
     };
-    if declared.is_some_and(|value| !value.eq_ignore_ascii_case(sniffed)) {
+    if !declared.is_some_and(|value| value.eq_ignore_ascii_case(sniffed)) {
         return None;
     }
     Some(sniffed)

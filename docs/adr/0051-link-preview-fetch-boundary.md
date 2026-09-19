@@ -43,6 +43,7 @@ Issue #1174では、投稿本文中の外部URLをlink化し、OGP metadataを�
 | image body | 1 MiB |
 | title／site／description | 200／100／500文字 |
 | 同時取得 | 4件 |
+| distinct URLのin-flight待機 | 32件 |
 | process cache | 128 entryかつ16 MiB |
 | success／failure TTL | 10分／60秒 |
 

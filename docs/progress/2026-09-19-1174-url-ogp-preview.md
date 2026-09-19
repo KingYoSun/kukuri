@@ -13,7 +13,7 @@
 - Timeline／Profile／Bookmarks、Thread、Community Indexの`PostCard`へpreviewを明示opt-inした。公開、表示可能、settled、viewport内、document visibleのprimary content先頭URLだけを取得する。private、Composer、adult／trust gate、withdrawn、missing、pending／syncing／failedはinvoke 0。
 - Tauriに`fetch_link_preview`を追加した。page／image URLごとにscheme、credential、既定port、hostname、DNS全address、実接続先、redirectを検査し、検証済みaddressをreqwestへ固定する。system proxy、cookie store、Authorization、Refererは使わない。
 - HTML tokenizerでOGP／titleを抽出し、PNG／JPEG／GIF／WebPのdeclared MIMEとmagic bytesが一致するbounded imageだけをdata URLへ変換する。WebView CSPへremote imageを追加していない。
-- requestはredirect 3、connect 3秒、total 6秒、HTML 512KiB、image 1MiB、同時4件。cacheはprocess-memory 128件／payload 16MiB、success 10分／failure 60秒で、同URLのin-flightを共有する。
+- requestはredirect 3、connect 3秒、total 6秒、HTML 512KiB、image 1MiB、同時4件、distinct URLのin-flight待機32件。cacheはprocess-memory 128件／payload 16MiB、success 10分／failure 60秒で、同URLのin-flightを共有する。
 - legal bundleをversion 8（施行日2026-09-19）へ更新し、正文、三言語UI、外部送信表示、data-flow inventory、同意分類を同期した。version 7以下は再同意前にReadyへ進まない。年齢自己申告versionは1のまま。
 - 正本はADR 0051、`docs/legal/link-preview-data-classification.md`、`DESIGN.md`へ反映した。UI採用条件は`docs/ui-reviews/2026-09-19-1174-link-preview.md`。
 
@@ -48,6 +48,17 @@ Issue添付画像のplain URL表示と一致した。実装後は同testが成�
 - `cargo xtask oversized-files`: PASS。production `link_preview.rs`は750行、test moduleは234行で閾値未満。既存baselineのwarningのみ
 - `git diff --check`: PASS
 - Windows Storybook実描画: dark／light、狭幅、長文、image、inline link／card focusを確認。初回確認でempty slotが`display:none`のためIntersectionObserverが発火しない不具合を再現し、親articleをobserveする修正後にcard表示を確認した
+- Linux visual baseline: `Kukuri Visual Baseline` run `35400030692`で生成し、legal bundle version 8の意図した差分 `app-consent-en-dark.png`／`app-consent-ja-light-narrow.png` だけを更新した
+
+## 独立監査と修正delta
+
+固定head `d2b8139a9159228179377dae29c53c878a2c8df1` の初回独立監査は `FAIL`（inventory 6 / 適合3 / 不適合3 / 未分類0）だった。
+
+1. `rootMargin: 160px`でviewport外160px以内のcardが取得される: `rootMargin: 0px`へ変更し、observer optionと親article targetをcomponent testで固定した。
+2. distinct URLごとのsemaphore待機task／in-flight entryが無制限: distinct URLのin-flightを32件に制限し、超過をtyped `busy`へした。上限到達時にnetwork taskをspawnせずentry数不変のtestを追加した。
+3. IPv6 special-purpose `2001:10::/28`等をpublic扱い: IANA special-purposeを含む`2001::/23`、documentation、deprecated 6to4 `2002::/16`、`3fff::/20`を拒否し、特殊用途DNSでHTTP hit 0のtestを追加した。
+
+監査のnon-blockerだったContent-Type欠落画像の許可もADR 0051へ厳密に合わせ、declared raster MIMEとmagic bytesの双方が一致する場合だけ許可するtestへ変更した。修正commitは同じ監査担当へdelta再監査する。
 
 ## 未確認と補完
 

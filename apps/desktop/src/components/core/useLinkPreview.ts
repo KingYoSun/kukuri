@@ -36,7 +36,7 @@ export function useLinkPreview({
     const target = slot.closest('article') ?? slot;
     const observer = new IntersectionObserver(
       (entries) => setIntersecting(entries.some((entry) => entry.isIntersecting)),
-      { rootMargin: '160px 0px' }
+      { rootMargin: '0px' }
     );
     observer.observe(target);
     return () => observer.disconnect();

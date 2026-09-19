@@ -102,7 +102,11 @@ fn rejects_private_and_reserved_addresses() {
         "::1",
         "fc00::1",
         "fe80::1",
+        "2001::1",
+        "2001:10::1",
+        "2001:20::1",
         "2001:db8::1",
+        "2002:a00:1::1",
         "3fff::1",
     ] {
         assert!(!is_public_ip(value.parse().unwrap()), "{value}");
@@ -111,6 +115,7 @@ fn rejects_private_and_reserved_addresses() {
     assert!(is_public_ip(
         "2606:2800:220:1:248:1893:25c8:1946".parse().unwrap()
     ));
+    assert!(is_public_ip("2001:4860:4860::8888".parse().unwrap()));
 }
 
 #[test]
@@ -129,6 +134,14 @@ fn parses_ogp_without_evaluating_markup() {
     assert_eq!(metadata.site_name.as_deref(), Some("Example Site"));
     assert_eq!(metadata.image.as_deref(), Some("/preview.png"));
     assert_eq!(metadata.html_title, "Fallback");
+}
+
+#[test]
+fn raster_image_requires_matching_declared_mime_and_magic_bytes() {
+    let png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    assert_eq!(raster_mime(&png, Some("image/png")), Some("image/png"));
+    assert_eq!(raster_mime(&png, Some("image/jpeg")), None);
+    assert_eq!(raster_mime(&png, None), None);
 }
 
 #[tokio::test]
@@ -191,6 +204,21 @@ async fn blocks_private_dns_before_http_sink() {
 }
 
 #[tokio::test]
+async fn blocks_ipv6_special_purpose_dns_before_http_sink() {
+    let transport = FakeTransport::new(Vec::new());
+    transport.resolved.lock().await.insert(
+        "example.com".into(),
+        vec![SocketAddr::new("2001:10::1".parse().unwrap(), 443)],
+    );
+    let result = fetch_preview(&transport, Url::parse("https://example.com/post").unwrap()).await;
+    assert_eq!(
+        result,
+        LinkPreviewOutcome::unavailable(LinkPreviewUnavailableReason::BlockedTarget)
+    );
+    assert!(transport.hits.lock().await.is_empty());
+}
+
+#[tokio::test]
 async fn revalidates_redirect_target_before_second_http_hit() {
     let mut redirect = FakeTransport::html(302, "", [93, 184, 216, 34]);
     redirect.location = Some("https://private.example/metadata".into());
@@ -204,6 +232,26 @@ async fn revalidates_redirect_target_before_second_http_hit() {
         LinkPreviewOutcome::unavailable(LinkPreviewUnavailableReason::BlockedTarget)
     );
     assert_eq!(transport.hits.lock().await.len(), 1);
+}
+
+#[tokio::test]
+async fn distinct_in_flight_urls_are_bounded_before_spawning_network_tasks() {
+    let state = LinkPreviewState::default();
+    let mut in_flight = state.inner.in_flight.lock().await;
+    for index in 0..MAX_IN_FLIGHT_ENTRIES {
+        let (sender, _receiver) = watch::channel(None);
+        in_flight.insert(format!("https://example.com/{index}"), sender);
+    }
+    drop(in_flight);
+
+    assert_eq!(
+        state.request("https://example.com/overflow").await,
+        LinkPreviewOutcome::unavailable(LinkPreviewUnavailableReason::Busy)
+    );
+    assert_eq!(
+        state.inner.in_flight.lock().await.len(),
+        MAX_IN_FLIGHT_ENTRIES
+    );
 }
 
 #[test]

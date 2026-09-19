@@ -13,6 +13,7 @@ export type LinkPreviewUnavailableReason =
   | 'blocked_target'
   | 'redirect_rejected'
   | 'too_many_redirects'
+  | 'busy'
   | 'timeout'
   | 'network'
   | 'http_status'
