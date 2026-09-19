@@ -18,6 +18,58 @@ file; automated changelog entries start from the next preview release.
 
 ## [Unreleased]
 
+## [v0.2.8-preview.2] - 2026-09-19
+
+### Features
+
+- URLパースとOGPプレビューを追加 ([#1179](https://github.com/kukuri-app/kukuri/pull/1179))
+- paste clipboard images into composers ([#1177](https://github.com/kukuri-app/kukuri/pull/1177))
+- 案内する release を v0.2.7-preview.1 に更新する ([#1043](https://github.com/kukuri-app/kukuri/pull/1043), [#1170](https://github.com/kukuri-app/kukuri/pull/1170))
+
+### Fixes
+
+- show custom reaction names in tooltips ([#1178](https://github.com/kukuri-app/kukuri/pull/1178))
+
+### Other
+
+- linux-verify を PR でも走る reusable workflow にし PowerShell を入れる ([#1180](https://github.com/kukuri-app/kukuri/pull/1180), [#1183](https://github.com/kukuri-app/kukuri/pull/1183))
+- prepare v0.2.8-preview.1 release ([#1182](https://github.com/kukuri-app/kukuri/pull/1182))
+- Kukuri Release を Namespace へ移し cache を使わない構成にする ([#1180](https://github.com/kukuri-app/kukuri/pull/1180), [#1181](https://github.com/kukuri-app/kukuri/pull/1181))
+- [codex][fix] 画像viewerのクリッピングを修正 ([#1175](https://github.com/kukuri-app/kukuri/pull/1175))
+- profile editor 保存後の待ちの負荷時 flake を直す ([#1167](https://github.com/kukuri-app/kukuri/pull/1167), [#1169](https://github.com/kukuri-app/kukuri/pull/1169))
+- v0.2.7-preview.1 の公開結果を作業記録へ追記する ([#1168](https://github.com/kukuri-app/kukuri/pull/1168))
+- bookmarks 空状態と profile 集約の test の負荷時 flake を直す ([#1165](https://github.com/kukuri-app/kukuri/pull/1165), [#1166](https://github.com/kukuri-app/kukuri/pull/1166))
+
+## [v0.2.7-preview.1] - 2026-09-18
+
+### Features
+
+- LP・OGP・Product Hunt・note・X の静止画を preset から一括で作る ([#1041](https://github.com/kukuri-app/kukuri/pull/1041), [#1156](https://github.com/kukuri-app/kukuri/pull/1156))
+- 案内する release を v0.2.6-preview.1 にし、release.json で一元管理する ([#1043](https://github.com/kukuri-app/kukuri/pull/1043), [#1150](https://github.com/kukuri-app/kukuri/pull/1150))
+- Dome 予告を実機の静止画 1 枚にし、取り込み手順を足す ([#1040](https://github.com/kukuri-app/kukuri/pull/1040), [#1143](https://github.com/kukuri-app/kukuri/pull/1143))
+- kukuri.app の日本語・英語 LP を作る ([#1043](https://github.com/kukuri-app/kukuri/pull/1043), [#1144](https://github.com/kukuri-app/kukuri/pull/1144))
+- 3 場面のデモデータと撮影シナリオで UI 原素材を作る ([#1039](https://github.com/kukuri-app/kukuri/pull/1039), [#1137](https://github.com/kukuri-app/kukuri/pull/1137))
+
+### Fixes
+
+- DB 作成前後で keyring account がずれて Windows 初回起動に失敗する問題を直す ([#1163](https://github.com/kukuri-app/kukuri/pull/1163))
+- 添付の状態確認で remote 取得せず、成人向け表示 OFF の取得ゲートを迂回しない ([#1152](https://github.com/kukuri-app/kukuri/pull/1152), [#1158](https://github.com/kukuri-app/kukuri/pull/1158))
+- Metaverse blob cache GC の unpin_blob を内側の IrohBlobService へ転送する ([#1157](https://github.com/kukuri-app/kukuri/pull/1157), [#1159](https://github.com/kukuri-app/kukuri/pull/1159))
+- CSS・JS を内容のハッシュ付き URL で参照し、配信キャッシュに古い版が残らないようにする ([#1043](https://github.com/kukuri-app/kukuri/pull/1043), [#1155](https://github.com/kukuri-app/kukuri/pull/1155))
+- リンクと小見出しの色を通常文字のコントラスト基準へ上げる ([#1043](https://github.com/kukuri-app/kukuri/pull/1043), [#1147](https://github.com/kukuri-app/kukuri/pull/1147))
+- Metaverse の Tab / Enter で開いた overlay へ同じ key event 内で focus を移す ([#1139](https://github.com/kukuri-app/kukuri/pull/1139), [#1142](https://github.com/kukuri-app/kukuri/pull/1142))
+
+### Other
+
+- prepare v0.2.7-preview.1 release ([#1164](https://github.com/kukuri-app/kukuri/pull/1164))
+- 本番 Community Node でテスターフィードバック受付を有効化した記録を追加する ([#1162](https://github.com/kukuri-app/kukuri/pull/1162))
+- Cache Volume の保存量を減らし、容量を出力する ([#1160](https://github.com/kukuri-app/kukuri/pull/1160), [#1161](https://github.com/kukuri-app/kukuri/pull/1161))
+- 検証の run を Namespace の Cache Volume へ移し、xtask 経由の依存再 build をなくす ([#1148](https://github.com/kukuri-app/kukuri/pull/1148), [#1149](https://github.com/kukuri-app/kukuri/pull/1149))
+- #1068 の AC-6 を v0.2.6 で再確認した結果を記録する ([#1153](https://github.com/kukuri-app/kukuri/pull/1153))
+- brief の配布候補を v0.2.6-preview.1 に更新する ([#1036](https://github.com/kukuri-app/kukuri/pull/1036), [#1151](https://github.com/kukuri-app/kukuri/pull/1151))
+- v0.2.6-preview.1 のリリースと CN 反映を記録する ([#1146](https://github.com/kukuri-app/kukuri/pull/1146))
+- update CHANGELOG for v0.2.6-preview.1 ([#1145](https://github.com/kukuri-app/kukuri/pull/1145))
+
 ## [v0.2.6-preview.1] - 2026-09-18
 
 ### Features
