@@ -1,0 +1,156 @@
+name: Kukuri Release Verify
+
+# #1180: release の linux-verify を切り出した reusable workflow。release 用 profile（Ubuntu 22.04、
+# Cache Volume なし）の環境差は tag を切るまで表に出ないため、この file を変えた PR でも同じ検証を流す。
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kukuri-release-verify.yml'
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        required: true
+      release_tag:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  PNPM_VERSION: 10.16.1
+
+jobs:
+  linux-verify:
+    runs-on: namespace-profile-kukuri-linux-release
+    timeout-minutes: 90
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Verify requested source
+        env:
+          REQUESTED_SOURCE: ${{ inputs.source_ref }}
+        run: |
+          # release から呼ばれたときは固定した source が必須。PR の run だけ照合を省く。
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || [ -n "$REQUESTED_SOURCE" ]; then
+            [[ "$REQUESTED_SOURCE" =~ ^[0-9a-f]{40}$ ]] && test "$(git rev-parse HEAD)" = "$REQUESTED_SOURCE"
+          fi
+
+      - name: Install Rust 1.92
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          components: clippy,rustfmt
+
+      - name: Install Linux system dependencies
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y
+          pkg-config
+          ffmpeg
+          libdbus-1-dev
+          libglib2.0-dev
+          libgtk-3-dev
+          libwebkit2gtk-4.1-dev
+          libayatana-appindicator3-dev
+          librsvg2-dev
+          patchelf
+
+      # #1180: Namespace の Ubuntu 22.04 image には PowerShell が無い（v0.2.8-preview.1 の run
+      # 35415877964 で `pwsh: command not found`）。Microsoft の apt repository から入れる。
+      - name: Install PowerShell
+        run: |
+          set -euo pipefail
+          if ! command -v pwsh >/dev/null; then
+            . /etc/os-release
+            curl -fsSL -o "$RUNNER_TEMP/packages-microsoft-prod.deb" \
+              "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
+            sudo dpkg -i "$RUNNER_TEMP/packages-microsoft-prod.deb"
+            sudo apt-get update
+            sudo apt-get install -y powershell
+          fi
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Doctor
+        run: cargo xtask doctor
+
+      # PR の run には tag が無いので、version gate は PR 以外（release から呼ばれたとき）に行う。
+      # tag が空なら release-check が失敗する。
+      - name: Release version gate
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: cargo xtask release-check "$RELEASE_TAG"
+
+      - name: Rust checks
+        run: cargo xtask rust-check
+
+      - name: Tauri compile check
+        run: cargo xtask tauri-check
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Package and asset notices check
+        shell: pwsh
+        run: ./scripts/release/generate-third-party-notices.ps1 -Check
+
+      - name: Install Playwright Chromium
+        working-directory: apps/desktop
+        # #1180: Ubuntu 22.04 の release 用 profile では Chromium の依存 library を前提にしない。
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Rust tests
+        run: cargo xtask rust-test
+
+      - name: Desktop lint + typecheck
+        run: cargo xtask desktop-lint
+
+      - name: Desktop Vitest
+        run: cargo xtask desktop-test
+
+      - name: Desktop Storybook build
+        run: cargo xtask desktop-storybook
+
+      - name: Desktop browser tests
+        run: cargo xtask desktop-browser-test
+
+      - name: Community-node checks
+        run: cargo xtask cn-check
+
+      - name: Community-node integration tests
+        run: cargo xtask cn-test
+
+      - name: E2E smoke
+        run: cargo xtask e2e-smoke
+
+      - name: Community-node connectivity scenario
+        run: cargo xtask scenario community_node_public_connectivity
+
+      - name: Upload Linux verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kukuri-release-linux-artifacts
+          path: test-results/kukuri/
+          if-no-files-found: warn

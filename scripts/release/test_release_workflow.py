@@ -51,7 +51,7 @@ class WorkflowTests(unittest.TestCase):
             words = shlex.split(step["run"])
             return set(words[words.index("install") + 1:]) - {"-y"}
 
-        missing = packages("kukuri-fast.yml", "linux-cn") - packages("kukuri-release.yml", "linux-verify")
+        missing = packages("kukuri-fast.yml", "linux-cn") - packages("kukuri-release-verify.yml", "linux-verify")
         self.assertEqual(missing, set(), "release linux-verify must install the Fast CN test dependencies")
 
     def test_publish_requires_every_platform_and_validation(self):
@@ -78,9 +78,25 @@ class WorkflowTests(unittest.TestCase):
                 self.assertNotIn("${{ inputs.", script)
         initial = jobs["validate-release-inputs"]
         self.assertIn("release_source", initial["outputs"])
-        for name in ("linux-verify", "windows-package", "release-assets"):
+        for name in ("windows-package", "release-assets"):
             checkout = next(s for s in jobs[name]["steps"] if s.get("uses", "").startswith("actions/checkout"))
             self.assertEqual(checkout["with"]["ref"], "${{ needs.validate-release-inputs.outputs.release_source }}")
+        # linux-verify は reusable workflow（#1180）。固定した source と tag を渡し、呼ばれる側で照合する。
+        verify = jobs["linux-verify"]
+        self.assertEqual(verify["uses"], "./.github/workflows/kukuri-release-verify.yml")
+        self.assertEqual(verify["with"]["source_ref"], "${{ needs.validate-release-inputs.outputs.release_source }}")
+        self.assertEqual(verify["with"]["release_tag"], "${{ needs.validate-release-inputs.outputs.release_tag }}")
+        steps = workflow("kukuri-release-verify.yml")["jobs"]["linux-verify"]["steps"]
+        self.assertEqual(steps[0]["with"]["ref"], "${{ inputs.source_ref || github.sha }}")
+        self.assertIn("test \"$(git rev-parse HEAD)\" = \"$REQUESTED_SOURCE\"", steps[1]["run"])
+        for step in steps:
+            self.assertNotIn("${{ inputs.", step.get("run", ""))
+        gate = next(step for step in steps if step.get("name") == "Release version gate")
+        self.assertEqual(gate["if"], "${{ github.event_name != 'pull_request' }}")
+        # PR でも動く file なので、secrets を参照せず、pull_request_target 等の trigger も持たない。
+        source = (ROOT / ".github/workflows/kukuri-release-verify.yml").read_text(encoding="utf-8")
+        self.assertNotIn("secrets", source)
+        self.assertEqual(set(workflow("kukuri-release-verify.yml")["on"]), {"pull_request", "workflow_call"})
 
     def test_linux_pr_does_not_receive_distribution_secrets(self):
         steps = workflow("kukuri-linux-package.yml")["jobs"]["linux-appimage"]["steps"]
@@ -121,7 +137,8 @@ class WorkflowTests(unittest.TestCase):
         # tool cache 等が PR の run と共有されるため使わない。
         jobs = workflow("kukuri-release.yml")["jobs"]
         self.assertEqual(jobs["validate-release-inputs"]["runs-on"], LINUX_RELEASE_PROFILE)
-        self.assertEqual(jobs["linux-verify"]["runs-on"], LINUX_RELEASE_PROFILE)
+        verify = workflow("kukuri-release-verify.yml")["jobs"]["linux-verify"]
+        self.assertEqual(verify["runs-on"], LINUX_RELEASE_PROFILE)
         self.assertEqual(jobs["windows-package"]["runs-on"], WINDOWS_RELEASE_PROFILE)
         for name in ("changelog", "release-assets", "publish-draft", "verify-published"):
             self.assertFalse(jobs[name]["runs-on"].startswith("namespace-"), name)
@@ -133,7 +150,10 @@ class WorkflowTests(unittest.TestCase):
         # release は不定期で他 run の cache を読めず、保存と復元の時間だけかかっていた（#1180）。
         release = workflow("kukuri-release.yml")
         self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED", "SCCACHE_GHA_VERSION"} & set(release.get("env", {})))
-        jobs = list(release["jobs"].items()) + [("cli-package.yml", workflow("kukuri-cli-package.yml")["jobs"]["cli-package"])]
+        jobs = list(release["jobs"].items()) + [
+            ("cli-package.yml", workflow("kukuri-cli-package.yml")["jobs"]["cli-package"]),
+            ("release-verify.yml", workflow("kukuri-release-verify.yml")["jobs"]["linux-verify"]),
+        ]
         for name, job in jobs:
             self.assertFalse({"RUSTC_WRAPPER", "SCCACHE_GHA_ENABLED"} & set(job.get("env", {})), name)
             for step in job.get("steps", []):
@@ -142,6 +162,15 @@ class WorkflowTests(unittest.TestCase):
                     self.assertNotIn(action, uses, f"{name}: {uses}")
                 if uses.startswith(("actions/setup-node@", "actions/setup-python@")):
                     self.assertNotIn("cache", step.get("with", {}), name)
+
+    def test_release_verify_installs_powershell_before_using_it(self):
+        # Namespace の Ubuntu 22.04 image には pwsh が無い（#1180、run 35415877964）。
+        steps = workflow("kukuri-release-verify.yml")["jobs"]["linux-verify"]["steps"]
+        install = next(i for i, step in enumerate(steps) if step.get("name") == "Install PowerShell")
+        users = [i for i, step in enumerate(steps) if step.get("shell") == "pwsh"]
+        self.assertTrue(users)
+        self.assertLess(install, min(users))
+        self.assertIn("apt-get install -y powershell", steps[install]["run"])
 
     def test_windows_signing_key_reaches_only_the_package_build_step(self):
         # #1180: 外部 runner では依存 package の install script や setup 系 action から鍵を見せない。
