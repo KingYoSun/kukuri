@@ -190,6 +190,10 @@ export function MetaverseRoomView({
     if (!eligibleRef.current || overlay === 'closed') return;
     const frame = requestAnimationFrame(() => {
       if (!eligibleRef.current) return;
+      // Tab already focuses the menu synchronously. Do not undo navigation
+      // performed before this deferred frame (for example ArrowRight).
+      if (overlay === 'categories' &&
+        stageRef.current?.querySelector('.metaverse-category-menu')?.contains(document.activeElement)) return;
       focusOverlay(stageRef.current, messageInputRef.current, overlay, category);
     });
     return () => cancelAnimationFrame(frame);

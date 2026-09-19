@@ -20,6 +20,20 @@ NS = {
 
 
 class WindowsStorePackageContracts(unittest.TestCase):
+    def test_windows_checkout_keeps_tauri_manifest_lf(self):
+        # Tauri's TOML serializer writes LF; a CRLF checkout can leave Git's
+        # status dirty even when diff reports no semantic/content difference.
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([
+                'git', '-c', 'core.autocrlf=true', '-C', str(ROOT),
+                'checkout-index', '--prefix=' + pathlib.Path(directory).as_posix() + '/',
+                '--', 'apps/desktop/src-tauri/Cargo.toml',
+            ], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            content = (pathlib.Path(directory) / 'apps/desktop/src-tauri/Cargo.toml').read_bytes()
+            self.assertIn(b'\n', content)
+            self.assertNotIn(b'\r\n', content)
+
     def test_store_version_is_derived_without_a_separate_counter(self):
         with tempfile.TemporaryDirectory() as directory:
             command = r'''

@@ -3,6 +3,7 @@ name: Kukuri Windows Store Package
 on:
   pull_request:
     paths:
+      - '.gitattributes'
       - '.github/workflows/kukuri-windows-store-package.yml'
       - 'apps/desktop/package.json'
       - 'apps/desktop/pnpm-lock.yaml'

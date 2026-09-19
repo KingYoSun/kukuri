@@ -96,6 +96,14 @@ WindowsのTauri unit test executableの直接起動は当初`STATUS_ENTRYPOINT_N
 
 ## 残工程
 
+### 2026-09-20 先行mergeとCI修正
+
+- ユーザーがStore申請完了を報告。Store審査を待たず、CI成功と不要機能の独立監査後にPR #1191を先行mergeする承認を受けた。Store承認／配布検証はIssue #1190に残し、mergeだけでCloseしない。
+- 残存監査で旧PFX／SignTool／StoreContext／skip-build実装の残存なし、通知smokeはcfg(test)限定と確認。
+- Store CIの失敗はTauri CLI後の`Cargo.toml`変更検知。Windows CRLF checkoutでCLIがLFへserializeすると、本文diffがなくてもstatusがMになる挙動を独立worktreeで再現。対象manifestだけ`text eol=lf`へ固定し、core.autocrlf=trueのcheckoutでもLFになるregression testを追加。clean-worktree検査は維持する。
+- browser CIの`metaverse-hud` focus失敗は今回のStore差分外の既存race。同期Tab focus→ArrowRight→遅延RAFの順でHostingからDomeへfocusが戻ることをunit testで再現した。開いているcategory menu内のfocusを遅延処理が奪わない最小guardで修正し、既存挙動testを維持。新しい製品機能は追加しない。
+- package contracts9件、MetaverseRoomView18件は修正後PASS。全UI gate／最終CI／delta監査／merge tree照合はPRの最終記録へ対応付ける。
+
 ### 透過shell iconの修正
 
 - ユーザーのWindows実機で青い背景plateを観測。元PNGとmanifestは透明背景だったが、targetsize／unplated／lightunplatedが欠落していた。既存ロゴの意匠・app内UI・NSISを変えず、Store stagingだけに14サイズ×3 variantsを追加する。

@@ -234,7 +234,11 @@ $finalCommit = (& git -C $repoRoot rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $finalCommit -ne $sourceCommit) { throw "Source commit changed during build" }
 $finalStatus = (& git -C $repoRoot status --porcelain | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Could not verify final source state" }
-if ($finalStatus -and -not $AllowDirty) { throw "Worktree changed during build:`n$finalStatus" }
+if ($finalStatus -and -not $AllowDirty) {
+    # This tracked build manifest contains dependency metadata, never credentials.
+    & git -C $repoRoot diff -- apps/desktop/src-tauri/Cargo.toml
+    throw "Worktree changed during build:`n$finalStatus"
+}
 $unsignedHash = (Get-FileHash -LiteralPath $unsignedPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $provenance = [ordered]@{
     schema_version = 1
