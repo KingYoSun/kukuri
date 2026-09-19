@@ -24,7 +24,9 @@ permissions:
 
 jobs:
   cli-package:
-    runs-on: ubuntu-22.04
+    # #1180: 配布物の CLI は Ubuntu 22.04 の glibc で build する（ADR 0049）。Cache Volume のない
+    # release 用 profile を使い、他の run の cache を持ち込まない。
+    runs-on: namespace-profile-kukuri-linux-release
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -43,9 +45,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: kukuri-cli-package-${{ matrix.arch }}
       - name: Package contracts
         run: |
           python3 scripts/release/test_release_assets.py

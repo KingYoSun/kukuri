@@ -52,12 +52,19 @@ python scripts/release/test_verify_public_preview.py
 1. 承認したsourceに新しいtagを作成・pushする。tag pushは既定でdraftまで。
 2. 手動実行なら`Kukuri Release`のworkflow refにも同じtagを選び、入力`tag`を一致させる。`draft`の既定値は`true`。別refのworkflowで過去tagをbuildする入力は拒否する。
 3. `validate-release-inputs`がevent／tag／versionを検証し、tagとworkflowのsourceを照合してcommit SHAを一度固定する。後続checkoutはそのSHAを使う。
-4. `linux-verify`が既存製品CIを実行。Windows／Linux GUI package、CLI 2archのjobで本体を生成し、source／target／version／SHA-256を`release-package.json`へ記録する。
+4. `linux-verify`が既存製品CIを実行。Windows／Linux GUI package、CLI 2archのjobで本体を生成し、source／target／version／SHA-256を`release-package.json`へ記録する。package jobは`linux-verify`を待たずに並行して始まり、公開は`linux-verify`を含む全jobの成功を条件とする（#1180）。
 5. CLIはarchiveから展開した実binaryでschema、専用profileのdaemon起動・status・終了を確認する。aarch64はQEMUで実行し、cross-compileだけを成功条件にしない。HOME／XDGとprofileは一時領域で、GUIのidentityを共有しない。
 6. `changelog`が固定sourceからRelease notesを生成し、`release-assets`が4targetの資材を集約する。必須job失敗・欠落・異なるsource／version／鍵・test署名・hash不一致は公開前に拒否する。
 7. 同じWindows buildの実Rust verifierで、最終manifestのWindows／AppImage／Debの3entryの実bytesとembedded signatureを検証する。正常bundle受理と1 byte改変拒否の双方が必要。installは行わない。
 8. `publish-draft`が完全性と現在のtag SHAを再検証し、draftを作成してuploadする。公開指定でも、全assetのuploadとGitHub SHA-256 digest照合が終わるまで公開しない。
 9. 公開指定時は`verify-published`が安定updater URL、checksum／provenance、5本体を取得して候補hashと照合する。失敗は公開後検証未完了として扱う。
+
+### Runnerとcache（#1180）
+
+- build／verifyと署名するjob（`validate-release-inputs`、`linux-verify`、`windows-package`、Linux GUI package、CLI package）はNamespaceで動かす。Linuxの配布物は`namespace-profile-kukuri-linux-release`（Ubuntu 22.04、Cache Volumeなし）でbuildし、glibcの下限をUbuntu 22.04に保つ。Windowsは`namespace-profile-kukuri-win`。
+- 配布用の署名鍵はNamespaceのrunnerへ渡る。2026-09-19のユーザー判断で、#1148の「配布鍵を渡すrunはGitHub-hosted」を改めた。PRのrunには引き続き渡さない。
+- releaseの経路ではbuild cache（sccache、rust-cache、pnpm cache、Cache Volume）を使わない。tagのrunは他のrunのcacheを読めず、復元・保存の時間だけかかっていた。PRのrunが書いた成果物を署名付きの配布物へ持ち込まない目的もある。
+- `contents: write`を持つ末尾のjob（`changelog`、`release-assets`、`publish-draft`、`verify-published`）はGitHub-hostedのまま。
 
 GitHub上の`prerelease` flagは既存互換のため`false`、公開時`make_latest=true`を維持する。製品としてはPreviewだが、`prerelease=true`へ変えると既存clientの`/releases/latest/download/latest-preview.json`に出なくなる。
 
