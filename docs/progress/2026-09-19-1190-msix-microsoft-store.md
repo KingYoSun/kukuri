@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Scope revision: `2026-09-19-v2`
+- Scope revision: `2026-09-19-v3`
 - 基準 commit: `f3d481f0fda732941033275510e6598eda93f2ef`
 - リスク区分: C
 - Issue: [#1190](https://github.com/kukuri-app/kukuri/issues/1190)
@@ -22,6 +22,17 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 - release／quickstart／legal data-flow／privacy／external-transmission／三言語UIをdistribution差分へ同期した。外部送信を増やさない補記なのでlegal bundle version 8は変更していない。
 
 ## 実packageの観測
+
+### 公式開発証明書によるinstalled MSIX検証（v3）
+
+- ユーザーの追加指示により、v2で省いた署名付きMSIXのローカル検証を復帰した。Store提出用buildはunsigned-onlyのまま、検証用は公式`winapp cert generate`／`winapp pack --cert`／`winapp cert install`を利用する。既存の`code_sign_certificate.pfx`は使用しない。
+- 有効期間7日の使い捨て開発証明書をGit除外の`test-results/kukuri/issue-1190-devcert`に生成した。ユーザーが管理者権限で`winapp cert install`を実行し、`LocalMachine/TrustedPeople`への登録を確認した。
+- `Add-AppxPackage`で`1.0.0.0`を正常installした。`IsDevelopmentMode=False`、`Status=Ok`、PFN=`KingYoSun.kukuri_p8fpcaf1kx88g`。WindowsApps配下の実行ファイルから画面が起動することを確認した。
+- `KUKURI_APP_DATA_DIR`に専用`test-results/kukuri/issue-1190-installed-profile`を指定した。既存ユーザーデータを移行・削除せず試験した。
+- 検証用manifestだけversionを`1.0.1.0`へ変更し、同じ実行ファイルと開発証明書で再packした。上位版を`Add-AppxPackage`してversionと`Status=Ok`を確認した。
+- 停止後／更新後・再起動前の専用profile全38ファイルのSHA-256が一致した。更新後の実機画面でプロフィール`test`とタイムライン表示を確認した。ネットワーク同期開始後はDBが変わり得るため、再起動後の全ファイル不変までは主張しない。
+- 実機のリリース設定でMicrosoft Store管理の説明が表示され、アプリ内の更新確認／インストールボタンがないことを確認した。
+- OS通知の実配信、Storeサーバーによる更新配信、Partner Center validationは本観測だけでは検証済みにしない。
 
 ### WinApp CLI package
 

@@ -73,7 +73,18 @@ winapp unregister --manifest .\apps\desktop\src-tauri\windows\store\Package.appx
 
 Microsoft公式の[Tauri向けWinApp CLIガイド](https://learn.microsoft.com/ja-jp/windows/apps/dev-tools/winapp-cli/guides/tauri)どおり、Microsoft Storeへ提出するMSIXは事前署名しない。Microsoft Storeがcertification後にpackageを署名する。
 
-repository rootにlocal PFXが存在しても、Store package commandはPFX、password、private key、certificate store、SignToolを読み書きしない。sideload用の自己署名package作成は#1190のNon-goalであり、Store候補、CI artifact、Partner Center uploadへ混在させない。
+repository rootにlocal PFXが存在しても、Store提出用package commandはPFX、password、private key、certificate store、SignToolを読み書きしない。MSIXのローカル動作検証には、公式ガイドに従って別の開発証明書を生成する。検証用packageはStore候補、CI artifact、Partner Center uploadへ混在させない。
+
+## 開発証明書によるMSIX動作検証
+
+既存の製品用PFXは使わず、Git除外された検証directoryで次を実行する。CLI既定passwordは使い捨て開発証明書のためのもので、配布鍵として利用しない。
+
+```powershell
+winapp cert generate --manifest apps/desktop/src-tauri/windows/store/Package.appxmanifest --output test-results/kukuri/issue-1190-devcert/devcert.pfx --valid-days 7 --if-exists skip --export-cer
+winapp pack dist/microsoft-store/staging --manifest apps/desktop/src-tauri/windows/store/Package.appxmanifest --executable kukuri.exe --cert test-results/kukuri/issue-1190-devcert/devcert.pfx --output test-results/kukuri/issue-1190-devcert/kukuri-test.msix
+```
+
+続いて管理者PowerShellで`winapp cert install <devcert.pfxの絶対path>`を実行し、通常ユーザーで`Add-AppxPackage <kukuri-test.msixの絶対path>`を実行する。署名付きMSIXの起動、deep link、通知、restart、update、データ保持を検証する。証明書登録／解除対象は、この工程で生成した証明書のthumbprintで特定する。利用者の既存証明書と実データを削除しない。Store用unsigned candidateと検証用signed packageのpayload一致も照合する。
 
 ## app dataとDirect版の共存
 
