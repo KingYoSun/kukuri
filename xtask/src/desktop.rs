@@ -87,18 +87,11 @@ pub(crate) fn windows_store_package(args: impl Iterator<Item = String>) -> Resul
         match arg.as_str() {
             "--skip-build" => script_args.push("-SkipBuild".to_string()),
             "--allow-dirty" => script_args.push("-AllowDirty".to_string()),
-            "--sign-local" => script_args.push("-SignForLocalTest".to_string()),
-            "--prompt-certificate-password" => {
-                script_args.push("-PromptForCertificatePassword".to_string())
-            }
-            "--certificate" | "--output" => {
+            "--output" => {
                 let value = args
                     .next()
                     .with_context(|| format!("{arg} requires a value"))?;
-                script_args.push(match arg.as_str() {
-                    "--certificate" => "-CertificatePath".to_string(),
-                    _ => "-OutputDirectory".to_string(),
-                });
+                script_args.push("-OutputDirectory".to_string());
                 script_args.push(value);
             }
             _ => bail!("unsupported windows-store-package flag: {arg}"),

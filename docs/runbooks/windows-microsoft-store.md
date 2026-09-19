@@ -2,7 +2,7 @@
 
 ## 対象
 
-Issue #1190で追加したWindows x64 MSIXのbuild、local test、WACK、Partner Center提出を扱う。通常のWindows NSIS／GitHub updaterは[Release Runbook](release.md)の経路を使い、本書のStore profileと混在させない。
+Issue #1190で追加したWindows x64 MSIXのbuild、package identity付きlocal test、Partner Center提出を扱う。通常のWindows NSIS／GitHub updaterは[Release Runbook](release.md)の経路を使い、本書のStore profileと混在させない。
 
 Store packageの更新はMicrosoft Store／Windowsへ委譲する。kukuriはStore buildからGitHub Releasesを自動確認せず、`Windows.Services.Store.StoreContext`等の別updaterも持たない。SettingsはStore管理であることを表示する。
 
@@ -69,21 +69,11 @@ winapp unregister --manifest .\apps\desktop\src-tauri\windows\store\Package.appx
 
 `winapp unregister`はdevelopment mode登録だけを対象にする。別project treeの登録へ`--force`を使わない。Issue #1190ではAUMID `KingYoSun.kukuri_p8fpcaf1kx88g!kukuri`、single processの`kukuri:`再activation、対象登録だけの解除を確認した。
 
-## PFXとlocal-test署名
+## Store署名
 
-repository rootの`code_sign_certificate.pfx`は`*.pfx`でGit除外されている。PFX、password、private keyをGit、log、cache、CI artifact、Issue／PRへ保存しない。Store候補の作成はPFX非依存である。
+Microsoft公式の[Tauri向けWinApp CLIガイド](https://learn.microsoft.com/ja-jp/windows/apps/dev-tools/winapp-cli/guides/tauri)どおり、Microsoft Storeへ提出するMSIXは事前署名しない。Microsoft Storeがcertification後にpackageを署名する。
 
-signed local-test copyが必要なときだけ、passwordをterminalから`SecureString`へ直接mask入力する。`setx`、command引数、`winapp --cert-password`、`SignTool /p`を使わない。
-
-```powershell
-cargo xtask windows-store-package --skip-build --sign-local --prompt-certificate-password
-```
-
-非対話の隔離されたlocal jobでだけ、`KUKURI_MSIX_CERT_PASSWORD` process環境を代替入力にできる。persistent user／machine環境へ保存しない。
-
-scriptはPFXを`CurrentUser\My`へnon-exportableで一時importし、manifest Publisherとの一致、private key、期限、code-signing用途を検査する。unsigned candidateのcopyだけをthumbprint指定でSHA-256署名する。自己署名chainの`SignTool verify`中だけpublic certificateを`CurrentUser\Root`へ一時importし、成功後にpublic `.cer`と別hashをprovenanceへ追加する。処理前から存在したcertificateは残し、この処理で新規importした`My`／`Root` certificateだけを`finally`でexact thumbprint削除し、残存0件を検査する。
-
-signed copyをinstallするtest user／VMでは、出力した`.cer`だけを`CurrentUser\TrustedPeople`へ一時importし、MSIXを`Add-AppxPackage`する。test後は対象packageと、このtestで追加したcertificateだけを正確なidentity／thumbprintで削除する。利用者の実profileや他certificateをcleanup対象にしない。
+repository rootにlocal PFXが存在しても、Store package commandはPFX、password、private key、certificate store、SignToolを読み書きしない。sideload用の自己署名package作成は#1190のNon-goalであり、Store候補、CI artifact、Partner Center uploadへ混在させない。
 
 ## app dataとDirect版の共存
 
@@ -96,16 +86,14 @@ package identity付きloose runでも、kukuriのapp data正本はDirect／NSIS�
 
 同一identityの上位Store versionへupgradeするときは、account key、profile、consent、settings、draft、private capability、DBをbefore／afterで照合する。失敗時にapp data削除で回復しない。
 
-## WACKとPartner Center
+## Partner Center
 
 提出候補はclean worktreeから作ったunsigned MSIXに固定し、source SHA、Store version、SHA-256を記録する。
 
-1. 同じpayloadから作ったsigned local-test copyをWindows App Certification Kitとinstall／upgrade smokeへ使う。
-2. unsigned candidateをPartner CenterのStore ID `9NQ18HML4GS3`へuploadする。
-3. WACK report、signed copy hash、unsigned candidate hash、`store-package.json`の対応を記録する。
-4. Partner Center validationのerror／warningを保存し、失敗をoverrideしない。再buildは別candidateとして全検査をやり直す。
-5. certification提出とavailability／一般公開を分離し、承認された公開範囲・日時だけを適用する。
-6. certification後にStoreから取得したpackageのMicrosoft signature、identity／version、起動、Store update認識を確認する。
+1. unsigned candidateをPartner CenterのStore ID `9NQ18HML4GS3`へuploadする。
+2. Partner Center validationのerror／warningを保存し、失敗をoverrideしない。再buildは別candidateとして全検査をやり直す。
+3. certification提出とavailability／一般公開を分離し、承認された公開範囲・日時だけを適用する。
+4. certification後にStoreから取得したMicrosoft署名済みpackageについて、signature、identity／version、clean install、同一identity update、起動、deep link、OS notification、app data保持、Store update認識を確認する。
 
 Store upload、certification、一般公開は外部状態の異なる操作である。実装PRやplanの承認だけを一般公開の承認として扱わない。
 

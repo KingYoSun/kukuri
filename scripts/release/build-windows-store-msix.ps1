@@ -1,9 +1,6 @@
 param(
     [switch]$SkipBuild,
     [switch]$AllowDirty,
-    [switch]$SignForLocalTest,
-    [switch]$PromptForCertificatePassword,
-    [string]$CertificatePath = "code_sign_certificate.pfx",
     [string]$OutputDirectory = "dist/microsoft-store"
 )
 
@@ -35,22 +32,6 @@ function Invoke-Native([string]$Executable, [string[]]$Arguments, [string]$Label
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed with exit code $LASTEXITCODE"
     }
-}
-
-function Find-SignTool {
-    $roots = @(
-        "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
-        "$env:ProgramFiles\Windows Kits\10\bin"
-    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
-    $candidates = foreach ($root in $roots) {
-        Get-ChildItem -LiteralPath $root -Filter signtool.exe -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.DirectoryName -match '[\\/]x64$' }
-    }
-    $tool = $candidates | Sort-Object FullName -Descending | Select-Object -First 1
-    if (-not $tool) {
-        throw "SignTool.exe was not found in the Windows SDK"
-    }
-    return $tool.FullName
 }
 
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -238,130 +219,10 @@ $provenance = [ordered]@{
         sha256 = $unsignedHash
         bytes = (Get-Item -LiteralPath $unsignedPath).Length
     }
-    signed_local_test = $null
 }
 $provenancePath = Join-Path $outputDir "store-package.json"
 $json = $provenance | ConvertTo-Json -Depth 8
 [IO.File]::WriteAllText($provenancePath, $json + "`n", [Text.UTF8Encoding]::new($false))
-$signedPath = $null
-$certificateOutputPath = $null
-
-if ($SignForLocalTest) {
-    $resolvedCertificate = Resolve-WorkspacePath $CertificatePath
-    Assert-WorkspaceChild $resolvedCertificate "CertificatePath"
-    if (-not (Test-Path -LiteralPath $resolvedCertificate -PathType Leaf)) {
-        throw "Local-test signing certificate is missing"
-    }
-    $password = if ($PromptForCertificatePassword) {
-        Read-Host "PFX password" -AsSecureString
-    }
-    elseif ($null -eq $env:KUKURI_MSIX_CERT_PASSWORD) {
-        [Security.SecureString]::new()
-    }
-    else {
-        ConvertTo-SecureString -String $env:KUKURI_MSIX_CERT_PASSWORD -AsPlainText -Force
-    }
-    $beforeThumbprints = @(Get-ChildItem Cert:\CurrentUser\My | ForEach-Object { $_.Thumbprint })
-    $beforeRootThumbprints = @(Get-ChildItem Cert:\CurrentUser\Root | ForEach-Object { $_.Thumbprint })
-    $imported = $null
-    $importedCertificates = @()
-    $rootCertificates = @()
-    $signingSucceeded = $false
-    try {
-        $importedCertificates = @(Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false)
-        $privateKeyCertificates = @($importedCertificates | Where-Object { $_.HasPrivateKey })
-        if ($privateKeyCertificates.Count -ne 1) {
-            throw "The local-test PFX must contain exactly one certificate with a private key"
-        }
-        $imported = $privateKeyCertificates[0]
-        if ($imported.Subject -ne $publisher) {
-            throw "The certificate subject does not match the Store manifest Publisher"
-        }
-        $now = Get-Date
-        if ($imported.NotBefore -gt $now -or $imported.NotAfter -le $now) {
-            throw "The local-test certificate is outside its validity period"
-        }
-        $eku = @($imported.EnhancedKeyUsageList | ForEach-Object {
-            if ($_.ObjectId -is [Security.Cryptography.Oid]) {
-                $_.ObjectId.Value
-            }
-            else {
-                [string]$_.ObjectId
-            }
-        })
-        if ($eku.Count -gt 0 -and $eku -notcontains "1.3.6.1.5.5.7.3.3") {
-            throw "The local-test certificate is not valid for code signing"
-        }
-        $signedName = "${packageName}_${storeVersion}_${architecture}_local-test-signed.msix"
-        $signedPath = Join-Path $outputDir $signedName
-        Copy-Item -LiteralPath $unsignedPath -Destination $signedPath
-        $signTool = Find-SignTool
-        Invoke-Native $signTool @(
-            "sign", "/fd", "SHA256", "/sha1", $imported.Thumbprint, "/s", "My", $signedPath
-        ) "MSIX local-test signing"
-        $certificateName = "${packageName}_local-test.cer"
-        $certificateOutputPath = Join-Path $outputDir $certificateName
-        Export-Certificate -Cert $imported -FilePath $certificateOutputPath -Force | Out-Null
-        $rootCertificates = @(Import-Certificate -FilePath $certificateOutputPath -CertStoreLocation Cert:\CurrentUser\Root)
-        Invoke-Native $signTool @("verify", "/pa", "/all", "/v", $signedPath) "MSIX signature verification"
-        $provenance.signed_local_test = [ordered]@{
-            file = $signedName
-            sha256 = (Get-FileHash -LiteralPath $signedPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            certificate_file = $certificateName
-            certificate_thumbprint = $imported.Thumbprint
-            certificate_not_after = $imported.NotAfter.ToUniversalTime().ToString("o")
-        }
-        $signingSucceeded = $true
-    }
-    finally {
-        $cleanupFailures = @()
-        if (-not $signingSucceeded) {
-            foreach ($failedArtifact in @($signedPath, $certificateOutputPath)) {
-                if ($failedArtifact -and (Test-Path -LiteralPath $failedArtifact)) {
-                    Remove-Item -LiteralPath $failedArtifact -Force
-                }
-            }
-        }
-        foreach ($certificate in $importedCertificates) {
-            if ($beforeThumbprints -notcontains $certificate.Thumbprint) {
-                & certutil.exe -user -delstore My $certificate.Thumbprint | Out-Null
-                if ($LASTEXITCODE -ne 0 -or
-                    (Test-Path -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)")) {
-                    $cleanupFailures += "CurrentUser/My:$($certificate.Thumbprint)"
-                }
-            }
-        }
-        foreach ($certificate in $rootCertificates) {
-            if ($beforeRootThumbprints -notcontains $certificate.Thumbprint) {
-                & certutil.exe -user -delstore Root $certificate.Thumbprint | Out-Null
-                if ($LASTEXITCODE -ne 0 -or
-                    (Test-Path -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)")) {
-                    $cleanupFailures += "CurrentUser/Root:$($certificate.Thumbprint)"
-                }
-            }
-        }
-        $password.Dispose()
-        if ($cleanupFailures.Count -gt 0) {
-            throw "Failed to remove temporary local-test certificates: $($cleanupFailures -join ', ')"
-        }
-    }
-}
-elseif ($PromptForCertificatePassword) {
-    throw "-PromptForCertificatePassword requires -SignForLocalTest"
-}
-
-$json = $provenance | ConvertTo-Json -Depth 8
-try {
-    [IO.File]::WriteAllText($provenancePath, $json + "`n", [Text.UTF8Encoding]::new($false))
-}
-catch {
-    foreach ($localArtifact in @($signedPath, $certificateOutputPath)) {
-        if ($localArtifact -and (Test-Path -LiteralPath $localArtifact)) {
-            Remove-Item -LiteralPath $localArtifact -Force
-        }
-    }
-    throw
-}
 Write-Output "Store package: $unsignedPath"
 Write-Output "SHA-256: $unsignedHash"
 Write-Output "Provenance: $provenancePath"

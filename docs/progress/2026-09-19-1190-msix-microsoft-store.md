@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Scope revision: `2026-09-19-v1`
+- Scope revision: `2026-09-19-v2`
 - 基準 commit: `f3d481f0fda732941033275510e6598eda93f2ef`
 - リスク区分: C
 - Issue: [#1190](https://github.com/kukuri-app/kukuri/issues/1190)
@@ -15,10 +15,10 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 - Microsoft WinApp CLI 0.6.1、固定manifest、x64 Tauri `--no-bundle` outputからunsigned MSIXを生成する`cargo xtask windows-store-package`を追加した。
 - `Package.appxmanifest`にPartner Center identity、SHA-256 package integrity、Desktop full-trust entry、最小visual assets、`kukuri:` protocolを固定した。
 - package scriptはclean output、source SHA、WinApp CLI version、payload allowlist、packed identity、block map SHA-256、MSIX hash／bytesを検査して`store-package.json`へ記録する。
-- Store upload candidateはcertificate optionなしのunsigned MSIX。local-test copyだけをPFXから一時importしたthumbprintで署名し、passwordをargvへ渡さず、成功／失敗のどちらでも新規import certificateをcleanupする。
+- Store upload candidateはcertificate optionなしのunsigned MSIX。2026-09-19のユーザー判断でMicrosoft公式Tauriガイドへ統一し、PFX／SignTool／certificate storeをStore package経路から除外した。Microsoft Storeがcertification後に署名する。
 - Store buildはCargo featureとVite distribution flagの両方で区別する。frontendは起動時／30分timer／Settings updater操作とGitHub外部送信表示を出さず、backendはupdate check／download／install／restart gateをnetwork／installer sinkより前に拒否する。
 - Store版の更新はMicrosoft Store／Windowsへ完全委譲し、`StoreContext`等の別app内updaterは追加しない。Direct／NSIS・Linux版は既存GitHub updaterを維持する。
-- unsigned packageをsecretなしでbuildするpath限定のWindows CIと、identity／manifest／署名境界／workflow contractを追加した。
+- unsigned packageをsecretなしでbuildするpath限定のWindows CIと、identity／manifest／unsigned-only境界／workflow contractを追加した。
 - release／quickstart／legal data-flow／privacy／external-transmission／三言語UIをdistribution差分へ同期した。外部送信を増やさない補記なのでlegal bundle version 8は変更していない。
 
 ## 実packageの観測
@@ -40,11 +40,11 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 - package container `%LOCALAPPDATA%\Packages\KingYoSun.kukuri_p8fpcaf1kx88g`は作成されたが、kukuriのaccount／DB／consent正本はDirect版と同じ`%APPDATA%\app.kukuri.desktop`だった。
 - exact PIDを終了して`winapp unregister --manifest ...`を実行し、対象development packageだけが消え、既存roaming app dataが残ることを確認した。
 
-### PFX negative boundary
+### Superseded: local PFX署名調査
 
-- `KUKURI_MSIX_CERT_PASSWORD`なしの`--sign-local`は`Import-PfxCertificate`で非0終了した。
-- unsigned MSIXとunsigned provenanceは保持し、signed local-test fileは残さず、certificate storeへ新規certificateを残さないことを確認した。
-- 実PFX署名、signed install／upgrade、WACKはpasswordをprocess環境へmask入力したcandidateで別途行う。password自体は本記録、log、Gitへ残さない。
+- Scope revision v1ではlocal PFX署名も検討したが、Microsoft公式ガイド上、Store提出用MSIXは署名不要でStoreが再署名する。ユーザー判断によりv2でこの経路を削除した。
+- 調査中に一時importしたcertificateは`CurrentUser\My`、`TrustedPeople`、`Root`のすべてで残存0件を確認した。PFX／passwordはtracked file、PR、CI、artifactへ含めていない。
+- `code_sign_certificate.pfx`はrootでGit除外されたまま保持し、#1190のbuild／validation／uploadから参照しない。
 
 ## Validation
 
@@ -66,6 +66,5 @@ WindowsのTauri unit test executableを直接起動するtargeted commandは、t
 ## 残工程
 
 - clean PR headからunsigned candidateを再buildし、source SHA／hashを固定する。
-- PFX passwordをchat／argvへ出さずprocess環境へ注入し、local-test copyの実署名、temporary certificate cleanup、install／same-identity upgrade、WACKを行う。
 - 区分Cの独立監査、必須CI、PR merge後tree照合。
-- 同一unsigned candidateをPartner Centerへuploadしてvalidationする。certification提出とavailability／一般公開は外部状態を分離して記録する。
+- 同一unsigned candidateをPartner Centerへuploadしてvalidationする。certification後のMicrosoft署名済みpackageでinstall／update／activationを確認する。certification提出とavailability／一般公開は外部状態を分離して記録する。
