@@ -261,15 +261,16 @@ if ($SignForLocalTest) {
     }
     $beforeThumbprints = @(Get-ChildItem Cert:\CurrentUser\My | ForEach-Object { $_.Thumbprint })
     $imported = $null
-    $removeImported = $false
+    $importedCertificates = @()
     $signedPath = $null
     $signingSucceeded = $false
     try {
-        $imported = Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false
-        if (-not $imported -or -not $imported.HasPrivateKey) {
-            throw "The local-test certificate does not contain a private key"
+        $importedCertificates = @(Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false)
+        $privateKeyCertificates = @($importedCertificates | Where-Object { $_.HasPrivateKey })
+        if ($privateKeyCertificates.Count -ne 1) {
+            throw "The local-test PFX must contain exactly one certificate with a private key"
         }
-        $removeImported = $beforeThumbprints -notcontains $imported.Thumbprint
+        $imported = $privateKeyCertificates[0]
         if ($imported.Subject -ne $publisher) {
             throw "The certificate subject does not match the Store manifest Publisher"
         }
@@ -304,8 +305,10 @@ if ($SignForLocalTest) {
         if (-not $signingSucceeded -and $signedPath -and (Test-Path -LiteralPath $signedPath)) {
             Remove-Item -LiteralPath $signedPath -Force
         }
-        if ($removeImported -and $imported) {
-            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($imported.Thumbprint)" -Force
+        foreach ($certificate in $importedCertificates) {
+            if ($beforeThumbprints -notcontains $certificate.Thumbprint) {
+                Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force
+            }
         }
         $password.Dispose()
     }

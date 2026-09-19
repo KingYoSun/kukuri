@@ -607,6 +607,7 @@ mod tests {
             include_str!("../../../../docs/legal/external-transmission-notice.md");
         const PRIVACY: &str = include_str!("../../../../docs/legal/privacy-policy.md");
         const TAURI_CONFIG: &str = include_str!("../tauri.conf.json");
+        const STORE_CONFIG: &str = include_str!("../tauri.microsoft-store.conf.json");
         const DESKTOP_SHELL: &str = include_str!("../../src/shell/DesktopShellPage.tsx");
 
         let tauri_config: serde_json::Value =
@@ -630,6 +631,14 @@ mod tests {
         assert!(EXTERNAL_TRANSMISSION.contains("GitHub Releases"));
         assert!(PRIVACY.contains("GitHub Releases"));
         assert!(DESKTOP_SHELL.contains("const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;"));
+        let store_config: serde_json::Value =
+            serde_json::from_str(STORE_CONFIG).expect("Store config must be valid json");
+        assert_eq!(
+            store_config.pointer("/plugins/updater/active"),
+            Some(&serde_json::Value::Bool(false))
+        );
+        assert!(EXTERNAL_TRANSMISSION.contains("Microsoft Store版はkukuri内から送信しません"));
+        assert!(PRIVACY.contains("Microsoft Store版の更新はMicrosoft Store／Windowsへ委譲"));
 
         let distribution = distribution_community_node_config().expect("distribution config");
         for node in distribution.nodes {
