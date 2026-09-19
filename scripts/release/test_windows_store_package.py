@@ -61,6 +61,7 @@ class WindowsStorePackageContracts(unittest.TestCase):
         self.assertIn("if (-not $signingSucceeded", source)
         self.assertIn("foreach ($localArtifact in @($signedPath, $certificateOutputPath))", source)
         self.assertIn("foreach ($certificate in $importedCertificates)", source)
+        self.assertIn("$_.ObjectId -is [Security.Cryptography.Oid]", source)
         self.assertIn("$beforeThumbprints -notcontains $certificate.Thumbprint", source)
         self.assertIn("Remove-Item -LiteralPath \"Cert:\\CurrentUser\\My\\$($certificate.Thumbprint)\"", source)
         self.assertIn('"--features", "microsoft-store"', source)

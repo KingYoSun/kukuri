@@ -279,7 +279,14 @@ if ($SignForLocalTest) {
         if ($imported.NotBefore -gt $now -or $imported.NotAfter -le $now) {
             throw "The local-test certificate is outside its validity period"
         }
-        $eku = @($imported.EnhancedKeyUsageList | ForEach-Object { $_.ObjectId.Value })
+        $eku = @($imported.EnhancedKeyUsageList | ForEach-Object {
+            if ($_.ObjectId -is [Security.Cryptography.Oid]) {
+                $_.ObjectId.Value
+            }
+            else {
+                [string]$_.ObjectId
+            }
+        })
         if ($eku.Count -gt 0 -and $eku -notcontains "1.3.6.1.5.5.7.3.3") {
             throw "The local-test certificate is not valid for code signing"
         }
