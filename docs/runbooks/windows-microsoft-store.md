@@ -90,9 +90,9 @@ winapp pack dist/microsoft-store/staging --manifest apps/desktop/src-tauri/windo
 
 ## app dataとDirect版の共存
 
-package identity付きloose runでも、kukuriのapp data正本はDirect／NSIS版と同じ`%APPDATA%\app.kukuri.desktop`だった。Windowsのpackage container `%LOCALAPPDATA%\Packages\KingYoSun.kukuri_p8fpcaf1kx88g`も作成されるが、account registry、DB、consent、notification設定の正本として使わない。development package解除後も既存app dataが残ることを確認済み。
+Tauriの論理app data pathは`%APPDATA%\app.kukuri.desktop`。ただし既存roaming directoryの存在だけでは、installed MSIXの実際の書込先やWindowsによるvirtualizationは判定できない。今回のinstalled MSIX検証は`KUKURI_APP_DATA_DIR`で専用profileを指定したため、既定pathでのNSISとのデータ共有は未確認。development package解除後に既存roaming dataが残ることと、専用profileのMSIX更新時保持は確認済み。
 
-- Store版への切替でdataをcopyしない。既存pathをそのまま使う。
+- Store版への切替でdataを自動copy・移行しない。既存accountが見えない場合はdevice backup／restoreを使い、pathの同一性を仮定しない。
 - Direct版とStore版を同時起動しない。同じprofile DBを二つのprocessで開かない。
 - 切替前に全accountのdevice backupを別の安全な場所へ作る。
 - MSIXのuninstallをkukuri data削除手段として扱わない。data削除を目的に`%APPDATA%\app.kukuri.desktop`やpackage containerを手動削除しない。

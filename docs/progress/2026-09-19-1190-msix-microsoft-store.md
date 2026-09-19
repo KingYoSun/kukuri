@@ -48,7 +48,7 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 - `winapp run --detach --json`はAUMID `KingYoSun.kukuri_p8fpcaf1kx88g!kukuri`と`kukuri.exe` processを返し、processは応答状態だった。
 - `kukuri:topic:issue-1190-smoke`をactivationしてもprocess件数は1のままだった。
 - development packageは`KingYoSun.kukuri_1.0.0.0_x64__p8fpcaf1kx88g`、`IsDevelopmentMode=True`で登録された。
-- package container `%LOCALAPPDATA%\Packages\KingYoSun.kukuri_p8fpcaf1kx88g`は作成されたが、kukuriのaccount／DB／consent正本はDirect版と同じ`%APPDATA%\app.kukuri.desktop`だった。
+- package containerと既存`%APPDATA%\app.kukuri.desktop`の存在を観測した。ただしこれだけではinstalled MSIXの実書込先やvirtualizationを証明できない。専用profile指定の検証とは区別し、既定pathでのNSISとのデータ共有は未確認とする。
 - exact PIDを終了して`winapp unregister --manifest ...`を実行し、対象development packageだけが消え、既存roaming app dataが残ることを確認した。
 
 ### Superseded: local PFX署名調査
@@ -70,7 +70,7 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 
 | 対象 | 結果 |
 | --- | --- |
-| `python scripts/release/test_windows_store_package.py` | 4 tests PASS |
+| `python scripts/release/test_windows_store_package.py` | 6 tests PASS |
 | `python scripts/release/test_release_workflow.py` | 14 tests PASS（isolated PyYAML 6.0.3） |
 | targeted frontend（distribution／ReleasePanel／scheduler／i18n parity） | 83 tests PASS |
 | `cargo test -p xtask desktop::package_tests` | 6 tests PASS |
@@ -81,10 +81,17 @@ Partner Centerの公開identityは`KingYoSun.kukuri`、Publisher `CN=33EB763C-48
 | `cargo xtask desktop-ui-check` | PASS（frontend 1906、Storybook、browser 366、visual reachability 42） |
 | `git diff --check` | PASS |
 
-WindowsのTauri unit test executableを直接起動するtargeted commandは、test本体へ入る前に既存native DLL entrypoint不足の`STATUS_ENTRYPOINT_NOT_FOUND`で終了した。default／Store featureのcompileは成功し、frontend／xtask／package contractsとCIで実行可能なtestを根拠にする。この環境固有失敗をtest PASSとして数えていない。
+WindowsのTauri unit test executableの直接起動は当初`STATUS_ENTRYPOINT_NOT_FOUND`で失敗したが、上記のCommon Controls v6 manifestを付与する`test-windows-store-updater.ps1`によりDirect 5件／Store 4件の実行がPASSした。CIにも同じ検証入口を追加した。
+
+### 最終candidateと追加更新試験
+
+- clean source `0aa328ac11d11d894c4014cf6aeeefd7a21fa5a8`からStore専用targetで再buildしたunsigned candidateは`dist/microsoft-store-0aa328ac/KingYoSun.kukuri_1.0.0.0_x64.msix`。SHA-256は`47e4026a35988d4a61c90fee774b49ff8a9bfa78a0ea8f0f554a7ede16b117b1`、35,591,507 bytes。
+- 同じstagingを検証専用version `1.0.2.0`で開発署名し、installed `1.0.1.0`から更新。`Status=Ok`、専用profileの全38ファイルのSHA-256が更新前後で一致し、更新後processの起動に成功した。
+- 既存HKCUの`kukuri:` handlerはDirect開発版を指していた。process件数が1のままだった観測だけをStoreへのURI配送の証明とは扱わず、既存の利用者protocol選択は変更していない。
+- ユーザーがPartner Centerへのuploadを手動で担当する。提出対象は上記unsigned candidateで、開発署名付き`1.0.2.0`ではない。
 
 ## 残工程
 
-- clean PR headからunsigned candidateを再buildし、source SHA／hashを固定する。
+- 固定unsigned candidateのPartner Center validation結果を記録する。
 - 区分Cの独立監査、必須CI、PR merge後tree照合。
-- 同一unsigned candidateをPartner Centerへuploadしてvalidationする。certification後のMicrosoft署名済みpackageでinstall／update／activationを確認する。certification提出とavailability／一般公開は外部状態を分離して記録する。
+- ユーザーによるupload後、certification後のMicrosoft署名済みpackageでinstall／update／activationを確認する。certification提出とavailability／一般公開は外部状態を分離して記録する。
