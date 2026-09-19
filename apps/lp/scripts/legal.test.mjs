@@ -17,6 +17,8 @@ for (const [route, source] of [['privacy', 'privacy-policy.md'], ['terms', 'term
       .replace(/^\d+\. /gm, '').replace(/^#{1,3} /gm, '').replace(/^> /gm, '').replace(/^- /gm, '').replace(/`/g, '').replace(/\*\*/g, '');
     assert.equal(actual.replace(/\s/g, ''), expected.replace(/\s/g, ''));
     assert.doesNotMatch(html, /<script\b/i);
+    assert.ok(html.indexOf('<!--email_off-->') < html.indexOf('<article>'));
+    assert.ok(html.indexOf('<!--/email_off-->') > html.indexOf('</footer>'));
     assert.match(html, /<html lang="ja">/);
   });
 }

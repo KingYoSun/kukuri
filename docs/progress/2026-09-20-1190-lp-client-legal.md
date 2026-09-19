@@ -18,3 +18,4 @@ Store提出の文書URL整備として、ユーザーがLPのclient privacy／te
 - Chromiumで1280×900／390×900、JavaScript無効でprivacy／termsの描画本文を正文と全文照合。overflowなし、両言語LPからのprivacy遷移、Tabでhomeリンクへfocusを確認。スクリーンショットのPC利用規約・mobile privacyを目視確認。
 - 法務内容自体の改訂・翻訳は行わない。Store用MSIX candidateのsource／hashは8cfd0e8d時点の記録を維持し、LPだけの追加commitで再buildしたと主張しない。
 - 公開URLの到達確認と独立delta監査結果はPR #1191のcommentへ記録する。
+- 初回本番検証でCloudflareのemail obfuscationが連絡先をJS依存のplaceholderへ置換することを検出。公式の`email_off`コメントを生成ページ内だけに付け、公開済みの連絡先を含む本文を保持する。zone全体の設定は変更しない。

@@ -62,12 +62,14 @@ for (const [route, file, label] of [
   </style>
 </head>
 <body>
+<!--email_off-->
   <header><nav aria-label="サイト内ナビゲーション"><a href="/">kukuri ホーム</a><a href="/en/" lang="en">English home</a><a href="/terms/">クライアント利用規約</a><a href="/privacy/">クライアントプライバシーポリシー</a></nav>
   <p class="notice">クライアント用文書（日本語正文）。Community Nodeの個別文書とは異なります。<br><span lang="en">Client document — authoritative Japanese text. Separate from each Community Node's policies.</span></p></header>
   <main id="content"><article>
 ${render(source)}
   </article></main>
   <footer><a href="https://github.com/kukuri-app/kukuri/blob/main/docs/legal/${file}">正文のソース（GitHub）</a> · <a href="mailto:ops@kukuri.app">お問い合わせ</a></footer>
+<!--/email_off-->
 </body>
 </html>
 `;
