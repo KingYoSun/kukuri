@@ -243,6 +243,8 @@ $provenance = [ordered]@{
 $provenancePath = Join-Path $outputDir "store-package.json"
 $json = $provenance | ConvertTo-Json -Depth 8
 [IO.File]::WriteAllText($provenancePath, $json + "`n", [Text.UTF8Encoding]::new($false))
+$signedPath = $null
+$certificateOutputPath = $null
 
 if ($SignForLocalTest) {
     $resolvedCertificate = Resolve-WorkspacePath $CertificatePath
@@ -262,7 +264,6 @@ if ($SignForLocalTest) {
     $beforeThumbprints = @(Get-ChildItem Cert:\CurrentUser\My | ForEach-Object { $_.Thumbprint })
     $imported = $null
     $importedCertificates = @()
-    $signedPath = $null
     $signingSucceeded = $false
     try {
         $importedCertificates = @(Import-PfxCertificate -FilePath $resolvedCertificate -CertStoreLocation Cert:\CurrentUser\My -Password $password -Exportable:$false)
@@ -291,7 +292,8 @@ if ($SignForLocalTest) {
         ) "MSIX local-test signing"
         Invoke-Native $signTool @("verify", "/pa", "/all", "/v", $signedPath) "MSIX signature verification"
         $certificateName = "${packageName}_local-test.cer"
-        Export-Certificate -Cert $imported -FilePath (Join-Path $outputDir $certificateName) -Force | Out-Null
+        $certificateOutputPath = Join-Path $outputDir $certificateName
+        Export-Certificate -Cert $imported -FilePath $certificateOutputPath -Force | Out-Null
         $provenance.signed_local_test = [ordered]@{
             file = $signedName
             sha256 = (Get-FileHash -LiteralPath $signedPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -318,7 +320,17 @@ elseif ($PromptForCertificatePassword) {
 }
 
 $json = $provenance | ConvertTo-Json -Depth 8
-[IO.File]::WriteAllText($provenancePath, $json + "`n", [Text.UTF8Encoding]::new($false))
+try {
+    [IO.File]::WriteAllText($provenancePath, $json + "`n", [Text.UTF8Encoding]::new($false))
+}
+catch {
+    foreach ($localArtifact in @($signedPath, $certificateOutputPath)) {
+        if ($localArtifact -and (Test-Path -LiteralPath $localArtifact)) {
+            Remove-Item -LiteralPath $localArtifact -Force
+        }
+    }
+    throw
+}
 Write-Output "Store package: $unsignedPath"
 Write-Output "SHA-256: $unsignedHash"
 Write-Output "Provenance: $provenancePath"
