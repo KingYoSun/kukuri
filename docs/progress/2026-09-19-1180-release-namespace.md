@@ -30,6 +30,19 @@ Issue: https://github.com/kukuri-app/kukuri/issues/1180 ／ リスク区分 C（
 - 他の job は成功: validate-release-inputs 2 分 30 秒、windows-package 16 分 40 秒（変更前 65 分 50 秒）、linux-package 13 分、CLI 4〜4 分 30 秒。runner の割り当て待ちは 1 分未満。
 - 対応: PowerShell を Microsoft の apt repository から入れる。linux-verify を reusable workflow `kukuri-release-verify.yml` に切り出し、その file を変えた PR で 22.04 の上の検証全体を tag 前に流す。
 
-### v0.2.8-preview.2
+### v0.2.8-preview.2（run 35418444116、成功・公開）
 
-公開 run で記録する。
+全体 **28 分 25 秒**（変更前 2 時間 31 分）。dispatch から validate の開始まで 1 分 15 秒、各 job の runner の割り当て待ちは 1 分未満。
+
+| job | 所要 | 変更前 |
+| --- | --- | --- |
+| validate-release-inputs | 2 分 15 秒 | 4 分 30 秒 |
+| linux-verify | 21 分 7 秒 | 47 分 40 秒（＋待ち 28 分） |
+| windows-package | 20 分 19 秒 | 65 分 50 秒 |
+| linux-package | 13 分 12 秒 | 25 分 |
+| cli-package（2 arch） | 4 分 20 秒 | 12〜13 分 |
+| 末尾 4 job | 3 分 34 秒 | 4 分 |
+
+- クリティカルパスは validate → windows-package / linux-verify（並行、約 21 分）→ 末尾。
+- Namespace の上で未確認だった点はすべて通った: Windows の `setup-python` と pwsh、`attest-build-provenance`（OIDC）、Ubuntu 22.04 での pwsh（apt で導入）、ffmpeg 4.4 の CN test、Playwright、docker compose の scenario、ネイティブ source の収集。
+- 公開: [v0.2.8-preview.2](https://github.com/kukuri-app/kukuri/releases/tag/v0.2.8-preview.2)、Latest、assets 21 件。`latest-preview.json` は version 0.2.8 で、3 entry とも当該 tag の URL と空でない署名を持つ。
